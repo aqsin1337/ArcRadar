@@ -1,0 +1,7 @@
+node_modules
+.next
+coverage
+package-lock.json
+supabase/.temp
+deploy/nginx/runtime
+AGENTS.md
