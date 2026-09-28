@@ -151,7 +151,7 @@ describe("OpenAI-compatible adapters (Groq, OpenAI, DeepSeek)", () => {
   it("Groq: posts messages with json_object response_format and parses choices[0].message.content", async () => {
     const { impl, calls } = fakeFetch(() =>
       json({
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
         choices: [{ message: { content: '{"a":1}' } }],
         usage: { prompt_tokens: 10, completion_tokens: 5 },
       }),
@@ -161,7 +161,7 @@ describe("OpenAI-compatible adapters (Groq, OpenAI, DeepSeek)", () => {
 
     expect(result).toEqual({
       data: { a: 1 },
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       usage: { input: 10, output: 5 },
     });
     const { url, init } = calls[0];
@@ -169,7 +169,7 @@ describe("OpenAI-compatible adapters (Groq, OpenAI, DeepSeek)", () => {
     expect(init.headers).toMatchObject({ authorization: "Bearer gk" });
     const body = JSON.parse(String(init.body));
     expect(body).toMatchObject({
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: "system" },
