@@ -30,8 +30,14 @@ test mailbox `http://127.0.0.1:54324` (password-recovery and confirmation emails
 Open <http://localhost:3000>. It sends you to the sign-in page; on the local stack the page shows
 Admin / Analyst / Viewer buttons that fill in a demo account (controlled by `NEXT_PUBLIC_DEMO_LOGINS=true`,
 which `npm run db:env` sets; leave it empty anywhere else). Signed in, the sidebar shows what the role may
-see; entries marked "Soon" are modules built in later phases. `npm run dev` also serves a component gallery at
-<http://localhost:3000/design> (a 404 in production builds).
+see; every module through Phase 7 is live (nothing is marked "Soon" right now). `npm run dev` also serves a
+component gallery at <http://localhost:3000/design> (a 404 in production builds).
+
+The **Overview** page is a real dashboard (real counts, charts, recent records); click your name in the
+header to reach **Profile** (display name, avatar, password), open to every role. Everyone can read
+**Reports** (analysts and administrators can also generate one). Under Administration, analysts and
+administrators see **Integrations** (which providers are configured; only an admin may pause one) and their
+own **API keys**; **Audit log** and **Settings** (accounts, roles, active status) are admin-only.
 
 ## Trying the API
 
@@ -47,6 +53,50 @@ curl -b jar.txt "http://localhost:3000/api/audit-logs?page_size=5"
 
 `npm run api:smoke` runs the full set of checks. Endpoints and conventions: `docs/API.md`. Changes to
 `supabase/config.toml` (auth settings, redirect URLs) need `npm run db:stop` then `npm run db:start`.
+
+## Intelligence lookups and live providers (optional)
+
+The IP, domain, URL and hash lookup pages and the vulnerability list work straight away on the built-in
+demo dataset (samples such as `198.51.100.23`, `harbor-lights-c2.example`, `8.8.8.8` and the demo CVEs are
+offered on each page). To try live providers, add a key to `.env.local` and restart the server:
+`VIRUSTOTAL_API_KEY` (IP, domain, URL, hash), `ABUSEIPDB_API_KEY` (IP) or `NVD_API_KEY` (lets an administrator
+import a CVE from the vulnerability list). Live lookups are only for analysts and administrators, only for
+public values, and are audited; without a key nothing ever leaves your machine. Never commit a key.
+
+## Alerts, investigations and threat intelligence
+
+These pages work from the seed (15 alerts, 6 investigations, 5 actors, 4 campaigns, 6 malware families, 15
+ATT&CK techniques, all labelled demo data). What each demo user can do there:
+
+| Role    | Alerts and investigations                                          | Threat actors, campaigns, malware, MITRE | Indicators                   |
+| ------- | ------------------------------------------------------------------ | ---------------------------------------- | ---------------------------- |
+| viewer  | read only                                                          | read only                                | read only                    |
+| analyst | create, acknowledge, resolve, assign, open and work investigations | read only                                | create, edit, link, relate   |
+| admin   | everything, including deleting alerts and investigations           | create, edit, delete                     | everything, including delete |
+
+The end-to-end tests create their own records (titles start with `E2E`) and remove them afterwards with the
+service role. Threat intelligence you add by hand is saved as `local` data, never as demo or external.
+
+## Telemetry (sensor data)
+
+The **Telemetry** page lists each source with its status, the machines (assets) that report, and the latest
+events. From the seed it shows demo feeds (labelled "Demo feed", never "receiving") and four demo machines; the
+Wazuh card reads "No events yet" until something is delivered. You can try the whole pipeline without a
+Wazuh Manager:
+
+```powershell
+# 1. an administrator makes an ingest key (printed once; the password comes from the environment)
+$env:ARCRADAR_EMAIL = "admin@arcradar.test"; $env:ARCRADAR_PASSWORD = "ArcRadar-Demo-1!"
+npm run apikey:create -- --url http://localhost:3000 --name "Local trial" --days 7
+# 2. send fictional Wazuh alerts with it (manager "sample-manager", agents SAMPLE-*)
+npm run ingest:sample -- --url http://localhost:3000 --key arc_...
+```
+
+The Wazuh card turns to "Receiving", alerts of level 7 and up appear on **Alerts** (origin "External provider"),
+and re-sending with `--replay` creates nothing new. This data is stored like real telemetry: remove it from the
+database when you are done (`delete` the `wazuh` rows of `alerts`, `events`, `assets`, `indicators`, and the
+key from `api_keys`), or run `npm run db:reset`. Connecting a real Manager: `docs/WAZUH_INTEGRATION.md`.
+The end-to-end tests make their own keys and telemetry (names start with `E2E-TEL`) and remove them afterwards.
 
 ## Demo users (local seed only)
 
@@ -74,6 +124,8 @@ these credentials must never be used in production. All seeded records are marke
 | `npm run api:smoke`                 | End-to-end API checks (app + local stack must be running)       |
 | `npm run e2e`                       | Browser tests in Chrome (local stack up, `npm run build` first) |
 | `npm run check:contrast`            | WCAG contrast check of the design tokens, both themes           |
+| `npm run apikey:create`             | Make an ingest API key as an administrator (`--url`, `--name`)  |
+| `npm run ingest:sample`             | Send fictional Wazuh alerts to a running app with a key         |
 | `npx supabase migration new <name>` | Create a new empty migration file                               |
 
 ## Changing the database
@@ -108,3 +160,8 @@ powershell -File scripts/nginx.ps1 stop
 - **OneDrive:** this folder lives under OneDrive. Keep OneDrive stopped while developing so it does not
   sync `node_modules` and `.next`.
 - **`node` not found in Git Bash:** open a new terminal after installing Node, or use PowerShell.
+- **`npm run format:check` fails on every file on Windows:** the files were checked out with CRLF line endings
+  (Git for Windows defaults to `core.autocrlf=true`) and Prettier wants LF. The repo's `.gitattributes` forces LF,
+  so a fresh clone is fine; an older clone needs `git config --local core.autocrlf input` and `npm run format`, or
+  simply a fresh clone. `docs/HANDOFF_PROMPT.md` and `docs/ORIGINAL_PROMPT.md` keep the original prompt verbatim
+  and are excluded from Prettier.

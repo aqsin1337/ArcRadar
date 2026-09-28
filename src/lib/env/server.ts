@@ -18,6 +18,13 @@ const serverEnvSchema = z.object({
   OTX_API_KEY: optionalSecret,
   SHODAN_API_KEY: optionalSecret,
   NVD_API_KEY: optionalSecret,
+  GROQ_API_KEY: optionalSecret,
+  OPENAI_API_KEY: optionalSecret,
+  ANTHROPIC_API_KEY: optionalSecret,
+  DEEPSEEK_API_KEY: optionalSecret,
+  // A local server address, not a secret, but still never sent to the client and never editable
+  // from the admin UI (see docs/AI_AND_ORCHESTRATION_ARCHITECTURE.md, "Ollama and SSRF").
+  OLLAMA_BASE_URL: optionalSecret,
 });
 
 export type ServerEnv = z.output<typeof serverEnvSchema>;

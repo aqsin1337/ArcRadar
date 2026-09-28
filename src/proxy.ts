@@ -23,8 +23,9 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except static assets and the health check.
+  // Everything except static assets, the health check and the machine-facing ingest endpoints (an
+  // API key, not a session cookie, authenticates those, so there is nothing to refresh or redirect).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|api/health|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|api/health|api/ingest/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

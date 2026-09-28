@@ -398,6 +398,39 @@ from (values
 ) as a (title, severity, source, status, indicator, assigned, created_hours, ack_min, resolved_min);
 
 -- ---------------------------------------------------------------------------
+-- Assets: the fictional machines some of the demo events and alerts came from
+-- ---------------------------------------------------------------------------
+insert into public.assets (source, external_id, name, ip_address, os, origin, first_seen, last_seen) values
+  ('demo-edr', 'DEMO-001', 'DEMO-WIN10-01', '192.0.2.21', 'Windows 10', 'demo', now() - interval '60 days', now() - interval '2 hours'),
+  ('demo-edr', 'DEMO-002', 'DEMO-FILESRV-01', '192.0.2.22', 'Windows Server 2019', 'demo', now() - interval '200 days', now() - interval '40 hours'),
+  ('demo-waf', 'DEMO-003', 'DEMO-WEB-01', '192.0.2.23', 'Ubuntu 22.04', 'demo', now() - interval '300 days', now() - interval '6 hours'),
+  ('demo-mail-gateway', 'DEMO-004', 'DEMO-MAILGW-01', '192.0.2.24', 'Linux', 'demo', now() - interval '250 days', now() - interval '20 hours');
+
+update public.events e set asset_id = a.id
+  from public.assets a
+  where e.origin = 'demo' and e.source = 'demo-edr' and a.external_id = 'DEMO-001';
+
+update public.events e set asset_id = a.id
+  from public.assets a
+  where e.origin = 'demo' and e.source = 'demo-mail-gateway' and a.external_id = 'DEMO-004';
+
+update public.alerts al set asset_id = a.id
+  from public.assets a
+  where al.origin = 'demo' and al.source = 'demo-edr' and al.title like 'Ransomware%' and a.external_id = 'DEMO-002';
+
+update public.alerts al set asset_id = a.id
+  from public.assets a
+  where al.origin = 'demo' and al.source = 'demo-edr' and al.title not like 'Ransomware%' and a.external_id = 'DEMO-001';
+
+update public.alerts al set asset_id = a.id
+  from public.assets a
+  where al.origin = 'demo' and al.source = 'demo-waf' and a.external_id = 'DEMO-003';
+
+update public.alerts al set asset_id = a.id
+  from public.assets a
+  where al.origin = 'demo' and al.source = 'demo-mail-gateway' and a.external_id = 'DEMO-004';
+
+-- ---------------------------------------------------------------------------
 -- Investigations, notes, evidence and links
 -- ---------------------------------------------------------------------------
 insert into public.investigations
@@ -435,6 +468,12 @@ insert into public.investigation_alerts (investigation_id, alert_id) values
   (pg_temp.inv('Log4Shell exposure review'), pg_temp.alrt('Exploit attempt: Log4Shell pattern in request headers')),
   (pg_temp.inv('Outdated Spring Framework instances'), pg_temp.alrt('Outdated software with exploited-in-the-wild CVE'));
 
+-- The links were added shortly after each investigation was opened (this feeds its timeline).
+update public.investigation_indicators ii set added_at = i.created_at + interval '20 minutes'
+from public.investigations i where i.id = ii.investigation_id;
+update public.investigation_alerts ia set added_at = i.created_at + interval '10 minutes'
+from public.investigations i where i.id = ia.investigation_id;
+
 insert into public.investigation_tags (investigation_id, tag_id) values
   (pg_temp.inv('Harbor Lights C2 infrastructure'), pg_temp.tag('c2')),
   (pg_temp.inv('Paper Lantern phishing wave'), pg_temp.tag('phishing')),
@@ -442,12 +481,29 @@ insert into public.investigation_tags (investigation_id, tag_id) values
   (pg_temp.inv('Web shell upload on public site'), pg_temp.tag('exploit')),
   (pg_temp.inv('Log4Shell exposure review'), pg_temp.tag('exploit'));
 
-insert into public.investigation_notes (investigation_id, author_id, body, created_at) values
-  (pg_temp.inv('Harbor Lights C2 infrastructure'), 'aaaaaaaa-0000-4000-8000-000000000002', 'Demo data. The polling endpoint and the domain resolve to the same address; pivoting on the loader check-in URL next.', now() - interval '30 hours'),
-  (pg_temp.inv('Harbor Lights C2 infrastructure'), 'aaaaaaaa-0000-4000-8000-000000000001', 'Demo data. Blocked the domain at the DNS resolver; watch for fallback domains.', now() - interval '24 hours'),
-  (pg_temp.inv('Paper Lantern phishing wave'), 'aaaaaaaa-0000-4000-8000-000000000002', 'Demo data. Three users clicked the link; password resets issued.', now() - interval '90 hours'),
-  (pg_temp.inv('EmberLock ransomware on file server'), 'aaaaaaaa-0000-4000-8000-000000000002', 'Demo data. Host isolated from the network; restoring from the last clean backup.', now() - interval '40 hours'),
-  (pg_temp.inv('Web shell upload on public site'), 'aaaaaaaa-0000-4000-8000-000000000002', 'Demo data. Upload blocked by the WAF; no file reached the web root.', now() - interval '75 hours');
+-- updated_at is set to created_at, so the demo notes do not look edited (the page marks a note as
+-- edited when the two differ).
+insert into public.investigation_notes (investigation_id, author_id, body, created_at, updated_at)
+select v.inv, v.author, v.body, v.at, v.at
+from (values
+  (pg_temp.inv('Harbor Lights C2 infrastructure'), 'aaaaaaaa-0000-4000-8000-000000000002'::uuid, 'Demo data. The polling endpoint and the domain resolve to the same address; pivoting on the loader check-in URL next.', now() - interval '30 hours'),
+  (pg_temp.inv('Harbor Lights C2 infrastructure'), 'aaaaaaaa-0000-4000-8000-000000000001'::uuid, 'Demo data. Blocked the domain at the DNS resolver; watch for fallback domains.', now() - interval '24 hours'),
+  (pg_temp.inv('Paper Lantern phishing wave'), 'aaaaaaaa-0000-4000-8000-000000000002'::uuid, 'Demo data. Three users clicked the link; password resets issued.', now() - interval '90 hours'),
+  (pg_temp.inv('EmberLock ransomware on file server'), 'aaaaaaaa-0000-4000-8000-000000000002'::uuid, 'Demo data. Host isolated from the network; restoring from the last clean backup.', now() - interval '40 hours'),
+  (pg_temp.inv('Web shell upload on public site'), 'aaaaaaaa-0000-4000-8000-000000000002'::uuid, 'Demo data. Upload blocked by the WAF; no file reached the web root.', now() - interval '75 hours')
+) as v(inv, author, body, at);
+
+-- Status history, as the application records it (kind = 'system').
+insert into public.investigation_notes (investigation_id, author_id, kind, body, created_at, updated_at)
+select v.inv, v.author, 'system', v.body, v.at, v.at
+from (values
+  (pg_temp.inv('Harbor Lights C2 infrastructure'), 'aaaaaaaa-0000-4000-8000-000000000002'::uuid, 'Status changed from Open to Investigating. (Demo data)', now() - interval '35 hours'),
+  (pg_temp.inv('Paper Lantern phishing wave'), 'aaaaaaaa-0000-4000-8000-000000000002'::uuid, 'Status changed from Open to Investigating. (Demo data)', now() - interval '98 hours'),
+  (pg_temp.inv('EmberLock ransomware on file server'), 'aaaaaaaa-0000-4000-8000-000000000002'::uuid, 'Status changed from Open to Investigating. (Demo data)', now() - interval '43 hours'),
+  (pg_temp.inv('EmberLock ransomware on file server'), 'aaaaaaaa-0000-4000-8000-000000000002'::uuid, 'Status changed from Investigating to Contained. (Demo data)', now() - interval '38 hours'),
+  (pg_temp.inv('Web shell upload on public site'), 'aaaaaaaa-0000-4000-8000-000000000002'::uuid, 'Status changed from Open to Resolved. (Demo data)', now() - interval '70 hours'),
+  (pg_temp.inv('Outdated Spring Framework instances'), 'aaaaaaaa-0000-4000-8000-000000000002'::uuid, 'Status changed from Open to Closed. (Demo data)', now() - interval '150 hours')
+) as v(inv, author, body, at);
 
 insert into public.investigation_evidence (investigation_id, title, location, description, added_by, created_at) values
   (pg_temp.inv('Harbor Lights C2 infrastructure'), 'Firewall log excerpt', 'demo://logs/firewall/2026-09-24', 'Demo data. Outbound sessions to the C2 address.', 'aaaaaaaa-0000-4000-8000-000000000002', now() - interval '29 hours'),

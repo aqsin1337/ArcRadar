@@ -1,4 +1,5 @@
-// End-to-end smoke test of the auth + RBAC + audit + indicators API against a RUNNING app and the local
+// End-to-end smoke test of the auth + RBAC + audit + indicators + intelligence + vulnerabilities API
+// against a RUNNING app and the local
 // Supabase stack (npm run db:start, then npm run dev or npm start). Local only: it signs in with the
 // demo users, creates a throwaway user through the public signup endpoint, reads the recovery email
 // from Mailpit, and deletes that user again with the service-role key from .env.local.
@@ -7,6 +8,7 @@
 //   SMOKE_BASE_URL=http://localhost:8080 npm run api:smoke   # through nginx
 //
 // Supabase limits sign-ins/sign-ups to 30 per 5 minutes per IP, so avoid back-to-back runs.
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const BASE = process.env.SMOKE_BASE_URL ?? "http://localhost:3000";
@@ -605,6 +607,2907 @@ async function main() {
     "indicator endpoints need a session (401)",
     (await call(null, "GET", "/api/indicators")).status === 401,
   );
+
+  section("Intelligence lookups (demo provider, no live keys)");
+  const lookup = (jar, kind, value) =>
+    call(jar, "GET", `/api/intel/${kind}?value=${encodeURIComponent(value)}`);
+  const ipLookup = await lookup(viewer.jar, "ip", "198.51.100.23");
+  const ipData = ipLookup.json?.data;
+  check(
+    "an IP lookup answers from the demo provider, labelled demo, with the network details",
+    ipLookup.status === 200 &&
+      ipData?.results?.length === 1 &&
+      ipData.results[0].provider.id === "demo" &&
+      ipData.results[0].provider.origin === "demo" &&
+      ipData.results[0].profile.kind === "ip" &&
+      ipData.results[0].profile.asn === 64501 &&
+      ipData.results[0].profile.reputation.verdict === "malicious",
+    ipLookup.json?.error ?? ipData?.results,
+  );
+  check(
+    "the answer says what happened with each provider and that nothing live is connected",
+    ipData?.attempts?.length === 1 &&
+      ipData.attempts[0].status === "ok" &&
+      ipData.live_providers.length === 0 &&
+      ipData.fallback === false &&
+      ipData.value === "198.51.100.23" &&
+      ipData.indicator_type === "ipv4",
+    ipData?.attempts,
+  );
+  check(
+    "it comes with what the workspace knows: the tracked indicator, relationships and a timeline",
+    ipData?.local?.indicator?.value === "198.51.100.23" &&
+      ipData.local.indicator.relationships.length >= 2 &&
+      ipData.local.timeline.length >= 2 &&
+      ipData.local.timeline.every((entry) => entry.at && entry.kind && entry.title),
+    ipData?.local?.timeline,
+  );
+  check(
+    "viewers may not ask live providers, analysts may (no key is configured, so nothing is asked)",
+    ipData?.live_allowed === false &&
+      (await lookup(analyst.jar, "ip", "198.51.100.23")).json?.data?.live_allowed === true,
+  );
+
+  const domainLookup = await lookup(viewer.jar, "domain", "Harbor-Lights-C2.EXAMPLE");
+  const domainProfile = domainLookup.json?.data?.results?.[0]?.profile;
+  check(
+    "a domain lookup canonicalizes the value and returns registration, DNS and related IPs",
+    domainLookup.status === 200 &&
+      domainLookup.json.data.value === "harbor-lights-c2.example" &&
+      domainProfile?.kind === "domain" &&
+      domainProfile.related_ips.includes("198.51.100.23") &&
+      domainProfile.dns_records.length >= 1 &&
+      domainProfile.nameservers.length >= 1 &&
+      domainProfile.registrar,
+    domainLookup.json?.error ?? domainProfile,
+  );
+  const urlLookup = await lookup(
+    viewer.jar,
+    "url",
+    "http://invoice-download.example/files/invoice_2026.zip",
+  );
+  check(
+    "a URL lookup returns reputation, detections and the redirect chain, never fetching the URL",
+    urlLookup.status === 200 &&
+      urlLookup.json.data.results[0].profile.kind === "url" &&
+      urlLookup.json.data.results[0].profile.host === "invoice-download.example" &&
+      urlLookup.json.data.results[0].profile.redirect_chain.length === 2 &&
+      urlLookup.json.data.results[0].profile.detections.malicious > 0,
+    urlLookup.json?.error,
+  );
+  const sample = (algorithm) =>
+    createHash(algorithm).update("arcradar-demo-sample-1", "utf8").digest("hex");
+  const hashLookups = await Promise.all(
+    [sample("md5"), sample("sha1"), sample("sha256").toUpperCase()].map((hash) =>
+      lookup(viewer.jar, "hash", hash),
+    ),
+  );
+  check(
+    "MD5, SHA-1 and SHA-256 (any case) of one sample all find the same file",
+    hashLookups.every(
+      (r) =>
+        r.status === 200 &&
+        r.json.data.results[0]?.profile.file_name === "invoice_viewer.exe" &&
+        r.json.data.results[0].profile.malware_families[0] === "NightLoader",
+    ) &&
+      hashLookups.map((r) => r.json.data.results[0].profile.hash_type).join() === "md5,sha1,sha256",
+    hashLookups.map((r) => r.json?.error),
+  );
+  const noRecord = await lookup(viewer.jar, "ip", "203.0.113.190");
+  check(
+    "a value the demo dataset does not know answers 200 with no results and 'not_found'",
+    noRecord.status === 200 &&
+      noRecord.json.data.results.length === 0 &&
+      noRecord.json.data.attempts[0].status === "not_found" &&
+      noRecord.json.data.local.indicator?.value === "203.0.113.190",
+    noRecord.json?.data?.attempts,
+  );
+  const privateIp = await lookup(viewer.jar, "ip", "10.0.0.1");
+  check(
+    "a private address is accepted and answered locally (it would never be sent out)",
+    privateIp.status === 200 && privateIp.json.data.results.length === 0,
+    privateIp.json?.error,
+  );
+
+  check(
+    "a malformed value is a 422 that names the field",
+    (await lookup(viewer.jar, "ip", "not-an-ip")).status === 422 &&
+      (await lookup(viewer.jar, "ip", "not-an-ip")).json.error.details.issues[0].path === "value" &&
+      (await lookup(viewer.jar, "domain", "http://x.example/a")).status === 422 &&
+      (await lookup(viewer.jar, "hash", "abc123")).status === 422 &&
+      (await lookup(viewer.jar, "url", "javascript:alert(1)")).status === 422,
+  );
+  check(
+    "a missing value is a 422 and an unknown kind is a 404",
+    (await call(viewer.jar, "GET", "/api/intel/ip")).status === 422 &&
+      (await call(viewer.jar, "GET", "/api/intel/mac?value=x")).status === 404,
+  );
+  check(
+    "lookups need a session (401)",
+    (await call(null, "GET", "/api/intel/ip?value=8.8.8.8")).status === 401,
+  );
+  const intelAudit = await call(admin.jar, "GET", "/api/audit-logs?entity_type=intel");
+  check(
+    "demo lookups leave no audit entry (nothing left the workspace)",
+    intelAudit.status === 200 && intelAudit.json.data.pagination.total === 0,
+    intelAudit.json?.data?.pagination,
+  );
+
+  section("Vulnerabilities: list, search, filter, sort, paginate, detail, statistics");
+  const vulns = await call(viewer.jar, "GET", "/api/vulnerabilities?page_size=100");
+  check(
+    "viewer can list vulnerabilities, each with its provenance",
+    vulns.status === 200 &&
+      vulns.json.data.pagination.total >= 12 &&
+      vulns.json.data.items.every((v) => ["demo", "local", "external"].includes(v.origin)),
+    vulns.json?.error,
+  );
+  const published = vulns.json.data.items.map((v) => Date.parse(v.published_at));
+  check(
+    "newest published comes first by default",
+    published.every((time, index) => index === 0 || time <= published[index - 1]),
+  );
+  const log4j = await call(viewer.jar, "GET", "/api/vulnerabilities?q=log4j");
+  check(
+    "text search finds a CVE by its title words",
+    log4j.status === 200 && log4j.json.data.items.some((v) => v.cve_id === "CVE-2021-44228"),
+    log4j.json?.error,
+  );
+  const byId = await call(viewer.jar, "GET", "/api/vulnerabilities?q=cve-2021-44228");
+  check(
+    "text search finds a CVE by its id, whatever the case",
+    byId.json?.data?.items?.length === 1 && byId.json.data.items[0].cve_id === "CVE-2021-44228",
+  );
+  const byVendor = await call(viewer.jar, "GET", "/api/vulnerabilities?q=microsoft&page_size=100");
+  check(
+    "text search also matches affected vendors and products",
+    byVendor.json?.data?.items?.some((v) => v.cve_id === "CVE-2017-0144") &&
+      byVendor.json.data.items.some((v) => v.cve_id === "CVE-2021-26855"),
+    byVendor.json?.error,
+  );
+  check(
+    "a term that matches nothing gives an empty list, not an error",
+    (await call(viewer.jar, "GET", "/api/vulnerabilities?q=zzz-nothing")).json?.data?.pagination
+      ?.total === 0,
+  );
+  const critical = await call(
+    viewer.jar,
+    "GET",
+    "/api/vulnerabilities?severity=critical&page_size=100",
+  );
+  check(
+    "severity filter is exact",
+    critical.status === 200 &&
+      critical.json.data.items.length > 0 &&
+      critical.json.data.items.every((v) => v.severity === "critical"),
+  );
+  const poc = await call(viewer.jar, "GET", "/api/vulnerabilities?exploit_status=poc_available");
+  check(
+    "exploit status filter is exact",
+    poc.json?.data?.items?.length > 0 &&
+      poc.json.data.items.every((v) => v.exploit_status === "poc_available"),
+  );
+  const highScore = await call(
+    viewer.jar,
+    "GET",
+    "/api/vulnerabilities?min_cvss=9.8&page_size=100",
+  );
+  check(
+    "minimum CVSS filter keeps only records at or above the score",
+    highScore.json?.data?.items?.length > 0 &&
+      highScore.json.data.items.every((v) => v.cvss_score >= 9.8),
+  );
+  check(
+    "origin filter separates demo from external data",
+    (await call(viewer.jar, "GET", "/api/vulnerabilities?origin=demo")).json?.data?.pagination
+      ?.total >= 12 &&
+      (await call(viewer.jar, "GET", "/api/vulnerabilities?origin=external")).json?.data?.pagination
+        ?.total === 0,
+  );
+  const byScoreDesc = await call(
+    viewer.jar,
+    "GET",
+    "/api/vulnerabilities?sort=cvss_score&order=desc&page_size=100",
+  );
+  const scores = byScoreDesc.json?.data?.items?.map((v) => v.cvss_score) ?? [];
+  check(
+    "sorting by CVSS score descending is ordered",
+    scores.length >= 12 &&
+      scores.every((score, index) => index === 0 || score <= scores[index - 1]),
+    scores,
+  );
+  const byScoreAsc = await call(
+    viewer.jar,
+    "GET",
+    "/api/vulnerabilities?sort=cvss_score&order=asc&page_size=100",
+  );
+  const ascending = byScoreAsc.json?.data?.items?.map((v) => v.cvss_score) ?? [];
+  check(
+    "sorting by CVSS score ascending is ordered",
+    ascending.every((score, index) => index === 0 || score >= ascending[index - 1]),
+  );
+  const vulnBySeverity = await call(
+    viewer.jar,
+    "GET",
+    "/api/vulnerabilities?sort=severity&order=desc&page_size=100",
+  );
+  check(
+    "sorting by severity puts the most severe first, not alphabetical order",
+    vulnBySeverity.json?.data?.items?.[0]?.severity === "critical",
+  );
+  const vulnPage3 = await call(viewer.jar, "GET", "/api/vulnerabilities?page_size=5&page=3");
+  const vulnBeyond = await call(viewer.jar, "GET", "/api/vulnerabilities?page=99");
+  check(
+    "paging works, and a page past the end is an empty page with the real total",
+    vulnPage3.json?.data?.items?.length === 2 &&
+      vulnPage3.json.data.pagination.total_pages === 3 &&
+      vulnBeyond.status === 200 &&
+      vulnBeyond.json.data.items.length === 0 &&
+      vulnBeyond.json.data.pagination.total >= 12,
+    vulnBeyond.json,
+  );
+  check(
+    "invalid query values are 422",
+    (await call(viewer.jar, "GET", "/api/vulnerabilities?severity=nope")).status === 422 &&
+      (await call(viewer.jar, "GET", "/api/vulnerabilities?min_cvss=11")).status === 422 &&
+      (await call(viewer.jar, "GET", "/api/vulnerabilities?sort=description")).status === 422 &&
+      (await call(viewer.jar, "GET", "/api/vulnerabilities?page_size=101")).status === 422,
+  );
+
+  const vulnDetail = await call(viewer.jar, "GET", "/api/vulnerabilities/cve-2021-44228");
+  check(
+    "a CVE has its score, affected products, references and the indicator that tracks it",
+    vulnDetail.status === 200 &&
+      vulnDetail.json.data.cve_id === "CVE-2021-44228" &&
+      vulnDetail.json.data.cvss_score === 10 &&
+      vulnDetail.json.data.affected_products.length >= 1 &&
+      vulnDetail.json.data.affected_products[0].vendor === "Apache" &&
+      vulnDetail.json.data.reference_urls.length >= 1 &&
+      vulnDetail.json.data.indicator?.id &&
+      vulnDetail.json.data.origin === "demo",
+    vulnDetail.json?.error ?? vulnDetail.json?.data,
+  );
+  check(
+    "an unknown or malformed CVE id is 404",
+    (await call(viewer.jar, "GET", "/api/vulnerabilities/CVE-2099-0001")).status === 404 &&
+      (await call(viewer.jar, "GET", "/api/vulnerabilities/not-a-cve")).status === 404,
+  );
+  const stats = await call(viewer.jar, "GET", "/api/vulnerabilities/stats");
+  const rows = stats.json?.data?.by_severity ?? [];
+  check(
+    "statistics list every severity, most severe first, and add up",
+    stats.status === 200 &&
+      rows.map((row) => row.severity).join() === "critical,high,medium,low,info" &&
+      rows.reduce((sum, row) => sum + row.total, 0) === stats.json.data.total &&
+      stats.json.data.total === vulns.json.data.pagination.total &&
+      stats.json.data.exploited > 0 &&
+      rows.every((row) => row.exploited <= row.total),
+    stats.json?.data,
+  );
+  check(
+    "vulnerability endpoints need a session (401)",
+    (await call(null, "GET", "/api/vulnerabilities")).status === 401 &&
+      (await call(null, "GET", "/api/vulnerabilities/stats")).status === 401 &&
+      (await call(null, "GET", "/api/vulnerabilities/CVE-2021-44228")).status === 401,
+  );
+
+  const importBody = { cve_id: "CVE-2099-0001" };
+  check(
+    "importing from a provider needs vulnerabilities:write: viewers and analysts get 403",
+    (await call(viewer.jar, "POST", "/api/vulnerabilities/import", { body: importBody })).status ===
+      403 &&
+      (await call(analyst.jar, "POST", "/api/vulnerabilities/import", { body: importBody }))
+        .status === 403 &&
+      (await call(null, "POST", "/api/vulnerabilities/import", { body: importBody })).status ===
+        401,
+  );
+  const badImport = await call(admin.jar, "POST", "/api/vulnerabilities/import", {
+    body: { cve_id: "not-a-cve", origin: "external" },
+  });
+  check(
+    "an import body is strict: bad id and extra fields are 422",
+    badImport.status === 422,
+    badImport.json,
+  );
+  if (env.NVD_API_KEY) {
+    console.log("  skip  no-provider import check (NVD_API_KEY is set: the import would call NVD)");
+  } else {
+    const noProvider = await call(admin.jar, "POST", "/api/vulnerabilities/import", {
+      body: importBody,
+    });
+    check(
+      "an administrator gets 503 when no vulnerability provider is connected, and nothing is stored",
+      noProvider.status === 503 &&
+        code(noProvider) === "DEPENDENCY_UNAVAILABLE" &&
+        (await call(viewer.jar, "GET", "/api/vulnerabilities?origin=external")).json.data.pagination
+          .total === 0,
+      noProvider.json,
+    );
+  }
+
+  section("Global search: vulnerabilities and lookup suggestions");
+  const logSearch = await call(viewer.jar, "GET", "/api/search?q=log4j");
+  const vulnGroup = logSearch.json?.data?.groups?.find((g) => g.kind === "vulnerability");
+  check(
+    "global search finds CVEs, with a link, severity, score and provenance",
+    vulnGroup?.hits?.[0]?.href === "/vulnerabilities/CVE-2021-44228" &&
+      vulnGroup.hits[0].origin === "demo" &&
+      /Critical · CVSS 10\.0/.test(vulnGroup.hits[0].subtitle),
+    logSearch.json?.data,
+  );
+  const ipSearch = await call(viewer.jar, "GET", "/api/search?q=198.51.100.23");
+  check(
+    "an IP address is recognized and a lookup is offered first (structure only, no verdict)",
+    ipSearch.json?.data?.groups?.[0]?.kind === "lookup" &&
+      ipSearch.json.data.groups[0].hits[0].href === "/intelligence/ip?q=198.51.100.23" &&
+      ipSearch.json.data.groups[0].hits[0].origin === null &&
+      !/malicious|suspicious|safe/i.test(ipSearch.json.data.groups[0].hits[0].subtitle) &&
+      ipSearch.json.data.groups.some((g) => g.kind === "indicator"),
+    ipSearch.json?.data?.groups?.map((g) => g.kind),
+  );
+
+  // ---------------------------------------------------------------------------------------------
+  // Phase 6: alerts, investigations, threat intelligence
+  // ---------------------------------------------------------------------------------------------
+  const stamp = Date.now();
+  const analystId = analystMe.json?.data?.user?.id;
+  const NIL_UUID = "00000000-0000-4000-8000-000000000000";
+  const problems = (r) => r.json?.error?.details?.issues?.map((i) => i.path) ?? [];
+
+  section("Alerts: read, search, filter, sort, paginate, statistics");
+  const anonAlerts = await call(null, "GET", "/api/alerts");
+  check("GET /api/alerts without a session is 401", anonAlerts.status === 401, anonAlerts.status);
+  const alertList = await call(viewer.jar, "GET", "/api/alerts");
+  const alertItems = alertList.json?.data?.items ?? [];
+  check(
+    "viewer lists alerts, each with its provenance, indicator and assignee",
+    alertList.status === 200 &&
+      alertItems.length > 0 &&
+      alertItems.every((a) => a.origin && "indicator" in a && "assignee" in a),
+    alertList.json?.data?.pagination,
+  );
+  const alertTotal = alertList.json?.data?.pagination?.total ?? 0;
+  const criticalAlerts = await call(viewer.jar, "GET", "/api/alerts?severity=critical");
+  check(
+    "severity filter narrows the list",
+    criticalAlerts.json?.data?.items?.every((a) => a.severity === "critical") &&
+      criticalAlerts.json.data.pagination.total > 0 &&
+      criticalAlerts.json.data.pagination.total < alertTotal,
+    criticalAlerts.json?.data?.pagination,
+  );
+  const beaconAlerts = await call(viewer.jar, "GET", "/api/alerts?q=beacon%20harbor");
+  check(
+    "all search words must match (title, source or indicator value)",
+    beaconAlerts.json?.data?.items?.length > 0 &&
+      beaconAlerts.json.data.items.every(
+        (a) => /beacon/i.test(a.title) && /harbor/i.test(a.title + (a.indicator?.value ?? "")),
+      ),
+    beaconAlerts.json?.data?.items?.map((a) => a.title),
+  );
+  const wildcardAlerts = await call(viewer.jar, "GET", "/api/alerts?q=%25");
+  check(
+    "a literal % in the search text matches nothing instead of everything",
+    wildcardAlerts.status === 200 && wildcardAlerts.json?.data?.pagination?.total === 0,
+    wildcardAlerts.json?.data?.pagination,
+  );
+  const unassigned = await call(viewer.jar, "GET", "/api/alerts?assignee=none");
+  check(
+    "assignee=none lists only alerts nobody has picked up",
+    unassigned.json?.data?.items?.every((a) => a.assigned_to === null),
+    unassigned.json?.data?.pagination,
+  );
+  const alertsBySeverity = await call(
+    viewer.jar,
+    "GET",
+    "/api/alerts?sort=severity&order=desc&page_size=100",
+  );
+  const rank = { info: 0, low: 1, medium: 2, high: 3, critical: 4 };
+  const ranks = (alertsBySeverity.json?.data?.items ?? []).map((a) => rank[a.severity]);
+  check(
+    "sorting by severity puts the most severe first",
+    ranks.length > 1 && ranks.every((value, index) => index === 0 || ranks[index - 1] >= value),
+    ranks,
+  );
+  for (const [name, path] of [
+    ["an unknown status", "/api/alerts?status=bogus"],
+    ["an unknown sort", "/api/alerts?sort=title"],
+    ["a bad assignee", "/api/alerts?assignee=everyone"],
+  ]) {
+    const bad = await call(viewer.jar, "GET", path);
+    check(`${name} is 422`, bad.status === 422, bad.json);
+  }
+  const pastEnd = await call(viewer.jar, "GET", "/api/alerts?page=9999");
+  check(
+    "a page past the last one is an empty page, not an error",
+    pastEnd.status === 200 &&
+      pastEnd.json?.data?.items?.length === 0 &&
+      pastEnd.json.data.pagination.total === alertTotal,
+    pastEnd.json?.data?.pagination,
+  );
+  const alertStats = await call(viewer.jar, "GET", "/api/alerts/stats");
+  check(
+    "statistics cover every status in lifecycle order and add up to the total",
+    alertStats.json?.data?.by_status?.map((s) => s.status).join(",") ===
+      "new,acknowledged,investigating,resolved,false_positive" &&
+      alertStats.json.data.total === alertTotal &&
+      alertStats.json.data.by_status.reduce((sum, s) => sum + s.total, 0) === alertTotal,
+    alertStats.json?.data,
+  );
+  const firstAlert = await call(viewer.jar, "GET", `/api/alerts/${alertItems[0]?.id}`);
+  check(
+    "an alert opens with its indicator, event and investigations",
+    firstAlert.status === 200 &&
+      "event" in (firstAlert.json?.data ?? {}) &&
+      Array.isArray(firstAlert.json.data.investigations),
+    firstAlert.json?.data && Object.keys(firstAlert.json.data),
+  );
+  const malformedAlert = await call(viewer.jar, "GET", "/api/alerts/not-a-uuid");
+  const unknownAlert = await call(viewer.jar, "GET", `/api/alerts/${NIL_UUID}`);
+  check(
+    "a malformed or unknown alert id is 404",
+    malformedAlert.status === 404 && unknownAlert.status === 404,
+    [malformedAlert.status, unknownAlert.status],
+  );
+
+  section("Alerts: lifecycle, assignment, permissions");
+  const viewerCreatesAlert = await call(viewer.jar, "POST", "/api/alerts", {
+    body: { title: "Viewer alert" },
+  });
+  check(
+    "a viewer cannot create an alert (403)",
+    viewerCreatesAlert.status === 403,
+    viewerCreatesAlert.json,
+  );
+  const alertTitle = `Smoke alert ${stamp}`;
+  const madeAlert = await call(analyst.jar, "POST", "/api/alerts", {
+    body: { title: `  ${alertTitle}  `, severity: "high", description: "" },
+  });
+  const smokeAlert = madeAlert.json?.data;
+  check(
+    "analyst creates an alert (201): new, manual, local, unassigned, title trimmed",
+    madeAlert.status === 201 &&
+      smokeAlert?.title === alertTitle &&
+      smokeAlert.status === "new" &&
+      smokeAlert.source === "manual" &&
+      smokeAlert.origin === "local" &&
+      smokeAlert.assigned_to === null &&
+      smokeAlert.description === null,
+    madeAlert.json,
+  );
+  for (const [name, body] of [
+    ["origin", { title: "x", origin: "external" }],
+    ["source", { title: "x", source: "wazuh" }],
+    ["status", { title: "x", status: "resolved" }],
+    ["an empty title", { title: "   " }],
+  ]) {
+    const rejected = await call(analyst.jar, "POST", "/api/alerts", { body });
+    check(`an alert body with ${name} is rejected (422)`, rejected.status === 422, rejected.json);
+  }
+  const base = `/api/alerts/${smokeAlert?.id}`;
+  const viewerAlertPatch = await call(viewer.jar, "PATCH", base, {
+    body: { status: "acknowledged" },
+  });
+  check(
+    "a viewer cannot change an alert (403)",
+    viewerAlertPatch.status === 403,
+    viewerAlertPatch.json,
+  );
+  const emptyPatch = await call(analyst.jar, "PATCH", base, { body: {} });
+  const extraPatch = await call(analyst.jar, "PATCH", base, {
+    body: { status: "acknowledged", severity: "low" },
+  });
+  check(
+    "an empty or over-wide update is 422",
+    emptyPatch.status === 422 && extraPatch.status === 422,
+    [emptyPatch.status, extraPatch.status],
+  );
+
+  const acked = await call(analyst.jar, "PATCH", base, { body: { status: "acknowledged" } });
+  check(
+    "new -> acknowledged stamps acknowledged_at and takes the alert",
+    acked.status === 200 &&
+      acked.json.data.status === "acknowledged" &&
+      !!acked.json.data.acknowledged_at &&
+      acked.json.data.resolved_at === null &&
+      acked.json.data.assigned_to === analystId,
+    acked.json?.data,
+  );
+  const backToNew = await call(analyst.jar, "PATCH", base, { body: { status: "new" } });
+  check(
+    "an alert never goes back to new (409)",
+    backToNew.status === 409 && code(backToNew) === "CONFLICT",
+    backToNew.json,
+  );
+  const resolvedAlert = await call(analyst.jar, "PATCH", base, { body: { status: "resolved" } });
+  check(
+    "acknowledged -> resolved stamps resolved_at and keeps acknowledged_at",
+    resolvedAlert.status === 200 &&
+      !!resolvedAlert.json.data.resolved_at &&
+      resolvedAlert.json.data.acknowledged_at === acked.json.data.acknowledged_at,
+    resolvedAlert.json?.data,
+  );
+  const closedToAcked = await call(analyst.jar, "PATCH", base, {
+    body: { status: "acknowledged" },
+  });
+  check(
+    "a closed alert cannot become acknowledged (409)",
+    closedToAcked.status === 409,
+    closedToAcked.json,
+  );
+  const reopened = await call(analyst.jar, "PATCH", base, { body: { status: "investigating" } });
+  check(
+    "a closed alert can be reopened into investigating, which clears resolved_at",
+    reopened.status === 200 &&
+      reopened.json.data.status === "investigating" &&
+      reopened.json.data.resolved_at === null,
+    reopened.json?.data,
+  );
+  const falsePositive = await call(analyst.jar, "PATCH", base, {
+    body: { status: "false_positive" },
+  });
+  check(
+    "investigating -> false_positive closes it too",
+    falsePositive.status === 200 && !!falsePositive.json.data.resolved_at,
+    falsePositive.json,
+  );
+  const sameStatus = await call(analyst.jar, "PATCH", base, { body: { status: "false_positive" } });
+  check(
+    "asking for the status it already has changes nothing (200)",
+    sameStatus.status === 200 && sameStatus.json.data.status === "false_positive",
+    sameStatus.status,
+  );
+  const unassign = await call(analyst.jar, "PATCH", base, { body: { assigned_to: null } });
+  check(
+    "assigned_to null unassigns",
+    unassign.status === 200 && unassign.json.data.assigned_to === null,
+    unassign.json?.data,
+  );
+  const assignMe = await call(analyst.jar, "PATCH", base, { body: { assigned_to: "me" } });
+  check(
+    "assigned_to 'me' assigns the caller",
+    assignMe.status === 200 && assignMe.json.data.assigned_to === analystId,
+    assignMe.json?.data,
+  );
+  const assignViewer = await call(analyst.jar, "PATCH", base, { body: { assigned_to: viewerId } });
+  check(
+    "a viewer cannot be given an alert (422 on assigned_to)",
+    assignViewer.status === 422 && problems(assignViewer).includes("assigned_to"),
+    assignViewer.json,
+  );
+  const analystDeletes = await call(analyst.jar, "DELETE", base);
+  check(
+    "an analyst cannot delete an alert (403)",
+    analystDeletes.status === 403,
+    analystDeletes.json,
+  );
+  const afterAlertWork = await call(analyst.jar, "GET", base);
+  check(
+    "the alert still has its history fields after all that",
+    afterAlertWork.json?.data?.status === "false_positive" &&
+      !!afterAlertWork.json.data.acknowledged_at,
+    afterAlertWork.json?.data?.status,
+  );
+
+  section("Investigations: read, search, filter, statistics");
+  const anonInvestigations = await call(null, "GET", "/api/investigations");
+  check(
+    "GET /api/investigations without a session is 401",
+    anonInvestigations.status === 401,
+    anonInvestigations.status,
+  );
+  const investigationList = await call(viewer.jar, "GET", "/api/investigations");
+  const investigationItems = investigationList.json?.data?.items ?? [];
+  check(
+    "viewer lists investigations with analyst, tags, provenance and counts",
+    investigationList.status === 200 &&
+      investigationItems.length > 0 &&
+      investigationItems.every(
+        (i) =>
+          i.origin &&
+          "analyst" in i &&
+          Array.isArray(i.tags) &&
+          typeof i.indicator_count === "number" &&
+          typeof i.alert_count === "number",
+      ),
+    investigationList.json?.data?.pagination,
+  );
+  const investigationTotal = investigationList.json?.data?.pagination?.total ?? 0;
+  const openOnes = await call(
+    viewer.jar,
+    "GET",
+    "/api/investigations?status=investigating&priority=critical",
+  );
+  check(
+    "status and priority filters combine",
+    openOnes.json?.data?.items?.length > 0 &&
+      openOnes.json.data.items.every(
+        (i) => i.status === "investigating" && i.priority === "critical",
+      ),
+    openOnes.json?.data?.pagination,
+  );
+  const harborInvestigations = await call(viewer.jar, "GET", "/api/investigations?q=harbor");
+  check(
+    "search finds investigations by title or attached indicator value",
+    harborInvestigations.json?.data?.items?.some((i) => /harbor/i.test(i.title)),
+    harborInvestigations.json?.data?.items?.map((i) => i.title),
+  );
+  const investigationStats = await call(viewer.jar, "GET", "/api/investigations/stats");
+  check(
+    "statistics cover every status and add up to the total",
+    investigationStats.json?.data?.by_status?.map((s) => s.status).join(",") ===
+      "open,investigating,contained,resolved,closed" &&
+      investigationStats.json.data.total === investigationTotal,
+    investigationStats.json?.data,
+  );
+  const badInvestigationSort = await call(viewer.jar, "GET", "/api/investigations?sort=nope");
+  check("an unknown sort is 422", badInvestigationSort.status === 422, badInvestigationSort.status);
+  const detailOfDemo = await call(
+    viewer.jar,
+    "GET",
+    `/api/investigations/${investigationItems.find((i) => /Harbor Lights C2/.test(i.title))?.id}`,
+  );
+  check(
+    "a demo investigation opens with linked indicators, alerts, notes, evidence and a timeline",
+    detailOfDemo.status === 200 &&
+      detailOfDemo.json.data.indicators.length > 0 &&
+      Array.isArray(detailOfDemo.json.data.alerts) &&
+      Array.isArray(detailOfDemo.json.data.notes) &&
+      detailOfDemo.json.data.timeline.at(-1)?.kind === "opened" &&
+      detailOfDemo.json.data.origin === "demo",
+    detailOfDemo.json?.data && Object.keys(detailOfDemo.json.data),
+  );
+
+  section("Investigations: lifecycle, notes, evidence, links");
+  const viewerOpens = await call(viewer.jar, "POST", "/api/investigations", {
+    body: { title: "Viewer case" },
+  });
+  check(
+    "a viewer cannot open an investigation (403)",
+    viewerOpens.status === 403,
+    viewerOpens.json,
+  );
+  for (const [name, body] of [
+    ["a status", { title: "x", status: "closed" }],
+    ["an origin", { title: "x", origin: "external" }],
+    ["an empty title", { title: " " }],
+    ["a viewer as the analyst", { title: "x", analyst_id: viewerId }],
+    ["an alert that does not exist", { title: "x", alert_ids: [NIL_UUID] }],
+  ]) {
+    const rejected = await call(analyst.jar, "POST", "/api/investigations", { body });
+    check(
+      `an investigation with ${name} is rejected (422)`,
+      rejected.status === 422,
+      rejected.json,
+    );
+  }
+
+  // A fresh, untouched alert: opening an investigation on it should start work on it.
+  const workAlert = await call(analyst.jar, "POST", "/api/alerts", {
+    body: { title: `Smoke work alert ${stamp}` },
+  });
+  const workAlertId = workAlert.json?.data?.id;
+  const madeInvestigation = await call(analyst.jar, "POST", "/api/investigations", {
+    body: {
+      title: `Smoke case ${stamp}`,
+      description: "",
+      priority: "high",
+      tags: ["Smoke Case", "smoke case"],
+      alert_ids: [workAlertId],
+    },
+  });
+  const smokeCase = madeInvestigation.json?.data;
+  check(
+    "analyst opens an investigation (201): open, local, assigned to them, tags collapsed, alert attached",
+    madeInvestigation.status === 201 &&
+      smokeCase?.status === "open" &&
+      smokeCase.origin === "local" &&
+      smokeCase.analyst_id === analystId &&
+      smokeCase.priority === "high" &&
+      smokeCase.description === null &&
+      smokeCase.tags.length === 1 &&
+      smokeCase.alerts.length === 1,
+    madeInvestigation.json,
+  );
+  const workedAlert = await call(analyst.jar, "GET", `/api/alerts/${workAlertId}`);
+  check(
+    "attaching the alert moved it from new to investigating and linked the investigation",
+    workedAlert.json?.data?.status === "investigating" &&
+      workedAlert.json.data.investigations.some((i) => i.id === smokeCase?.id),
+    workedAlert.json?.data?.status,
+  );
+  const caseBase = `/api/investigations/${smokeCase?.id}`;
+
+  const viewerNote = await call(viewer.jar, "POST", `${caseBase}/notes`, {
+    body: { body: "nope" },
+  });
+  check("a viewer cannot write a note (403)", viewerNote.status === 403, viewerNote.json);
+  const emptyNote = await call(analyst.jar, "POST", `${caseBase}/notes`, { body: { body: "   " } });
+  const systemNote = await call(analyst.jar, "POST", `${caseBase}/notes`, {
+    body: { body: "x", kind: "system" },
+  });
+  check(
+    "an empty note, or one that claims to be system history, is 422",
+    emptyNote.status === 422 && systemNote.status === 422,
+    [emptyNote.status, systemNote.status],
+  );
+  const noted = await call(analyst.jar, "POST", `${caseBase}/notes`, {
+    body: { body: "  Confirmed in the proxy logs.  " },
+  });
+  const ownNote = noted.json?.data?.notes?.find((n) => n.kind === "note");
+  check(
+    "analyst adds a note (201), trimmed and attributed to them",
+    noted.status === 201 &&
+      ownNote?.body === "Confirmed in the proxy logs." &&
+      ownNote.author_id === analystId,
+    noted.json?.data?.notes,
+  );
+  const editedNote = await call(analyst.jar, "PATCH", `${caseBase}/notes/${ownNote?.id}`, {
+    body: { body: "Confirmed in the proxy and DNS logs." },
+  });
+  check(
+    "the author edits their note",
+    editedNote.status === 200 &&
+      editedNote.json.data.notes.find((n) => n.id === ownNote.id)?.body.includes("DNS"),
+    editedNote.json,
+  );
+  const adminEdits = await call(admin.jar, "PATCH", `${caseBase}/notes/${ownNote?.id}`, {
+    body: { body: "Rewritten by an admin." },
+  });
+  check(
+    "nobody else can edit somebody's note, not even an administrator (403)",
+    adminEdits.status === 403,
+    adminEdits.json,
+  );
+
+  const started = await call(analyst.jar, "PATCH", caseBase, { body: { status: "investigating" } });
+  const historyLine = started.json?.data?.notes?.find((n) => n.kind === "system");
+  check(
+    "a status change leaves a system line in the history and the timeline",
+    started.status === 200 &&
+      /Status changed from Open to Investigating\./.test(historyLine?.body ?? "") &&
+      started.json.data.timeline.some((e) => e.kind === "system" && e.title === historyLine.body),
+    started.json?.data?.notes,
+  );
+  const editHistory = await call(analyst.jar, "PATCH", `${caseBase}/notes/${historyLine?.id}`, {
+    body: { body: "forged" },
+  });
+  const deleteHistory = await call(admin.jar, "DELETE", `${caseBase}/notes/${historyLine?.id}`);
+  check(
+    "the status history cannot be edited or deleted by anyone (403)",
+    editHistory.status === 403 && deleteHistory.status === 403,
+    [editHistory.status, deleteHistory.status],
+  );
+  const forgedHistory = await call(analyst.jar, "PATCH", caseBase, {
+    body: { status: "closed", closed_at: "2020-01-01T00:00:00.000Z" },
+  });
+  check(
+    "closed_at is not the client's to set (422)",
+    forgedHistory.status === 422,
+    forgedHistory.json,
+  );
+
+  const closedCase = await call(analyst.jar, "PATCH", caseBase, { body: { status: "closed" } });
+  check(
+    "closing stamps closed_at",
+    closedCase.status === 200 && !!closedCase.json.data.closed_at,
+    closedCase.json?.data?.closed_at,
+  );
+  const reopenedCase = await call(analyst.jar, "PATCH", caseBase, {
+    body: { status: "investigating", priority: "critical" },
+  });
+  check(
+    "reopening clears closed_at, and a priority change is recorded too",
+    reopenedCase.status === 200 &&
+      reopenedCase.json.data.closed_at === null &&
+      reopenedCase.json.data.notes.some((n) =>
+        /Priority changed from High to Critical\./.test(n.body),
+      ),
+    reopenedCase.json?.data?.notes?.map((n) => n.body),
+  );
+  const unassignedCase = await call(analyst.jar, "PATCH", caseBase, { body: { analyst_id: null } });
+  check(
+    "the analyst can be removed, and it is recorded",
+    unassignedCase.status === 200 &&
+      unassignedCase.json.data.analyst_id === null &&
+      unassignedCase.json.data.notes.some((n) => n.body === "Unassigned."),
+    unassignedCase.json?.data?.analyst_id,
+  );
+  const viewerAnalyst = await call(analyst.jar, "PATCH", caseBase, {
+    body: { analyst_id: viewerId },
+  });
+  check(
+    "a viewer cannot be made the analyst (422)",
+    viewerAnalyst.status === 422,
+    viewerAnalyst.json,
+  );
+
+  const evidenceBody = { title: "Proxy export", location: "ticket #4711", description: "" };
+  const viewerEvidence = await call(viewer.jar, "POST", `${caseBase}/evidence`, {
+    body: evidenceBody,
+  });
+  check("a viewer cannot add evidence (403)", viewerEvidence.status === 403, viewerEvidence.json);
+  const noLocation = await call(analyst.jar, "POST", `${caseBase}/evidence`, {
+    body: { title: "x", location: " " },
+  });
+  check("evidence needs a location (422)", noLocation.status === 422, noLocation.json);
+  const evidenceAdded = await call(analyst.jar, "POST", `${caseBase}/evidence`, {
+    body: evidenceBody,
+  });
+  const evidence = evidenceAdded.json?.data?.evidence?.[0];
+  check(
+    "analyst adds evidence (201) that appears on the timeline",
+    evidenceAdded.status === 201 &&
+      evidence?.title === "Proxy export" &&
+      evidence.description === null &&
+      evidenceAdded.json.data.timeline.some((e) => e.kind === "evidence"),
+    evidenceAdded.json?.data?.evidence,
+  );
+
+  // Two throwaway indicators, used here and in the linking checks below; removed at the end.
+  const smokeIndicators = [];
+  for (const suffix of ["a", "b"]) {
+    const made = await call(analyst.jar, "POST", "/api/indicators", {
+      body: { type: "domain", value: `smoke-p6-${suffix}-${stamp}.example` },
+    });
+    smokeIndicators.push(made.json?.data);
+  }
+  const [indA, indB] = smokeIndicators;
+  const attached = await call(analyst.jar, "POST", `${caseBase}/indicators`, {
+    body: { indicator_id: indA?.id },
+  });
+  check(
+    "analyst attaches an indicator (201), shown with its provenance and on the timeline",
+    attached.status === 201 &&
+      attached.json.data.indicators.some((i) => i.id === indA?.id && i.origin === "local") &&
+      attached.json.data.timeline.some((e) => e.kind === "indicator"),
+    attached.json?.data?.indicators,
+  );
+  const attachedAgain = await call(analyst.jar, "POST", `${caseBase}/indicators`, {
+    body: { indicator_id: indA?.id },
+  });
+  check("attaching it twice is refused (409)", attachedAgain.status === 409, attachedAgain.json);
+  const ghostIndicator = await call(analyst.jar, "POST", `${caseBase}/indicators`, {
+    body: { indicator_id: NIL_UUID },
+  });
+  check(
+    "attaching an indicator that does not exist is refused (4xx, not 500)",
+    ghostIndicator.status >= 400 && ghostIndicator.status < 500,
+    ghostIndicator.json,
+  );
+  const detached = await call(analyst.jar, "DELETE", `${caseBase}/indicators/${indA?.id}`);
+  check(
+    "detaching removes only the link, and the indicator stays",
+    detached.status === 200 &&
+      (await call(analyst.jar, "GET", `/api/indicators/${indA?.id}`)).status === 200,
+    detached.status,
+  );
+  const detachedAgain = await call(analyst.jar, "DELETE", `${caseBase}/indicators/${indA?.id}`);
+  check(
+    "detaching something that is not attached is 404",
+    detachedAgain.status === 404,
+    detachedAgain.status,
+  );
+  const detachAlert = await call(analyst.jar, "DELETE", `${caseBase}/alerts/${workAlertId}`);
+  check(
+    "an alert can be detached too",
+    detachAlert.status === 200 && detachAlert.json.data.alerts.length === 0,
+    detachAlert.json,
+  );
+
+  const evidenceGone = await call(analyst.jar, "DELETE", `${caseBase}/evidence/${evidence?.id}`);
+  check(
+    "evidence can be removed",
+    evidenceGone.status === 200 && evidenceGone.json.data.evidence.length === 0,
+    evidenceGone.json,
+  );
+  const adminDeletesNote = await call(admin.jar, "DELETE", `${caseBase}/notes/${ownNote?.id}`);
+  check(
+    "an administrator can remove somebody else's ordinary note",
+    adminDeletesNote.status === 200 &&
+      !adminDeletesNote.json.data.notes.some((n) => n.id === ownNote?.id),
+    adminDeletesNote.json,
+  );
+
+  const analystDeletesCase = await call(analyst.jar, "DELETE", caseBase);
+  const adminDeletesCase = await call(admin.jar, "DELETE", caseBase);
+  const caseAfterDelete = await call(admin.jar, "GET", caseBase);
+  check(
+    "only an administrator deletes an investigation (403 for an analyst, 200, then 404)",
+    analystDeletesCase.status === 403 &&
+      adminDeletesCase.status === 200 &&
+      caseAfterDelete.status === 404,
+    [analystDeletesCase.status, adminDeletesCase.status, caseAfterDelete.status],
+  );
+  await adminRest("DELETE", "/rest/v1/tags?name=ilike.smoke*"); // the case's tag outlives the case
+  const adminDeletesAlert = await call(admin.jar, "DELETE", base);
+  const adminDeletesWorkAlert = await call(admin.jar, "DELETE", `/api/alerts/${workAlertId}`);
+  const alertAfterDelete = await call(admin.jar, "GET", base);
+  check(
+    "an administrator deletes the alerts (200, then 404)",
+    adminDeletesAlert.status === 200 &&
+      adminDeletesWorkAlert.status === 200 &&
+      alertAfterDelete.status === 404,
+    [adminDeletesAlert.status, adminDeletesWorkAlert.status, alertAfterDelete.status],
+  );
+
+  section("Threat intelligence: actors, campaigns, malware, MITRE (read)");
+  const anonActors = await call(null, "GET", "/api/threat-actors");
+  check(
+    "GET /api/threat-actors without a session is 401",
+    anonActors.status === 401,
+    anonActors.status,
+  );
+  const actorList = await call(viewer.jar, "GET", "/api/threat-actors");
+  const actorItems = actorList.json?.data?.items ?? [];
+  check(
+    "viewer lists threat actors with provenance and link counts, sorted by name",
+    actorList.status === 200 &&
+      actorItems.length > 0 &&
+      actorItems.every(
+        (a) =>
+          a.origin &&
+          a.counts &&
+          ["malware", "campaigns", "techniques", "indicators"].every(
+            (k) => typeof a.counts[k] === "number",
+          ),
+      ) &&
+      actorItems.map((a) => a.name).join("|") ===
+        [...actorItems.map((a) => a.name)].sort((x, y) => x.localeCompare(y)).join("|"),
+    actorList.json?.data?.pagination,
+  );
+  const demoActor = actorItems.find((a) => a.name === "Crimson Harbor") ?? actorItems[0];
+  const actorSearch = await call(viewer.jar, "GET", "/api/threat-actors?q=crimson%20finance");
+  check(
+    "actor search covers names and target industries, all words must match",
+    actorSearch.json?.data?.items?.some((a) => a.name === "Crimson Harbor"),
+    actorSearch.json?.data?.items?.map((a) => a.name),
+  );
+  const aliasSearch = await call(viewer.jar, "GET", "/api/threat-actors?q=DEMO-FIN-01");
+  check(
+    "actor search finds an alias",
+    aliasSearch.json?.data?.items?.[0]?.name === "Crimson Harbor",
+    aliasSearch.json?.data?.items?.map((a) => a.name),
+  );
+  const actorWildcard = await call(viewer.jar, "GET", "/api/threat-actors?q=%25");
+  check(
+    "a literal % matches no actor",
+    actorWildcard.json?.data?.pagination?.total === 0,
+    actorWildcard.json?.data?.pagination,
+  );
+  const badActorSort = await call(viewer.jar, "GET", "/api/threat-actors?sort=motivation");
+  check("an unknown actor sort is 422", badActorSort.status === 422, badActorSort.status);
+  const actorDetail = await call(viewer.jar, "GET", `/api/threat-actors/${demoActor?.id}`);
+  check(
+    "an actor opens with malware, campaigns, techniques and indicators, all with provenance",
+    actorDetail.status === 200 &&
+      actorDetail.json.data.malware.length > 0 &&
+      actorDetail.json.data.campaigns.length > 0 &&
+      actorDetail.json.data.techniques.length > 0 &&
+      actorDetail.json.data.malware.every((m) => m.origin) &&
+      typeof actorDetail.json.data.indicators.total === "number",
+    actorDetail.json?.data && Object.keys(actorDetail.json.data),
+  );
+  const malformedActor = await call(viewer.jar, "GET", "/api/threat-actors/not-a-uuid");
+  check("a malformed actor id is 404", malformedActor.status === 404, malformedActor.status);
+
+  const campaignList = await call(viewer.jar, "GET", "/api/campaigns?status=active");
+  check(
+    "campaigns filter by status and carry link counts and provenance",
+    campaignList.status === 200 &&
+      campaignList.json.data.items.length > 0 &&
+      campaignList.json.data.items.every(
+        (c) => c.status === "active" && c.origin && typeof c.counts.actors === "number",
+      ),
+    campaignList.json?.data?.pagination,
+  );
+  const badCampaignStatus = await call(viewer.jar, "GET", "/api/campaigns?status=finished");
+  check(
+    "an unknown campaign status is 422",
+    badCampaignStatus.status === 422,
+    badCampaignStatus.status,
+  );
+  const malwareList = await call(viewer.jar, "GET", "/api/malware?type=Ransomware");
+  check(
+    "malware filters by type",
+    malwareList.status === 200 &&
+      malwareList.json.data.items.length > 0 &&
+      malwareList.json.data.items.every((m) => m.malware_type === "Ransomware"),
+    malwareList.json?.data?.items?.map((m) => m.malware_type),
+  );
+  const platformSearch = await call(viewer.jar, "GET", "/api/malware?q=macos");
+  check(
+    "malware search covers platforms",
+    platformSearch.json?.data?.items?.some((m) => m.platforms.includes("macOS")),
+    platformSearch.json?.data?.items?.map((m) => m.name),
+  );
+  const campaignDetail = await call(
+    viewer.jar,
+    "GET",
+    `/api/campaigns/${campaignList.json?.data?.items?.[0]?.id}`,
+  );
+  const malwareDetail = await call(
+    viewer.jar,
+    "GET",
+    `/api/malware/${malwareList.json?.data?.items?.[0]?.id}`,
+  );
+  check(
+    "campaign and malware details list their actors and indicators",
+    campaignDetail.status === 200 &&
+      Array.isArray(campaignDetail.json.data.actors) &&
+      malwareDetail.status === 200 &&
+      Array.isArray(malwareDetail.json.data.actors) &&
+      typeof malwareDetail.json.data.indicators.total === "number",
+    [campaignDetail.status, malwareDetail.status],
+  );
+
+  const mitreList = await call(viewer.jar, "GET", "/api/mitre?page_size=100");
+  check(
+    "MITRE techniques list, sorted by id, each with tactics",
+    mitreList.status === 200 &&
+      mitreList.json.data.items.length >= 10 &&
+      mitreList.json.data.items.every(
+        (t) => /^T\d{4}(\.\d{3})?$/.test(t.id) && Array.isArray(t.tactics),
+      ),
+    mitreList.json?.data?.pagination,
+  );
+  const tacticFilter = await call(viewer.jar, "GET", "/api/mitre?tactic=Initial%20Access");
+  check(
+    "a tactic filter keeps only techniques of that tactic",
+    tacticFilter.json?.data?.items?.length > 0 &&
+      tacticFilter.json.data.items.every((t) => t.tactics.includes("Initial Access")),
+    tacticFilter.json?.data?.items?.map((t) => t.id),
+  );
+  const mitreSearch = await call(viewer.jar, "GET", "/api/mitre?q=phishing");
+  check(
+    "technique search finds by name",
+    mitreSearch.json?.data?.items?.some((t) => t.id === "T1566"),
+    mitreSearch.json?.data?.items?.map((t) => t.id),
+  );
+  const technique = await call(viewer.jar, "GET", "/api/mitre/t1566");
+  check(
+    "a technique opens by id in either case, with the actors known to use it",
+    technique.status === 200 &&
+      technique.json.data.id === "T1566" &&
+      Array.isArray(technique.json.data.actors),
+    technique.json,
+  );
+  const badTechnique = await call(viewer.jar, "GET", "/api/mitre/T9");
+  const unknownTechnique = await call(viewer.jar, "GET", "/api/mitre/T9999");
+  check(
+    "a malformed or unknown technique id is 404",
+    badTechnique.status === 404 && unknownTechnique.status === 404,
+    [badTechnique.status, unknownTechnique.status],
+  );
+
+  section("Threat intelligence: curation is administrators only");
+  const actorBody = {
+    name: `Smoke Actor ${stamp}`,
+    aliases: ["SMOKE-1", "smoke-1", " "],
+    description: "",
+    motivation: "Testing",
+  };
+  const viewerCreatesActor = await call(viewer.jar, "POST", "/api/threat-actors", {
+    body: actorBody,
+  });
+  const analystCreatesActor = await call(analyst.jar, "POST", "/api/threat-actors", {
+    body: actorBody,
+  });
+  check(
+    "viewers and analysts cannot create threat actors (403)",
+    viewerCreatesActor.status === 403 && analystCreatesActor.status === 403,
+    [viewerCreatesActor.status, analystCreatesActor.status],
+  );
+  const analystEditsActor = await call(
+    analyst.jar,
+    "PATCH",
+    `/api/threat-actors/${demoActor?.id}`,
+    {
+      body: { motivation: "Vandalism" },
+    },
+  );
+  const analystDeletesActor = await call(
+    analyst.jar,
+    "DELETE",
+    `/api/threat-actors/${demoActor?.id}`,
+  );
+  check(
+    "analysts cannot edit or delete one either (403)",
+    analystEditsActor.status === 403 && analystDeletesActor.status === 403,
+    [analystEditsActor.status, analystDeletesActor.status],
+  );
+  const untouched = await call(viewer.jar, "GET", `/api/threat-actors/${demoActor?.id}`);
+  check(
+    "and the demo actor is untouched",
+    untouched.json?.data?.motivation === actorDetail.json?.data?.motivation,
+    untouched.json?.data?.motivation,
+  );
+
+  const someMalware = malwareList.json?.data?.items?.[0]?.id;
+  const madeActor = await call(admin.jar, "POST", "/api/threat-actors", {
+    body: {
+      ...actorBody,
+      malware_ids: [someMalware, someMalware],
+      technique_ids: ["T1566", "T1078"],
+      target_industries: ["Finance", "finance"],
+    },
+  });
+  const smokeActor = madeActor.json?.data;
+  check(
+    "an administrator creates an actor (201): local, tidy lists, links set once",
+    madeActor.status === 201 &&
+      smokeActor?.origin === "local" &&
+      smokeActor.description === null &&
+      smokeActor.aliases.join("|") === "SMOKE-1" &&
+      smokeActor.target_industries.join("|") === "Finance" &&
+      smokeActor.malware.length === 1 &&
+      smokeActor.techniques.map((t) => t.id).join("|") === "T1078|T1566",
+    madeActor.json,
+  );
+  for (const [name, body, field] of [
+    ["origin", { name: "x", origin: "external" }, null],
+    ["an owner", { name: "x", created_by: analystId }, null],
+    ["a bad technique id", { name: "x", technique_ids: ["T15"] }, "technique_ids"],
+    [
+      "reversed dates",
+      { name: "x", first_seen: "2026-06-01T00:00:00.000Z", last_seen: "2026-01-01T00:00:00.000Z" },
+      "last_seen",
+    ],
+  ]) {
+    const rejected = await call(admin.jar, "POST", "/api/threat-actors", { body });
+    check(
+      `an actor with ${name} is rejected (422${field ? ` on ${field}` : ""})`,
+      rejected.status === 422 &&
+        (!field || problems(rejected).some((p) => p === field || p.startsWith(`${field}.`))),
+      rejected.json,
+    );
+  }
+  const duplicateActor = await call(admin.jar, "POST", "/api/threat-actors", {
+    body: { name: actorBody.name.toUpperCase() },
+  });
+  check("a duplicate name (any case) is 409", duplicateActor.status === 409, duplicateActor.json);
+  const ghostLink = await call(admin.jar, "POST", "/api/threat-actors", {
+    body: { name: `Ghost ${stamp}`, malware_ids: [NIL_UUID] },
+  });
+  const ghostSearch = await call(
+    admin.jar,
+    "GET",
+    `/api/threat-actors?q=${encodeURIComponent(`Ghost ${stamp}`)}`,
+  );
+  check(
+    "a link to something that does not exist is 422 and nothing is created",
+    ghostLink.status === 422 &&
+      problems(ghostLink).includes("malware_ids") &&
+      ghostSearch.json?.data?.pagination?.total === 0,
+    [ghostLink.status, ghostSearch.json?.data?.pagination],
+  );
+
+  const actorBase = `/api/threat-actors/${smokeActor?.id}`;
+  const emptyActorPatch = await call(admin.jar, "PATCH", actorBase, { body: {} });
+  check("an empty actor update is 422", emptyActorPatch.status === 422, emptyActorPatch.status);
+  const clearedMalware = await call(admin.jar, "PATCH", actorBase, {
+    body: { malware_ids: [], technique_ids: ["T1059"] },
+  });
+  check(
+    "a link list replaces the whole set (an empty one clears it); lists left out are kept",
+    clearedMalware.status === 200 &&
+      clearedMalware.json.data.malware.length === 0 &&
+      clearedMalware.json.data.techniques.map((t) => t.id).join("|") === "T1059" &&
+      clearedMalware.json.data.aliases.join("|") === "SMOKE-1",
+    clearedMalware.json?.data,
+  );
+  const badLinkPatch = await call(admin.jar, "PATCH", actorBase, {
+    body: { motivation: "Changed", campaign_ids: [NIL_UUID] },
+  });
+  const afterBadPatch = await call(admin.jar, "GET", actorBase);
+  check(
+    "a failed link check changes nothing at all, not even the other fields (422)",
+    badLinkPatch.status === 422 && afterBadPatch.json?.data?.motivation === "Testing",
+    [badLinkPatch.status, afterBadPatch.json?.data?.motivation],
+  );
+  const datesSet = await call(admin.jar, "PATCH", actorBase, {
+    body: { first_seen: "2026-01-01T00:00:00.000Z", last_seen: "2026-06-01T00:00:00.000Z" },
+  });
+  const datesNulled = await call(admin.jar, "PATCH", actorBase, { body: { first_seen: null } });
+  check(
+    "dates are set, and null clears one",
+    datesSet.status === 200 &&
+      !!datesSet.json.data.first_seen &&
+      datesNulled.status === 200 &&
+      datesNulled.json.data.first_seen === null,
+    [datesSet.status, datesNulled.json?.data?.first_seen],
+  );
+
+  const madeCampaign = await call(admin.jar, "POST", "/api/campaigns", {
+    body: { name: `Smoke Campaign ${stamp}`, status: "dormant", actor_ids: [smokeActor?.id] },
+  });
+  const smokeCampaign = madeCampaign.json?.data;
+  check(
+    "an administrator creates a campaign (201): local, its status kept, actor linked",
+    madeCampaign.status === 201 &&
+      smokeCampaign?.origin === "local" &&
+      smokeCampaign.status === "dormant" &&
+      smokeCampaign.actors.map((a) => a.id).join() === smokeActor?.id,
+    madeCampaign.json,
+  );
+  const badCampaign = await call(admin.jar, "POST", "/api/campaigns", {
+    body: { name: "x", status: "finished" },
+  });
+  check("a campaign with an unknown status is 422", badCampaign.status === 422, badCampaign.status);
+  const campaignUpdate = await call(admin.jar, "PATCH", `/api/campaigns/${smokeCampaign?.id}`, {
+    body: { status: "concluded", actor_ids: [] },
+  });
+  check(
+    "a campaign is updated and its actors cleared",
+    campaignUpdate.status === 200 &&
+      campaignUpdate.json.data.status === "concluded" &&
+      campaignUpdate.json.data.actors.length === 0,
+    campaignUpdate.json?.data,
+  );
+
+  const madeMalware = await call(admin.jar, "POST", "/api/malware", {
+    body: {
+      name: `SmokeLoader ${stamp}`,
+      malware_type: " Loader ",
+      platforms: ["Windows", "windows"],
+      actor_ids: [smokeActor?.id],
+    },
+  });
+  const smokeMalware = madeMalware.json?.data;
+  check(
+    "an administrator creates a malware family (201): local, tidy platforms, actor linked",
+    madeMalware.status === 201 &&
+      smokeMalware?.origin === "local" &&
+      smokeMalware.malware_type === "Loader" &&
+      smokeMalware.platforms.join() === "Windows" &&
+      smokeMalware.actors.length === 1,
+    madeMalware.json,
+  );
+  const malwareUpdate = await call(admin.jar, "PATCH", `/api/malware/${smokeMalware?.id}`, {
+    body: { malware_type: "", actor_ids: [] },
+  });
+  check(
+    "a malware family is updated: an empty type becomes null, actors cleared",
+    malwareUpdate.status === 200 &&
+      malwareUpdate.json.data.malware_type === null &&
+      malwareUpdate.json.data.actors.length === 0,
+    malwareUpdate.json?.data,
+  );
+  // Re-link the actor so the indicator checks below can see it from both sides.
+  await call(admin.jar, "PATCH", `/api/malware/${smokeMalware?.id}`, {
+    body: { actor_ids: [smokeActor?.id] },
+  });
+
+  section("Indicators: linked intelligence and relationships");
+  const viewerLinks = await call(viewer.jar, "PUT", `/api/indicators/${indA?.id}/links`, {
+    body: { actor_ids: [smokeActor?.id] },
+  });
+  check("a viewer cannot link an indicator (403)", viewerLinks.status === 403, viewerLinks.json);
+  const emptyLinks = await call(analyst.jar, "PUT", `/api/indicators/${indA?.id}/links`, {
+    body: {},
+  });
+  const forgedLinks = await call(analyst.jar, "PUT", `/api/indicators/${indA?.id}/links`, {
+    body: { actor_ids: [], origin: "demo" },
+  });
+  check(
+    "an empty or over-wide links body is 422",
+    emptyLinks.status === 422 && forgedLinks.status === 422,
+    [emptyLinks.status, forgedLinks.status],
+  );
+  const linked = await call(analyst.jar, "PUT", `/api/indicators/${indA?.id}/links`, {
+    body: {
+      actor_ids: [smokeActor?.id, smokeActor?.id],
+      campaign_ids: [smokeCampaign?.id],
+      malware_ids: [smokeMalware?.id],
+    },
+  });
+  check(
+    "an analyst links an indicator to an actor, a campaign and a malware family",
+    linked.status === 200 &&
+      linked.json.data.threat_actors.length === 1 &&
+      linked.json.data.campaigns.length === 1 &&
+      linked.json.data.malware.length === 1,
+    linked.json?.data && [
+      linked.json.data.threat_actors,
+      linked.json.data.campaigns,
+      linked.json.data.malware,
+    ],
+  );
+  const actorSeesIndicator = await call(viewer.jar, "GET", actorBase);
+  check(
+    "and the actor shows the indicator, from the other side",
+    actorSeesIndicator.json?.data?.indicators?.total === 1 &&
+      actorSeesIndicator.json.data.indicators.items[0].id === indA?.id,
+    actorSeesIndicator.json?.data?.indicators,
+  );
+  const relinked = await call(analyst.jar, "PUT", `/api/indicators/${indA?.id}/links`, {
+    body: { campaign_ids: [] },
+  });
+  check(
+    "a list left out is kept; an empty one clears just that kind",
+    relinked.status === 200 &&
+      relinked.json.data.campaigns.length === 0 &&
+      relinked.json.data.threat_actors.length === 1 &&
+      relinked.json.data.malware.length === 1,
+    relinked.json?.data,
+  );
+  const ghostLinks = await call(analyst.jar, "PUT", `/api/indicators/${indA?.id}/links`, {
+    body: { actor_ids: [], malware_ids: [NIL_UUID] },
+  });
+  const afterGhost = await call(analyst.jar, "GET", `/api/indicators/${indA?.id}`);
+  check(
+    "a link to something that does not exist is 422 and changes nothing",
+    ghostLinks.status === 422 && afterGhost.json?.data?.threat_actors?.length === 1,
+    [ghostLinks.status, afterGhost.json?.data?.threat_actors?.length],
+  );
+
+  const relBody = { target_id: indB?.id, relationship: "resolves_to" };
+  const viewerRel = await call(viewer.jar, "POST", `/api/indicators/${indA?.id}/relationships`, {
+    body: relBody,
+  });
+  check("a viewer cannot relate indicators (403)", viewerRel.status === 403, viewerRel.json);
+  const related = await call(analyst.jar, "POST", `/api/indicators/${indA?.id}/relationships`, {
+    body: relBody,
+  });
+  const outgoing = related.json?.data?.relationships?.find((r) => r.other.id === indB?.id);
+  check(
+    "an analyst relates two indicators (201): outgoing from this one",
+    related.status === 201 &&
+      outgoing?.direction === "outgoing" &&
+      outgoing.relationship === "resolves_to",
+    related.json?.data?.relationships,
+  );
+  const otherSide = await call(analyst.jar, "GET", `/api/indicators/${indB?.id}`);
+  check(
+    "the other indicator shows it as incoming",
+    otherSide.json?.data?.relationships?.some(
+      (r) => r.direction === "incoming" && r.other.id === indA?.id,
+    ),
+    otherSide.json?.data?.relationships,
+  );
+  const sameRel = await call(analyst.jar, "POST", `/api/indicators/${indA?.id}/relationships`, {
+    body: relBody,
+  });
+  const selfRel = await call(analyst.jar, "POST", `/api/indicators/${indA?.id}/relationships`, {
+    body: { target_id: indA?.id, relationship: "related_to" },
+  });
+  const ghostRel = await call(analyst.jar, "POST", `/api/indicators/${indA?.id}/relationships`, {
+    body: { target_id: NIL_UUID, relationship: "related_to" },
+  });
+  const badKind = await call(analyst.jar, "POST", `/api/indicators/${indA?.id}/relationships`, {
+    body: { target_id: indB?.id, relationship: "likes" },
+  });
+  check(
+    "the same relationship twice is 409; to itself, to nothing, or of an unknown kind is 422",
+    sameRel.status === 409 &&
+      selfRel.status === 422 &&
+      ghostRel.status === 422 &&
+      badKind.status === 422,
+    [sameRel.status, selfRel.status, ghostRel.status, badKind.status],
+  );
+  const otherKind = await call(analyst.jar, "POST", `/api/indicators/${indA?.id}/relationships`, {
+    body: { target_id: indB?.id, relationship: "related_to" },
+  });
+  check(
+    "a different kind between the same two indicators is allowed",
+    otherKind.status === 201,
+    otherKind.json,
+  );
+  const relationshipId = outgoing?.id;
+  const wrongIndicator = await call(
+    analyst.jar,
+    "DELETE",
+    `/api/indicators/${NIL_UUID}/relationships/${relationshipId}`,
+  );
+  check(
+    "a relationship cannot be removed through an indicator it does not involve (404)",
+    wrongIndicator.status === 404,
+    wrongIndicator.status,
+  );
+  const viewerUnrelate = await call(
+    viewer.jar,
+    "DELETE",
+    `/api/indicators/${indA?.id}/relationships/${relationshipId}`,
+  );
+  check("a viewer cannot remove one (403)", viewerUnrelate.status === 403, viewerUnrelate.status);
+  const unrelated = await call(
+    analyst.jar,
+    "DELETE",
+    `/api/indicators/${indA?.id}/relationships/${relationshipId}`,
+  );
+  const unrelatedAgain = await call(
+    analyst.jar,
+    "DELETE",
+    `/api/indicators/${indA?.id}/relationships/${relationshipId}`,
+  );
+  check(
+    "an analyst removes it (200), and removing it again is 404",
+    unrelated.status === 200 && unrelatedAgain.status === 404,
+    [unrelated.status, unrelatedAgain.status],
+  );
+
+  section("Threat intelligence: deletion, and what it leaves behind");
+  const linksBefore = (await call(viewer.jar, "GET", `/api/indicators/${indA?.id}`)).json?.data
+    ?.threat_actors?.length;
+  const deletedActor = await call(admin.jar, "DELETE", actorBase);
+  const goneActor = await call(admin.jar, "GET", actorBase);
+  const indicatorAfter = await call(analyst.jar, "GET", `/api/indicators/${indA?.id}`);
+  const campaignAfter = await call(admin.jar, "GET", `/api/campaigns/${smokeCampaign?.id}`);
+  check(
+    "deleting an actor removes its links but not the indicator, campaign or malware",
+    linksBefore === 1 &&
+      deletedActor.status === 200 &&
+      goneActor.status === 404 &&
+      indicatorAfter.json?.data?.threat_actors?.length === 0 &&
+      campaignAfter.status === 200,
+    [
+      linksBefore,
+      deletedActor.status,
+      goneActor.status,
+      indicatorAfter.json?.data?.threat_actors?.length,
+      campaignAfter.status,
+    ],
+  );
+  const deletedCampaign = await call(admin.jar, "DELETE", `/api/campaigns/${smokeCampaign?.id}`);
+  const deletedMalware = await call(admin.jar, "DELETE", `/api/malware/${smokeMalware?.id}`);
+  const deletedAgain = await call(admin.jar, "DELETE", `/api/malware/${smokeMalware?.id}`);
+  check(
+    "campaigns and malware families delete the same way (200, then 404)",
+    deletedCampaign.status === 200 && deletedMalware.status === 200 && deletedAgain.status === 404,
+    [deletedCampaign.status, deletedMalware.status, deletedAgain.status],
+  );
+  for (const indicatorToRemove of smokeIndicators) {
+    await call(admin.jar, "DELETE", `/api/indicators/${indicatorToRemove?.id}`);
+  }
+  const demoStillThere = await call(viewer.jar, "GET", `/api/threat-actors/${demoActor?.id}`);
+  check(
+    "demo intelligence is still all there",
+    demoStillThere.status === 200 &&
+      demoStillThere.json.data.malware.length === actorDetail.json.data.malware.length,
+    demoStillThere.status,
+  );
+
+  section("Audit trail for alerts, investigations and threat intelligence");
+  // One query per action: the trail is newest-first and this section alone writes dozens of entries.
+  const phase6Entries = [];
+  for (const action of [
+    "alert.created",
+    "alert.status_changed",
+    "alert.assigned",
+    "alert.deleted",
+    "investigation.created",
+    "investigation.updated",
+    "investigation.note_added",
+    "investigation.note_updated",
+    "investigation.note_deleted",
+    "investigation.evidence_added",
+    "investigation.evidence_removed",
+    "investigation.link_added",
+    "investigation.link_removed",
+    "investigation.deleted",
+    "threat_actor.created",
+    "threat_actor.updated",
+    "threat_actor.deleted",
+    "campaign.created",
+    "campaign.updated",
+    "campaign.deleted",
+    "malware.created",
+    "malware.updated",
+    "malware.deleted",
+    "indicator.links_updated",
+    "indicator.relationship_added",
+    "indicator.relationship_removed",
+    "authz.denied",
+  ]) {
+    const logs = await call(admin.jar, "GET", `/api/audit-logs?action=${action}&page_size=100`);
+    const items = logs.json?.data?.items ?? [];
+    phase6Entries.push(...items);
+    check(
+      action === "authz.denied"
+        ? "refused writes by viewers and analysts were recorded as denials"
+        : `audit contains ${action}`,
+      items.length > 0,
+      logs.json?.data?.pagination,
+    );
+  }
+  const attachedByWork = phase6Entries.find(
+    (e) =>
+      e.action === "alert.status_changed" && e.metadata?.reason === "attached to an investigation",
+  );
+  check(
+    "the alert moved by attaching it to an investigation says why",
+    !!attachedByWork && attachedByWork.metadata.to === "investigating",
+    attachedByWork,
+  );
+  const phase6Trail = JSON.stringify(phase6Entries);
+  check(
+    "no note text, evidence locations or raw request bodies in the audit trail",
+    !phase6Trail.includes("Confirmed in the proxy") && !phase6Trail.includes("ticket #4711"),
+  );
+
+  section("Global search: alerts, investigations and threat intelligence");
+  const wideSearch = await call(viewer.jar, "GET", "/api/search?q=harbor");
+  const kinds = new Map((wideSearch.json?.data?.groups ?? []).map((g) => [g.kind, g]));
+  check(
+    "one search finds alerts, investigations, actors and campaigns, each linked and labelled with its origin",
+    ["alert", "investigation", "threat_actor", "campaign"].every(
+      (kind) => kinds.get(kind)?.hits?.length > 0,
+    ) &&
+      kinds.get("threat_actor").hits[0].href.startsWith("/threat-actors/") &&
+      kinds.get("campaign").hits[0].href.startsWith("/campaigns/") &&
+      kinds.get("investigation").hits[0].href.startsWith("/investigations/") &&
+      kinds.get("alert").hits[0].href.startsWith("/alerts/") &&
+      kinds.get("threat_actor").hits[0].origin === "demo",
+    [...kinds.keys()],
+  );
+  const techniqueSearch = await call(viewer.jar, "GET", "/api/search?q=T1566");
+  const techniqueHit = techniqueSearch.json?.data?.groups?.find((g) => g.kind === "technique")
+    ?.hits?.[0];
+  check(
+    "a technique id finds the technique, without a made-up origin",
+    techniqueHit?.href === "/mitre/T1566" && techniqueHit.origin === null,
+    techniqueHit,
+  );
+  const malwareSearch = await call(viewer.jar, "GET", "/api/search?q=nightloader");
+  check(
+    "malware is searchable too",
+    malwareSearch.json?.data?.groups?.some(
+      (g) => g.kind === "malware" && g.hits[0].href.startsWith("/malware/"),
+    ),
+    malwareSearch.json?.data?.groups?.map((g) => g.kind),
+  );
+
+  // ---------------------------------------------------------------------------------------------
+  // Phase 6b: API keys and telemetry ingestion
+  // ---------------------------------------------------------------------------------------------
+  // Everything created here carries a marker (manager "smoke-manager", agent ids "smoke-...") so the
+  // clean-up at the end removes only this run's data, never a real sensor's.
+  const marker = `smoke-${stamp}`;
+  const keyPattern = /^arc_[A-Za-z0-9_-]{43}$/;
+  const ingestUrl = "/api/ingest/wazuh";
+  const bearer = (token) => ({ authorization: `Bearer ${token}` });
+  const wazuhAlert = (n, overrides = {}) => ({
+    id: `${stamp}.${n}`,
+    timestamp: new Date(Date.now() - (10 - n) * 1000).toISOString().replace("Z", "+0000"),
+    rule: {
+      id: "60204",
+      level: 10,
+      description: `Smoke alert ${n}`,
+      groups: ["windows", "authentication_failures"],
+    },
+    agent: { id: marker, name: `SMOKE-WIN10-${stamp}`, ip: "192.168.56.150" },
+    manager: { name: "smoke-manager" },
+    full_log: "smoke log line",
+    data: { win: { eventdata: { ipAddress: "198.51.100.199" } } },
+    location: "EventChannel",
+    ...overrides,
+  });
+  const smokeSha = createHash("sha256").update(marker).digest("hex");
+  const smokeAlerts = [
+    wazuhAlert(1, {
+      rule: {
+        id: "60204",
+        level: 10,
+        description: `Smoke logon failures ${stamp}`,
+        groups: ["authentication_failures"],
+        mitre: { id: ["T1110"] },
+      },
+    }),
+    wazuhAlert(2, {
+      rule: {
+        id: "100210",
+        level: 12,
+        description: `Smoke certutil ${stamp}`,
+        groups: ["sysmon", "sysmon_event1"],
+        mitre: { id: ["T1059.001"] },
+      },
+      data: {
+        win: {
+          system: { providerName: "Microsoft-Windows-Sysmon", eventID: "1" },
+          eventdata: { hashes: `SHA256=${smokeSha}`, queryName: `${marker}.example` },
+        },
+      },
+    }),
+    wazuhAlert(3, {
+      rule: {
+        id: "60106",
+        level: 3,
+        description: `Smoke routine ${stamp}`,
+        groups: ["authentication_success"],
+      },
+      data: { win: { eventdata: { ipAddress: "198.51.100.198" } } },
+    }),
+  ];
+
+  section("API keys: who may make one, what is shown");
+  const anonKeys = await call(null, "GET", "/api/api-keys");
+  const viewerKeys = await call(viewer.jar, "GET", "/api/api-keys");
+  check(
+    "keys need a session (401) and a role that may manage them (viewers: 403)",
+    anonKeys.status === 401 && viewerKeys.status === 403,
+    [anonKeys.status, viewerKeys.status],
+  );
+  const analystKey = await call(analyst.jar, "POST", "/api/api-keys", {
+    body: { name: "Smoke analyst key", scopes: ["ingest:wazuh"] },
+  });
+  check(
+    "an analyst cannot make an ingest key (403): the scope needs events:write",
+    analystKey.status === 403 && code(analystKey) === "FORBIDDEN",
+    analystKey.json,
+  );
+  for (const [name, body] of [
+    ["no name", { name: "  ", scopes: ["ingest:wazuh"] }],
+    ["no scope", { name: "x", scopes: [] }],
+    ["an unknown scope", { name: "x", scopes: ["admin:everything"] }],
+    ["a lifetime over a year", { name: "x", scopes: ["ingest:wazuh"], expires_in_days: 366 }],
+    ["an owner", { name: "x", scopes: ["ingest:wazuh"], user_id: analystId }],
+    ["a hash of its own", { name: "x", scopes: ["ingest:wazuh"], key_hash: "a".repeat(64) }],
+  ]) {
+    const rejected = await call(admin.jar, "POST", "/api/api-keys", { body });
+    check(`a key request with ${name} is rejected (422)`, rejected.status === 422, rejected.json);
+  }
+  const madeKey = await call(admin.jar, "POST", "/api/api-keys", {
+    body: {
+      name: `Smoke key ${stamp}`,
+      scopes: ["ingest:wazuh", "ingest:wazuh"],
+      expires_in_days: 7,
+    },
+  });
+  const ingestKey = madeKey.json?.data?.key;
+  const keyInfo = madeKey.json?.data?.api_key;
+  check(
+    "an administrator gets a key (201), shown once, with its details but never the hash",
+    madeKey.status === 201 &&
+      keyPattern.test(ingestKey ?? "") &&
+      keyInfo?.status === "active" &&
+      keyInfo.scopes.join() === "ingest:wazuh" &&
+      keyInfo.key_prefix === ingestKey.slice(0, 8) &&
+      !("key_hash" in keyInfo),
+    madeKey.json?.data && Object.keys(madeKey.json.data),
+  );
+  check(
+    "the key expires in the 7 days asked for",
+    Math.abs(Date.parse(keyInfo?.expires_at) - (Date.now() + 7 * 86400_000)) < 120_000,
+    keyInfo?.expires_at,
+  );
+  const adminKeys = await call(admin.jar, "GET", "/api/api-keys");
+  const analystKeys = await call(analyst.jar, "GET", "/api/api-keys");
+  check(
+    "the list shows the key without its secret; an analyst does not see an administrator's keys",
+    adminKeys.json?.data?.some((k) => k.id === keyInfo?.id) &&
+      !JSON.stringify(adminKeys.json?.data).includes(ingestKey) &&
+      !JSON.stringify(adminKeys.json?.data).includes("key_hash") &&
+      analystKeys.status === 200 &&
+      !analystKeys.json.data.some((k) => k.id === keyInfo?.id),
+    [adminKeys.status, analystKeys.status],
+  );
+  const analystRevokes = await call(analyst.jar, "DELETE", `/api/api-keys/${keyInfo?.id}`);
+  check(
+    "an analyst cannot revoke somebody else's key (404: it is not theirs to see)",
+    analystRevokes.status === 404,
+    analystRevokes.status,
+  );
+
+  section("Ingest: the key is the only way in");
+  const noKey = await call(null, "POST", ingestUrl, { body: { alerts: [smokeAlerts[0]] } });
+  const badKey = await call(null, "POST", ingestUrl, {
+    body: { alerts: [smokeAlerts[0]] },
+    headers: bearer("arc_" + "x".repeat(43)),
+  });
+  const junkKey = await call(null, "POST", ingestUrl, {
+    body: { alerts: [smokeAlerts[0]] },
+    headers: bearer("not-a-key"),
+  });
+  check(
+    "no key, a made-up key and a malformed one all get the same 401, with a Bearer challenge",
+    noKey.status === 401 &&
+      badKey.status === 401 &&
+      junkKey.status === 401 &&
+      noKey.text === badKey.text &&
+      badKey.text === junkKey.text &&
+      /^Bearer/.test(noKey.headers.get("www-authenticate") ?? ""),
+    [noKey.status, badKey.status, junkKey.status, noKey.headers.get("www-authenticate")],
+  );
+  const sessionOnly = await call(admin.jar, "POST", ingestUrl, {
+    body: { alerts: [smokeAlerts[0]] },
+  });
+  check(
+    "a signed-in administrator's session is not a key (401)",
+    sessionOnly.status === 401,
+    sessionOnly.status,
+  );
+  const viaGet = await call(null, "GET", ingestUrl);
+  check(
+    "the ingest endpoint takes POST only",
+    viaGet.status === 405 || viaGet.status === 404,
+    viaGet.status,
+  );
+  const nothingWritten = await call(admin.jar, "GET", `/api/events?source=wazuh&page_size=1`);
+  check(
+    "and nothing was written by any of those",
+    (nothingWritten.json?.data?.items ?? []).every((e) => !String(e.title).includes(String(stamp))),
+    nothingWritten.json?.data?.pagination,
+  );
+
+  section("Ingest: a batch of Wazuh alerts");
+  const sent = await call(null, "POST", ingestUrl, {
+    body: { alerts: [...smokeAlerts, "junk", { rule: {} }] },
+    headers: bearer(ingestKey),
+  });
+  const summary = sent.json?.data;
+  check(
+    "a batch is recorded: 3 events, alerts for level 7 and up only, one asset, indicators, and two alerts rejected on their own",
+    sent.status === 200 &&
+      summary?.received === 5 &&
+      summary.events_created === 3 &&
+      summary.alerts_created === 2 &&
+      summary.assets_created === 1 &&
+      summary.indicators_created === 3 &&
+      summary.duplicates === 0 &&
+      summary.rejected?.map((r) => r.index).join() === "3,4" &&
+      /Not a Wazuh alert/.test(summary.rejected[0].reason),
+    summary,
+  );
+  check(
+    "the answer never echoes the key or the alerts",
+    !sent.text.includes(ingestKey) && !sent.text.includes("smoke log line"),
+  );
+  const resent = await call(null, "POST", ingestUrl, {
+    body: { alerts: smokeAlerts },
+    headers: bearer(ingestKey),
+  });
+  check(
+    "sending the same alerts again is harmless: all duplicates, nothing created",
+    resent.status === 200 &&
+      resent.json?.data?.duplicates === 3 &&
+      resent.json.data.events_created === 0 &&
+      resent.json.data.alerts_created === 0 &&
+      resent.json.data.assets_created === 0 &&
+      resent.json.data.indicators_created === 0,
+    resent.json?.data,
+  );
+  const alone = await call(null, "POST", ingestUrl, {
+    body: { alerts: ["junk"] },
+    headers: bearer(ingestKey),
+  });
+  check(
+    "a batch with nothing usable is answered (200), with every alert rejected and nothing stored",
+    alone.status === 200 &&
+      alone.json?.data?.rejected?.length === 1 &&
+      alone.json.data.events_created === 0,
+    alone.json?.data,
+  );
+  for (const [name, request, status] of [
+    [
+      "not JSON",
+      { body: "{oops", headers: { ...bearer(ingestKey), "content-type": "application/json" } },
+      400,
+    ],
+    [
+      "not declared as JSON",
+      { body: "alerts=1", headers: { ...bearer(ingestKey), "content-type": "text/plain" } },
+      415,
+    ],
+    ["an empty list", { body: { alerts: [] }, headers: bearer(ingestKey) }, 422],
+    [
+      "101 alerts",
+      { body: { alerts: Array(101).fill(smokeAlerts[2]) }, headers: bearer(ingestKey) },
+      422,
+    ],
+    [
+      "a field it does not know",
+      { body: { alerts: [smokeAlerts[2]], extra: 1 }, headers: bearer(ingestKey) },
+      422,
+    ],
+  ]) {
+    const refused = await call(null, "POST", ingestUrl, request);
+    check(`a request with ${name} is refused (${status})`, refused.status === status, [
+      refused.status,
+      refused.json?.error,
+    ]);
+  }
+  const huge = await call(null, "POST", ingestUrl, {
+    body: JSON.stringify({ alerts: [{ full_log: "x".repeat(1024 * 1024 + 100) }] }),
+    headers: bearer(ingestKey),
+  });
+  check("a body over 1 MiB is refused (413)", huge.status === 413, huge.status);
+  const bigAlert = await call(null, "POST", ingestUrl, {
+    body: {
+      alerts: [
+        wazuhAlert(4, {
+          rule: { id: "1", level: 8, description: `Smoke big ${stamp}` },
+          full_log: "L".repeat(200_000),
+          data: { blob: "D".repeat(200_000) },
+        }),
+      ],
+    },
+    headers: bearer(ingestKey),
+  });
+  check(
+    "a large alert is accepted and stored within its limit",
+    bigAlert.status === 200 && bigAlert.json?.data?.events_created === 1,
+    bigAlert.json,
+  );
+
+  section("Ingest: what it created, as people see it");
+  const wazuhAlerts = await call(
+    viewer.jar,
+    "GET",
+    `/api/alerts?source=wazuh&q=${encodeURIComponent(`SMOKE-WIN10-${stamp}`)}`,
+  );
+  const ingestedAlert = wazuhAlerts.json?.data?.items?.find(
+    (a) => a.title === `Smoke logon failures ${stamp}`,
+  );
+  check(
+    "the alerts are searchable by their asset, and are external, new, unassigned, high",
+    wazuhAlerts.json?.data?.pagination?.total === 3 &&
+      ingestedAlert?.origin === "external" &&
+      ingestedAlert.source === "wazuh" &&
+      ingestedAlert.status === "new" &&
+      ingestedAlert.assigned_to === null &&
+      ingestedAlert.severity === "high" &&
+      ingestedAlert.asset?.name === `SMOKE-WIN10-${stamp}`,
+    wazuhAlerts.json?.data?.items?.map((a) => a.title),
+  );
+  const alertDetail = await call(viewer.jar, "GET", `/api/alerts/${ingestedAlert?.id}`);
+  const ingestedDetail = alertDetail.json?.data;
+  check(
+    "an alert opens with its machine, the attacker's address as its indicator, ATT&CK techniques (named when the workspace knows them) and the raw event",
+    alertDetail.status === 200 &&
+      ingestedDetail?.asset?.ip_address === "192.168.56.150" &&
+      ingestedDetail.asset.os === "Windows" &&
+      ingestedDetail.indicator?.value === "198.51.100.199" &&
+      ingestedDetail.indicator.verdict === "unknown" &&
+      ingestedDetail.techniques?.[0]?.id === "T1110" &&
+      ingestedDetail.techniques[0].name === "Brute Force" &&
+      ingestedDetail.event?.payload?.rule?.id === "60204" &&
+      ingestedDetail.event.payload.full_log === "smoke log line" &&
+      ingestedDetail.event.source === "wazuh",
+    ingestedDetail && {
+      asset: ingestedDetail.asset,
+      indicator: ingestedDetail.indicator,
+      techniques: ingestedDetail.techniques,
+    },
+  );
+  const techniqueAlert = wazuhAlerts.json?.data?.items?.find(
+    (a) => a.title === `Smoke certutil ${stamp}`,
+  );
+  const techniqueDetail = await call(viewer.jar, "GET", `/api/alerts/${techniqueAlert?.id}`);
+  check(
+    "a technique the workspace does not know is kept without a name (no invented link)",
+    techniqueDetail.json?.data?.techniques?.[0]?.id === "T1059.001" &&
+      techniqueDetail.json.data.techniques[0].name === null,
+    techniqueDetail.json?.data?.techniques,
+  );
+  const ipIndicator = await call(viewer.jar, "GET", `/api/indicators?q=198.51.100.199`);
+  const noiseIndicator = await call(viewer.jar, "GET", `/api/indicators?q=198.51.100.198`);
+  check(
+    "indicators from alerts are external, source wazuh, verdict unknown (a sensor sighting is not a verdict); the routine level-3 alert's address created none",
+    ipIndicator.json?.data?.items?.[0]?.origin === "external" &&
+      ipIndicator.json.data.items[0].verdict === "unknown" &&
+      ipIndicator.json.data.items[0].source === "wazuh" &&
+      noiseIndicator.json?.data?.pagination?.total === 0,
+    [ipIndicator.json?.data?.items?.[0], noiseIndicator.json?.data?.pagination],
+  );
+  const smokeHash = await call(viewer.jar, "GET", `/api/indicators?q=${smokeSha}`);
+  const smokeDomain = await call(viewer.jar, "GET", `/api/indicators?q=${marker}.example`);
+  check(
+    "the hash and the queried name of the second alert are indicators too",
+    smokeHash.json?.data?.pagination?.total === 1 &&
+      smokeDomain.json?.data?.pagination?.total === 1,
+    [smokeHash.json?.data?.pagination, smokeDomain.json?.data?.pagination],
+  );
+
+  const events = await call(viewer.jar, "GET", `/api/events?source=wazuh&origin=external`);
+  const ourEvents = (events.json?.data?.items ?? []).filter((e) =>
+    String(e.title).includes(String(stamp)),
+  );
+  check(
+    "events list newest first with their asset, and the ones that raised an alert say so",
+    events.status === 200 &&
+      ourEvents.length >= 3 &&
+      ourEvents.every((e) => e.origin === "external" && e.source === "wazuh") &&
+      ourEvents.some((e) => e.alert_id !== null) &&
+      ourEvents.some((e) => e.alert_id === null && e.severity === "info") &&
+      (events.json.data.items ?? [])
+        .map((e) => e.occurred_at)
+        .every((t, i, all) => i === 0 || all[i - 1] >= t),
+    ourEvents.map((e) => [e.title, e.alert_id !== null]),
+  );
+  const severityFilter = await call(viewer.jar, "GET", `/api/events?source=wazuh&severity=high`);
+  const badEventQuery = await call(viewer.jar, "GET", `/api/events?sort=title`);
+  const eventsPastEnd = await call(viewer.jar, "GET", `/api/events?page=9999`);
+  check(
+    "event filters work, a bad sort is 422 and a page past the end is an empty page",
+    severityFilter.json?.data?.items?.every((e) => e.severity === "high") &&
+      badEventQuery.status === 422 &&
+      eventsPastEnd.status === 200 &&
+      eventsPastEnd.json?.data?.items?.length === 0 &&
+      eventsPastEnd.json.data.pagination.total > 0,
+    [severityFilter.status, badEventQuery.status, eventsPastEnd.status],
+  );
+  const assets = await call(viewer.jar, "GET", `/api/assets?source=wazuh`);
+  const ourAsset = assets.json?.data?.items?.find((a) => a.external_id === marker);
+  check(
+    "the machine is an asset: external, with its address, and no operating system guess beyond the Windows data it sent",
+    assets.status === 200 &&
+      ourAsset?.origin === "external" &&
+      ourAsset.ip_address === "192.168.56.150" &&
+      ourAsset.os === "Windows" &&
+      ourAsset.name === `SMOKE-WIN10-${stamp}`,
+    ourAsset,
+  );
+  const sources = await call(viewer.jar, "GET", "/api/telemetry/sources");
+  const wazuhCard = sources.json?.data?.find((s) => s.id === "wazuh" && s.origin === "external");
+  const demoCards = sources.json?.data?.filter((s) => s.origin === "demo") ?? [];
+  check(
+    "the source list says Wazuh is receiving (something arrived just now), lists the demo feeds as demo, and lists Wazuh first",
+    sources.status === 200 &&
+      sources.json.data[0].id === "wazuh" &&
+      wazuhCard?.status === "receiving" &&
+      wazuhCard.events_total >= 3 &&
+      wazuhCard.assets_total >= 1 &&
+      demoCards.length >= 3 &&
+      demoCards.every((c) => c.status === "demo"),
+    sources.json?.data?.map((s) => `${s.id}:${s.status}`),
+  );
+  const anonEvents = await call(null, "GET", "/api/events");
+  const anonAssets = await call(null, "GET", "/api/assets");
+  check(
+    "events, assets and sources need a session (401)",
+    anonEvents.status === 401 && anonAssets.status === 401,
+    [anonEvents.status, anonAssets.status],
+  );
+
+  const analystWorks = await call(analyst.jar, "PATCH", `/api/alerts/${ingestedAlert?.id}`, {
+    body: { status: "acknowledged" },
+  });
+  check(
+    "an ingested alert follows the same lifecycle as any other (acknowledge: 200)",
+    analystWorks.status === 200 &&
+      analystWorks.json?.data?.status === "acknowledged" &&
+      analystWorks.json.data.assigned_to === analystId,
+    analystWorks.json?.data?.status,
+  );
+  const analystForges = await call(analyst.jar, "POST", "/api/alerts", {
+    body: { title: "Forged", source: "wazuh", origin: "external" },
+  });
+  check(
+    "nobody can forge sensor data through the alert API (422)",
+    analystForges.status === 422,
+    analystForges.status,
+  );
+
+  section("Ingest: the audit trail, and revoking the key");
+  const batchLogs = await call(
+    admin.jar,
+    "GET",
+    "/api/audit-logs?action=ingest.batch&page_size=50",
+  );
+  const ourBatch = batchLogs.json?.data?.items?.find(
+    (e) => e.entity_id === keyInfo?.id && e.metadata?.events_created === 3,
+  );
+  const allBatches = JSON.stringify(
+    batchLogs.json?.data?.items?.filter((e) => e.entity_id === keyInfo?.id) ?? [],
+  );
+  check(
+    "each accepted batch is one audit entry: which key, how many of each outcome",
+    ourBatch?.metadata?.source === "wazuh" &&
+      ourBatch.metadata.key_prefix === keyInfo?.key_prefix &&
+      ourBatch.metadata.accepted === 3 &&
+      ourBatch.metadata.rejected === 2 &&
+      ourBatch.metadata.alerts_created === 2,
+    ourBatch?.metadata,
+  );
+  check(
+    "and nothing of the alerts or the key is in it",
+    !allBatches.includes(ingestKey) &&
+      !allBatches.includes("smoke log line") &&
+      !allBatches.includes("198.51.100.199") &&
+      !allBatches.includes(`SMOKE-WIN10-${stamp}`),
+  );
+  const keyLogs = await call(
+    admin.jar,
+    "GET",
+    "/api/audit-logs?action=api_key.created&page_size=20",
+  );
+  const createdLog = keyLogs.json?.data?.items?.find((e) => e.entity_id === keyInfo?.id);
+  check(
+    "creating the key is audited without the key",
+    createdLog?.metadata?.name === `Smoke key ${stamp}` &&
+      !JSON.stringify(createdLog).includes(ingestKey),
+    createdLog?.metadata,
+  );
+  const deniedIngest = await call(admin.jar, "GET", `/api/api-keys`);
+  check(
+    "the key was recorded as used",
+    deniedIngest.json?.data?.find((k) => k.id === keyInfo?.id)?.last_used_at !== null,
+    deniedIngest.json?.data?.find((k) => k.id === keyInfo?.id)?.last_used_at,
+  );
+
+  const expiring = await adminRest("PATCH", `/rest/v1/api_keys?id=eq.${keyInfo?.id}`, {
+    expires_at: new Date(Date.now() - 1000).toISOString(),
+  });
+  const expiredTry = await call(null, "POST", ingestUrl, {
+    body: { alerts: [smokeAlerts[2]] },
+    headers: bearer(ingestKey),
+  });
+  const expiredList = await call(admin.jar, "GET", "/api/api-keys");
+  check(
+    "(setup) the key was made to expire, and an expired key is refused (401, same as any other bad key)",
+    expiring.status === 204 &&
+      expiredTry.status === 401 &&
+      expiredTry.text === noKey.text &&
+      expiredList.json?.data?.find((k) => k.id === keyInfo?.id)?.status === "expired",
+    [expiring.status, expiredTry.status],
+  );
+  await adminRest("PATCH", `/rest/v1/api_keys?id=eq.${keyInfo?.id}`, {
+    expires_at: new Date(Date.now() + 86400_000).toISOString(),
+  });
+  const alive = await call(null, "POST", ingestUrl, {
+    body: { alerts: [smokeAlerts[2]] },
+    headers: bearer(ingestKey),
+  });
+  check("(setup) with a future expiry it works again", alive.status === 200, alive.status);
+
+  const revoked = await call(admin.jar, "DELETE", `/api/api-keys/${keyInfo?.id}`);
+  const afterRevoke = await call(null, "POST", ingestUrl, {
+    body: { alerts: [smokeAlerts[2]] },
+    headers: bearer(ingestKey),
+  });
+  const revokedAgain = await call(admin.jar, "DELETE", `/api/api-keys/${keyInfo?.id}`);
+  const unknownRevoke = await call(admin.jar, "DELETE", `/api/api-keys/${NIL_UUID}`);
+  check(
+    "revoking stops the key at once (401), revoking again is harmless (200) and an unknown key is 404",
+    revoked.status === 200 &&
+      revoked.json?.data?.status === "revoked" &&
+      afterRevoke.status === 401 &&
+      afterRevoke.text === noKey.text &&
+      revokedAgain.status === 200 &&
+      unknownRevoke.status === 404,
+    [revoked.status, afterRevoke.status, revokedAgain.status, unknownRevoke.status],
+  );
+  const revokeLogs = await call(
+    admin.jar,
+    "GET",
+    "/api/audit-logs?action=api_key.revoked&page_size=20",
+  );
+  const revokedEntries = (revokeLogs.json?.data?.items ?? []).filter(
+    (e) => e.entity_id === keyInfo?.id,
+  );
+  check("revoking is audited once, not twice", revokedEntries.length === 1, revokedEntries.length);
+
+  // Clean-up: only what this run created.
+  await adminRest("DELETE", `/rest/v1/alerts?source_event_id=like.smoke-manager:*`);
+  await adminRest("DELETE", `/rest/v1/events?source_event_id=like.smoke-manager:*`);
+  await adminRest("DELETE", `/rest/v1/assets?external_id=eq.${marker}`);
+  await adminRest(
+    "DELETE",
+    `/rest/v1/indicators?value=in.(198.51.100.199,${smokeSha},${marker}.example)`,
+  );
+  await adminRest("DELETE", `/rest/v1/api_keys?id=eq.${keyInfo?.id}`);
+  const leftovers = await call(
+    viewer.jar,
+    "GET",
+    `/api/alerts?source=wazuh&q=${encodeURIComponent(`SMOKE-WIN10-${stamp}`)}`,
+  );
+  check(
+    "(cleanup) the smoke run's telemetry data is removed again",
+    leftovers.json?.data?.pagination?.total === 0,
+    leftovers.json?.data?.pagination,
+  );
+
+  section("Dashboard");
+  {
+    const overview = await call(viewer.jar, "GET", "/api/dashboard");
+    check("a viewer can read the dashboard (200)", overview.status === 200, overview.json?.error);
+    const counts = overview.json?.data?.counts;
+    check(
+      "it has real, non-negative counts and the standard shape",
+      counts && Object.values(counts).every((n) => typeof n === "number" && n >= 0),
+      counts,
+    );
+    check(
+      "it has a severity, IOC type and verdict distribution",
+      Array.isArray(overview.json?.data?.severity_distribution) &&
+        Array.isArray(overview.json?.data?.ioc_distribution) &&
+        Array.isArray(overview.json?.data?.verdict_distribution),
+    );
+    const windowed = await call(viewer.jar, "GET", "/api/dashboard?days=30&severity=high");
+    check(
+      "the days window is honoured by the activity series",
+      windowed.json?.data?.activity?.length === 30,
+      windowed.json?.data?.activity?.length,
+    );
+    const badDays = await call(viewer.jar, "GET", "/api/dashboard?days=0");
+    check("an out-of-range window is 422", badDays.status === 422, badDays.json);
+    const badSeverity = await call(viewer.jar, "GET", "/api/dashboard?severity=urgent");
+    check("an unknown severity is 422", badSeverity.status === 422, badSeverity.json);
+  }
+
+  section("Reports");
+  const reportIds = [];
+  {
+    const deniedCreate = await call(viewer.jar, "POST", "/api/reports", {
+      body: { type: "alerts" },
+    });
+    check(
+      "a viewer cannot generate a report (403)",
+      deniedCreate.status === 403,
+      deniedCreate.json,
+    );
+
+    const alerts = await call(analyst.jar, "POST", "/api/reports", {
+      body: { type: "alerts", title: `smoke-${stamp} alert summary` },
+    });
+    check("an analyst generates an alert summary (201)", alerts.status === 201, alerts.json?.error);
+    check(
+      "its content has the workspace's real totals",
+      typeof alerts.json?.data?.content?.total === "number" &&
+        alerts.json.data.content.total > 0 &&
+        alerts.json.data.origin === "local",
+      alerts.json?.data,
+    );
+    if (alerts.json?.data?.id) reportIds.push(alerts.json.data.id);
+
+    const noTitle = await call(analyst.jar, "POST", "/api/reports", {
+      body: { type: "indicators" },
+    });
+    check(
+      "a report without a title gets a generated one",
+      noTitle.status === 201 &&
+        typeof noTitle.json?.data?.title === "string" &&
+        noTitle.json.data.title.length > 0,
+      noTitle.json?.data?.title,
+    );
+    if (noTitle.json?.data?.id) reportIds.push(noTitle.json.data.id);
+
+    const missingTarget = await call(analyst.jar, "POST", "/api/reports", {
+      body: { type: "investigation" },
+    });
+    check(
+      "an investigation report without an id is 422",
+      missingTarget.status === 422,
+      missingTarget.json,
+    );
+
+    const found = await call(
+      analyst.jar,
+      "GET",
+      "/api/investigations?q=Harbor%20Lights&page_size=1",
+    );
+    const investigationId = found.json?.data?.items?.[0]?.id;
+    if (investigationId) {
+      const investigationReport = await call(analyst.jar, "POST", "/api/reports", {
+        body: { type: "investigation", investigation_id: investigationId },
+      });
+      check(
+        "an investigation report embeds its notes and linked records",
+        investigationReport.status === 201 &&
+          Array.isArray(investigationReport.json?.data?.content?.notes) &&
+          investigationReport.json.data.investigation_id === investigationId,
+        investigationReport.json?.data,
+      );
+      if (investigationReport.json?.data?.id) reportIds.push(investigationReport.json.data.id);
+    }
+    check("(setup) found the Harbor Lights investigation", !!investigationId);
+
+    const list = await call(
+      analyst.jar,
+      "GET",
+      `/api/reports?q=${encodeURIComponent(`smoke-${stamp}`)}`,
+    );
+    check(
+      "the search finds the titled report by title",
+      list.json?.data?.pagination?.total === 1,
+      list.json?.data,
+    );
+    const byType = await call(analyst.jar, "GET", "/api/reports?type=alerts&page_size=1");
+    check(
+      "the type filter narrows the list",
+      (byType.json?.data?.items ?? []).every((r) => r.type === "alerts"),
+      byType.json?.data,
+    );
+
+    const viewerRead = await call(viewer.jar, "GET", `/api/reports/${reportIds[0]}`);
+    check(
+      "a viewer can read a report someone else made (200)",
+      viewerRead.status === 200,
+      viewerRead.json?.error,
+    );
+    const missing = await call(
+      viewer.jar,
+      "GET",
+      "/api/reports/00000000-0000-4000-8000-000000000000",
+    );
+    check("an unknown report id is 404", missing.status === 404, missing.json);
+
+    const deniedDelete = await call(viewer.jar, "DELETE", `/api/reports/${reportIds[0]}`);
+    check("a viewer cannot delete a report (403)", deniedDelete.status === 403, deniedDelete.json);
+    const deleted = await call(analyst.jar, "DELETE", `/api/reports/${reportIds[0]}`);
+    check(
+      "reports:write deletes a report (even one it did not create)",
+      deleted.status === 200,
+      deleted.json,
+    );
+    const goneNow = await call(viewer.jar, "GET", `/api/reports/${reportIds[0]}`);
+    check("it is gone afterwards (404)", goneNow.status === 404, goneNow.json);
+    reportIds.shift();
+
+    // Clean up the other reports this run generated (their own delete rule was already checked above).
+    for (const id of reportIds) await call(analyst.jar, "DELETE", `/api/reports/${id}`);
+    const stillThere = [];
+    for (const id of reportIds) {
+      const probe = await call(admin.jar, "GET", `/api/reports/${id}`);
+      if (probe.status !== 404) stillThere.push(id);
+    }
+    check("(cleanup) no reports from this run remain", stillThere.length === 0, stillThere);
+  }
+
+  section("Integrations");
+  {
+    const deniedRead = await call(viewer.jar, "GET", "/api/integrations");
+    check(
+      "a viewer cannot read the integrations catalog (403)",
+      deniedRead.status === 403,
+      deniedRead.json,
+    );
+    const list = await call(analyst.jar, "GET", "/api/integrations");
+    check(
+      "an analyst reads the catalog, without any key values",
+      list.status === 200 &&
+        Array.isArray(list.json?.data) &&
+        !JSON.stringify(list.json.data).match(/[A-Za-z0-9_-]{32,}/),
+      list.status,
+    );
+    const demoRow = list.json?.data?.find((r) => r.provider === "demo");
+    check(
+      "the demo provider is always configured and enabled",
+      demoRow?.configured && demoRow?.enabled,
+      demoRow,
+    );
+
+    const analystToggle = await call(analyst.jar, "PATCH", "/api/integrations/virustotal", {
+      body: { enabled: false },
+    });
+    check(
+      "an analyst cannot toggle a provider (403)",
+      analystToggle.status === 403,
+      analystToggle.json,
+    );
+    const demoOff = await call(admin.jar, "PATCH", "/api/integrations/demo", {
+      body: { enabled: false },
+    });
+    check(
+      "the demo provider cannot be turned off, even by an admin (409)",
+      demoOff.status === 409,
+      demoOff.json,
+    );
+    const unknown = await call(admin.jar, "PATCH", "/api/integrations/not-a-provider", {
+      body: { enabled: false },
+    });
+    check("an unknown provider is 404", unknown.status === 404, unknown.json);
+
+    const off = await call(admin.jar, "PATCH", "/api/integrations/virustotal", {
+      body: { enabled: false },
+    });
+    check(
+      "an admin pauses a provider (200)",
+      off.status === 200 && off.json?.data?.enabled === false,
+      off.json,
+    );
+    const on = await call(admin.jar, "PATCH", "/api/integrations/virustotal", {
+      body: { enabled: true },
+    });
+    check(
+      "(cleanup) turned it back on",
+      on.status === 200 && on.json?.data?.enabled === true,
+      on.json,
+    );
+  }
+
+  section("AI: settings and per-alert analysis (no provider keys in this environment)");
+  {
+    // smokeAlert (and its `base`) was deleted at the end of the investigations section above; this
+    // needs its own alert, alive for the rest of this section.
+    const madeAiAlert = await call(analyst.jar, "POST", "/api/alerts", {
+      body: { title: `Smoke AI alert ${stamp}`, severity: "high" },
+    });
+    const aiAlertId = madeAiAlert.json?.data?.id;
+    check(
+      "(setup) an alert exists for the AI checks",
+      madeAiAlert.status === 201,
+      madeAiAlert.json,
+    );
+
+    const viewerSettings = await call(viewer.jar, "GET", "/api/ai/settings");
+    check(
+      "a viewer cannot read AI settings (403)",
+      viewerSettings.status === 403,
+      viewerSettings.json,
+    );
+    const analystSettings = await call(analyst.jar, "GET", "/api/ai/settings");
+    check(
+      "an analyst reads AI settings: five providers, none configured, nothing active",
+      analystSettings.status === 200 &&
+        analystSettings.json?.data?.providers?.length === 5 &&
+        analystSettings.json.data.providers.every((p) => p.configured === false) &&
+        analystSettings.json.data.active_provider === null &&
+        analystSettings.json.data.ready === false,
+      analystSettings.json,
+    );
+
+    const analystPatch = await call(analyst.jar, "PATCH", "/api/ai/settings", {
+      body: { active_provider: "groq", active_model: null },
+    });
+    check(
+      "an analyst cannot change the active AI provider (403)",
+      analystPatch.status === 403,
+      analystPatch.json,
+    );
+    const badProvider = await call(admin.jar, "PATCH", "/api/ai/settings", {
+      body: { active_provider: "not-a-provider", active_model: null },
+    });
+    check("an unknown provider id is rejected (422)", badProvider.status === 422, badProvider.json);
+    const modelWithoutProvider = await call(admin.jar, "PATCH", "/api/ai/settings", {
+      body: { active_provider: null, active_model: "some-model" },
+    });
+    check(
+      "a model without a provider is rejected (422)",
+      modelWithoutProvider.status === 422,
+      modelWithoutProvider.json,
+    );
+    const unconfigured = await call(admin.jar, "PATCH", "/api/ai/settings", {
+      body: { active_provider: "groq", active_model: null },
+    });
+    check(
+      "choosing a provider with no server-side key is refused (409)",
+      unconfigured.status === 409,
+      unconfigured.json,
+    );
+    const cleared = await call(admin.jar, "PATCH", "/api/ai/settings", {
+      body: { active_provider: null, active_model: null },
+    });
+    check(
+      "an admin can (still) clear the choice explicitly (200)",
+      cleared.status === 200 && cleared.json?.data?.active_provider === null,
+      cleared.json,
+    );
+
+    const viewerAnalyses = await call(viewer.jar, "GET", `/api/alerts/${aiAlertId}/ai`);
+    check(
+      "anyone who can read the alert reads its (empty) AI analysis history",
+      viewerAnalyses.status === 200 &&
+        viewerAnalyses.json?.data?.history?.length === 0 &&
+        JSON.stringify(viewerAnalyses.json.data.latest) === "{}",
+      viewerAnalyses.json,
+    );
+    const viewerAsks = await call(viewer.jar, "POST", `/api/alerts/${aiAlertId}/ai`, {
+      body: { kind: "threat_summary" },
+    });
+    check(
+      "a viewer cannot ask for an AI analysis (403)",
+      viewerAsks.status === 403,
+      viewerAsks.json,
+    );
+    const badKind = await call(analyst.jar, "POST", `/api/alerts/${aiAlertId}/ai`, {
+      body: { kind: "not_a_kind" },
+    });
+    check("an unknown analysis kind is rejected (422)", badKind.status === 422, badKind.json);
+    const noProvider = await call(analyst.jar, "POST", `/api/alerts/${aiAlertId}/ai`, {
+      body: { kind: "threat_summary" },
+    });
+    check(
+      "asking with no AI provider configured is a clear 503, not a crash",
+      noProvider.status === 503 && code(noProvider) === "DEPENDENCY_UNAVAILABLE",
+      noProvider.json,
+    );
+    // Live provider calls are NOT exercised here: no provider key exists in this environment, the
+    // same caveat the live intel providers and the NVD import carry (see docs/API.md).
+
+    const aiAlertDeleted = await call(admin.jar, "DELETE", `/api/alerts/${aiAlertId}`);
+    check(
+      "(cleanup) the AI checks' alert is deleted",
+      aiAlertDeleted.status === 200,
+      aiAlertDeleted.json,
+    );
+  }
+
+  section("Response orchestration and checklists (Phase 9)");
+  {
+    // --- the response-action catalog ---
+    const viewerCreatesAction = await call(viewer.jar, "POST", "/api/response-actions", {
+      body: { title: "Smoke isolate the host" },
+    });
+    check(
+      "a viewer cannot add a catalog action (403)",
+      viewerCreatesAction.status === 403,
+      viewerCreatesAction.json,
+    );
+    const madeAction = await call(analyst.jar, "POST", "/api/response-actions", {
+      body: {
+        title: `Smoke isolate the host ${stamp}`,
+        description: "Cut network access.",
+        category: "containment",
+      },
+    });
+    const action = madeAction.json?.data;
+    check(
+      "an analyst adds a catalog action (201): local, tidy fields",
+      madeAction.status === 201 && action?.origin === "local" && action.category === "containment",
+      madeAction.json,
+    );
+    const catalogList = await call(viewer.jar, "GET", "/api/response-actions");
+    check(
+      "anyone with alerts:read reads the catalog and finds it",
+      catalogList.status === 200 && catalogList.json?.data?.some((a) => a.id === action?.id),
+      catalogList.status,
+    );
+    const renamed = await call(analyst.jar, "PATCH", `/api/response-actions/${action?.id}`, {
+      body: { title: `Smoke isolate the endpoint ${stamp}` },
+    });
+    check(
+      "an analyst edits a catalog action (200)",
+      renamed.status === 200 && renamed.json?.data?.title === `Smoke isolate the endpoint ${stamp}`,
+      renamed.json,
+    );
+
+    // --- attached to an alert ---
+    const madeOrchAlert = await call(analyst.jar, "POST", "/api/alerts", {
+      body: { title: `Smoke orchestration alert ${stamp}`, severity: "high" },
+    });
+    const orchAlertId = madeOrchAlert.json?.data?.id;
+    const viewerAttaches = await call(
+      viewer.jar,
+      "POST",
+      `/api/alerts/${orchAlertId}/response-actions`,
+      {
+        body: { action_id: action?.id },
+      },
+    );
+    check(
+      "a viewer cannot recommend a response action (403)",
+      viewerAttaches.status === 403,
+      viewerAttaches.json,
+    );
+    const attached = await call(
+      analyst.jar,
+      "POST",
+      `/api/alerts/${orchAlertId}/response-actions`,
+      {
+        body: { action_id: action?.id },
+      },
+    );
+    const logEntries = attached.json?.data;
+    const logId = logEntries?.at(-1)?.id;
+    check(
+      "an analyst recommends it (201): recommended, source analyst",
+      attached.status === 201 &&
+        logEntries?.at(-1)?.status === "recommended" &&
+        logEntries.at(-1).source === "analyst",
+      attached.json,
+    );
+    const badTransition = await call(
+      analyst.jar,
+      "PATCH",
+      `/api/alerts/${orchAlertId}/response-actions/${logId}`,
+      {
+        body: { status: "completed" },
+      },
+    );
+    check(
+      "recommended -> completed directly is allowed by the workflow (200)",
+      badTransition.status === 200,
+      badTransition.json,
+    );
+    const backwards = await call(
+      analyst.jar,
+      "PATCH",
+      `/api/alerts/${orchAlertId}/response-actions/${logId}`,
+      {
+        body: { status: "acknowledged" },
+      },
+    );
+    check(
+      "a completed action cannot move backwards to acknowledged (409)",
+      backwards.status === 409,
+      backwards.json,
+    );
+    const cannotDeleteReferenced = await call(
+      analyst.jar,
+      "DELETE",
+      `/api/response-actions/${action?.id}`,
+    );
+    check(
+      "a catalog action with a logged history cannot be deleted (409)",
+      cannotDeleteReferenced.status === 409,
+      cannotDeleteReferenced.json,
+    );
+
+    // --- investigation checklist ---
+    const madeOrchInv = await call(analyst.jar, "POST", "/api/investigations", {
+      body: { title: `Smoke orchestration case ${stamp}` },
+    });
+    const orchInvId = madeOrchInv.json?.data?.id;
+    const viewerAddsItem = await call(
+      viewer.jar,
+      "POST",
+      `/api/investigations/${orchInvId}/checklist`,
+      {
+        body: { text: "Smoke viewer item" },
+      },
+    );
+    check(
+      "a viewer cannot add a checklist item (403)",
+      viewerAddsItem.status === 403,
+      viewerAddsItem.json,
+    );
+    const addedItem = await call(
+      analyst.jar,
+      "POST",
+      `/api/investigations/${orchInvId}/checklist`,
+      {
+        body: { text: "Pull DNS logs for the affected host" },
+      },
+    );
+    const items = addedItem.json?.data;
+    const itemId = items?.at(-1)?.id;
+    check(
+      "an analyst adds a checklist item by hand (201), source analyst",
+      addedItem.status === 201 && items?.at(-1)?.source === "analyst",
+      addedItem.json,
+    );
+    const toggled = await call(
+      analyst.jar,
+      "PATCH",
+      `/api/investigations/${orchInvId}/checklist/${itemId}`,
+      {
+        body: { done: true },
+      },
+    );
+    check(
+      "checking it off records done (200)",
+      toggled.status === 200 && toggled.json?.data?.find((i) => i.id === itemId)?.done === true,
+      toggled.json,
+    );
+    const removedItem = await call(
+      analyst.jar,
+      "DELETE",
+      `/api/investigations/${orchInvId}/checklist/${itemId}`,
+    );
+    check(
+      "removing it leaves the list empty (200)",
+      removedItem.status === 200 && removedItem.json?.data?.length === 0,
+      removedItem.json,
+    );
+
+    const badInvKind = await call(analyst.jar, "POST", `/api/investigations/${orchInvId}/ai`, {
+      body: { kind: "threat_summary" },
+    });
+    check(
+      "an alert-only AI kind is rejected for an investigation (422)",
+      badInvKind.status === 422,
+      badInvKind.json,
+    );
+    const invNoProvider = await call(analyst.jar, "POST", `/api/investigations/${orchInvId}/ai`, {
+      body: { kind: "investigation_checklist" },
+    });
+    check(
+      "asking for a checklist with no AI provider configured is a clear 503",
+      invNoProvider.status === 503 && code(invNoProvider) === "DEPENDENCY_UNAVAILABLE",
+      invNoProvider.json,
+    );
+
+    // --- indicator verdict recommendation ---
+    const madeOrchIndicator = await call(analyst.jar, "POST", "/api/indicators", {
+      body: { type: "domain", value: `smoke-orch-${stamp}.example` },
+    });
+    const orchIndicatorId = madeOrchIndicator.json?.data?.id;
+    const badIndKind = await call(analyst.jar, "POST", `/api/indicators/${orchIndicatorId}/ai`, {
+      body: { kind: "false_positive_score" },
+    });
+    check(
+      "an alert-only AI kind is rejected for an indicator (422)",
+      badIndKind.status === 422,
+      badIndKind.json,
+    );
+    const indNoProvider = await call(analyst.jar, "POST", `/api/indicators/${orchIndicatorId}/ai`, {
+      body: { kind: "verdict_recommendation" },
+    });
+    check(
+      "asking for a verdict recommendation with no AI provider configured is a clear 503",
+      indNoProvider.status === 503 && code(indNoProvider) === "DEPENDENCY_UNAVAILABLE",
+      indNoProvider.json,
+    );
+
+    // --- cleanup ---
+    await call(admin.jar, "DELETE", `/api/alerts/${orchAlertId}`);
+    await call(admin.jar, "DELETE", `/api/investigations/${orchInvId}`);
+    await call(admin.jar, "DELETE", `/api/indicators/${orchIndicatorId}`);
+    const finalDelete = await call(admin.jar, "DELETE", `/api/response-actions/${action?.id}`);
+    check(
+      "(cleanup) the catalog action is deleted once its alert is gone",
+      finalDelete.status === 200,
+      finalDelete.json,
+    );
+  }
+
+  section("Detection rules and alert deduplication (Phase 10)");
+  {
+    // A rule id derived from the run's own stamp: unique per run, always inside 100000-999999.
+    const ruleId = 100000 + (stamp % 899999);
+    const marker = `drmarker${stamp}`;
+
+    const viewerCreatesRule = await call(viewer.jar, "POST", "/api/detection-rules", {
+      body: {
+        id: ruleId,
+        name: "Smoke viewer rule",
+        conditions: [{ field: "title", op: "contains", value: marker }],
+      },
+    });
+    check(
+      "a viewer cannot create a detection rule (403)",
+      viewerCreatesRule.status === 403,
+      viewerCreatesRule.json,
+    );
+    const analystCreatesRule = await call(analyst.jar, "POST", "/api/detection-rules", {
+      body: {
+        id: ruleId,
+        name: "Smoke analyst rule",
+        conditions: [{ field: "title", op: "contains", value: marker }],
+      },
+    });
+    check(
+      "an analyst cannot create a detection rule either: rules:manage is admin only (403)",
+      analystCreatesRule.status === 403,
+      analystCreatesRule.json,
+    );
+
+    const badRange = await call(admin.jar, "POST", "/api/detection-rules", {
+      body: {
+        id: 1,
+        name: "Smoke bad id",
+        conditions: [{ field: "title", op: "contains", value: marker }],
+      },
+    });
+    check(
+      "a rule id outside 100000-999999 is rejected (422)",
+      badRange.status === 422,
+      badRange.json,
+    );
+    const badConditions = await call(admin.jar, "POST", "/api/detection-rules", {
+      body: { id: ruleId, name: "Smoke empty conditions", conditions: [] },
+    });
+    check(
+      "an empty conditions array is rejected (422)",
+      badConditions.status === 422,
+      badConditions.json,
+    );
+
+    const madeRule = await call(admin.jar, "POST", "/api/detection-rules", {
+      body: {
+        id: ruleId,
+        name: `Smoke rule ${stamp}`,
+        conditions: [{ field: "title", op: "contains", value: marker }],
+        severity: "critical",
+      },
+    });
+    const rule = madeRule.json?.data;
+    check(
+      "an admin creates a rule (201): local, the id given, enabled by default",
+      madeRule.status === 201 &&
+        rule?.id === ruleId &&
+        rule.origin === "local" &&
+        rule.enabled === true,
+      madeRule.json,
+    );
+    const ruleList = await call(viewer.jar, "GET", "/api/detection-rules");
+    check(
+      "anyone with alerts:read reads the rule catalog and finds it",
+      ruleList.status === 200 && ruleList.json?.data?.some((r) => r.id === ruleId),
+      ruleList.status,
+    );
+
+    const matchingAlert = await call(analyst.jar, "POST", "/api/alerts", {
+      body: { title: `Smoke ${marker} triggers a rule`, severity: "low" },
+    });
+    const matchedAlertId = matchingAlert.json?.data?.id;
+    check(
+      "a new alert matching an enabled rule has its severity raised and traces the rule (201)",
+      matchingAlert.status === 201 &&
+        matchingAlert.json.data.severity === "critical" &&
+        matchingAlert.json.data.matched_rule_id === ruleId,
+      matchingAlert.json,
+    );
+    const matchedDetail = await call(analyst.jar, "GET", `/api/alerts/${matchedAlertId}`);
+    check(
+      "the alert page shows which rule matched, by name",
+      matchedDetail.status === 200 && matchedDetail.json?.data?.matched_rule?.id === ruleId,
+      matchedDetail.json?.data?.matched_rule,
+    );
+
+    const disabled = await call(admin.jar, "PATCH", `/api/detection-rules/${ruleId}`, {
+      body: { enabled: false },
+    });
+    check(
+      "an admin disables the rule (200)",
+      disabled.status === 200 && disabled.json?.data?.enabled === false,
+      disabled.json,
+    );
+    const afterDisable = await call(analyst.jar, "POST", "/api/alerts", {
+      body: { title: `Smoke ${marker} but the rule is off`, severity: "low" },
+    });
+    check(
+      "a disabled rule no longer matches new alerts",
+      afterDisable.status === 201 &&
+        afterDisable.json.data.severity === "low" &&
+        afterDisable.json.data.matched_rule_id === null,
+      afterDisable.json,
+    );
+
+    const analystDeletesRule = await call(analyst.jar, "DELETE", `/api/detection-rules/${ruleId}`);
+    check(
+      "an analyst cannot delete a rule (403)",
+      analystDeletesRule.status === 403,
+      analystDeletesRule.json,
+    );
+
+    // --- deduplication ---
+    const dupTitle = `Smoke duplicate source ${stamp}`;
+    const firstOfPair = await call(analyst.jar, "POST", "/api/alerts", {
+      body: { title: dupTitle, severity: "medium" },
+    });
+    const firstId = firstOfPair.json?.data?.id;
+    check(
+      "a first occurrence is its own primary (no duplicate_of)",
+      firstOfPair.status === 201 && firstOfPair.json.data.duplicate_of === null,
+      firstOfPair.json,
+    );
+    const secondOfPair = await call(analyst.jar, "POST", "/api/alerts", {
+      body: { title: dupTitle, severity: "medium" },
+    });
+    const secondId = secondOfPair.json?.data?.id;
+    check(
+      "a second, identical occurrence links to the first as a duplicate",
+      secondOfPair.status === 201 && secondOfPair.json.data.duplicate_of === firstId,
+      secondOfPair.json,
+    );
+    const firstAfterDup = await call(analyst.jar, "GET", `/api/alerts/${firstId}`);
+    check(
+      "the primary's duplicate_count reaches 1 and it lists the duplicate",
+      firstAfterDup.status === 200 &&
+        firstAfterDup.json?.data?.duplicate_count === 1 &&
+        firstAfterDup.json.data.duplicates?.[0]?.id === secondId,
+      firstAfterDup.json?.data,
+    );
+    const hiddenByDefault = await call(
+      analyst.jar,
+      "GET",
+      `/api/alerts?q=${encodeURIComponent(dupTitle)}`,
+    );
+    check(
+      "the default list hides the duplicate, showing only the primary",
+      hiddenByDefault.status === 200 && hiddenByDefault.json?.data?.items?.length === 1,
+      hiddenByDefault.json?.data?.items,
+    );
+    const shownWithFilter = await call(
+      analyst.jar,
+      "GET",
+      `/api/alerts?q=${encodeURIComponent(dupTitle)}&duplicates=show`,
+    );
+    check(
+      "duplicates=show reveals both alerts",
+      shownWithFilter.status === 200 && shownWithFilter.json?.data?.items?.length === 2,
+      shownWithFilter.json?.data?.items,
+    );
+
+    // --- cleanup ---
+    for (const id of [matchedAlertId, afterDisable.json?.data?.id, firstId, secondId]) {
+      if (id) await call(admin.jar, "DELETE", `/api/alerts/${id}`);
+    }
+    const finalRuleDelete = await call(admin.jar, "DELETE", `/api/detection-rules/${ruleId}`);
+    check(
+      "(cleanup) an admin deletes the rule",
+      finalRuleDelete.status === 200,
+      finalRuleDelete.json,
+    );
+  }
+
+  section("Profile");
+  {
+    const before = await call(viewer.jar, "GET", "/api/auth/me");
+    const originalName = before.json?.data?.profile?.display_name ?? null;
+    const noFields = await call(viewer.jar, "PATCH", "/api/auth/me", { body: {} });
+    check("an empty profile update is 422", noFields.status === 422, noFields.json);
+    const badUrl = await call(viewer.jar, "PATCH", "/api/auth/me", {
+      body: { avatar_url: "not a url" },
+    });
+    check("an invalid avatar URL is 422", badUrl.status === 422, badUrl.json);
+    const renamed = await call(viewer.jar, "PATCH", "/api/auth/me", {
+      body: { display_name: `smoke-${stamp}` },
+    });
+    check(
+      "a signed-in user renames themselves",
+      renamed.status === 200 && renamed.json?.data?.profile?.display_name === `smoke-${stamp}`,
+      renamed.json,
+    );
+    const cleared = await call(viewer.jar, "PATCH", "/api/auth/me", { body: { display_name: "" } });
+    check(
+      "an empty string clears the name (falls back to null)",
+      cleared.status === 200 && cleared.json?.data?.profile?.display_name === null,
+      cleared.json,
+    );
+    const restored = await call(viewer.jar, "PATCH", "/api/auth/me", {
+      body: { display_name: originalName },
+    });
+    check("(cleanup) display name restored", restored.status === 200, restored.json);
+  }
+
+  section("User management (throwaway account, demo accounts never touched)");
+  {
+    const email = `smoke-users-${stamp}@arcradar.test`;
+    const signup = await call(null, "POST", "/api/auth/signup", {
+      body: { email, password: "Smoke-Users-Pass-1" },
+    });
+    const login = await loginAs(email, "Smoke-Users-Pass-1");
+    const targetId = login.response.json?.data?.user?.id;
+    check("(setup) throwaway account created and signed in", signup.status === 201 && !!targetId);
+
+    try {
+      const deniedList = await call(analyst.jar, "GET", "/api/users");
+      check("an analyst cannot list accounts (403)", deniedList.status === 403, deniedList.json);
+      const list = await call(admin.jar, "GET", "/api/users");
+      check(
+        "an admin lists every account, including the new one, with no password hash anywhere",
+        list.status === 200 &&
+          list.json.data.some((u) => u.id === targetId) &&
+          !JSON.stringify(list.json.data).toLowerCase().includes("password"),
+        list.status,
+      );
+
+      const selfChange = await call(
+        admin.jar,
+        "PATCH",
+        `/api/users/${adminMe.json?.data?.user?.id}`,
+        {
+          body: { is_active: false },
+        },
+      );
+      check(
+        "an admin cannot change their own account here (409)",
+        selfChange.status === 409,
+        selfChange.json,
+      );
+
+      const promote = await call(admin.jar, "PATCH", `/api/users/${targetId}`, {
+        body: { role_name: "analyst" },
+      });
+      check("an admin promotes the account (200)", promote.status === 200, promote.json);
+      const deactivate = await call(admin.jar, "PATCH", `/api/users/${targetId}`, {
+        body: { is_active: false },
+      });
+      check("an admin deactivates it (200)", deactivate.status === 200, deactivate.json);
+      const lockedOut = await call(login.jar, "GET", "/api/auth/me");
+      check("its live session is refused at once (403)", lockedOut.status === 403, lockedOut.json);
+
+      const userLogs = await call(
+        admin.jar,
+        "GET",
+        `/api/audit-logs?entity_type=profile&entity_id=${targetId}`,
+      );
+      const userActions = new Set((userLogs.json?.data?.items ?? []).map((e) => e.action));
+      check(
+        "role and status changes are audited",
+        userActions.has("user.role_changed") && userActions.has("user.deactivated"),
+        [...userActions],
+      );
+    } finally {
+      const removed = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${targetId}`, {
+        method: "DELETE",
+        headers: { apikey: SERVICE_KEY, authorization: `Bearer ${SERVICE_KEY}` },
+      });
+      check("(cleanup) throwaway account deleted", removed.ok || !targetId, removed.status);
+    }
+  }
 
   section("Logout");
   const logout = await call(viewer.jar, "POST", "/api/auth/logout");

@@ -12,13 +12,29 @@ import { ROLE_NAMES } from "@/types/domain";
 
 const migrationsDir = join(process.cwd(), "supabase", "migrations");
 const RBAC_MIGRATION = "20260925100100_rbac_profiles.sql";
+// Later migrations that are *allowed* to extend the RBAC reference data, because this test reads
+// their inserts too. A migration not in this list must not touch roles/permissions/role_permissions
+// (see the last test below) — add a migration here only alongside a matching change to
+// src/lib/rbac/permissions.ts.
+const RBAC_EXTENSION_MIGRATIONS = [
+  "20260927130000_ai_foundation.sql",
+  "20260928100000_alert_deduplication_and_detection_rules.sql",
+];
+const ALL_RBAC_MIGRATIONS = [RBAC_MIGRATION, ...RBAC_EXTENSION_MIGRATIONS];
 
 /** Extracts `('a', 'b')` string pairs and `('a')` singles from the body of an INSERT statement. */
 function insertedTuples(sql: string, table: string): string[][] {
   const match = new RegExp(`insert into public\\.${table}[^;]*?values\\s*([^;]+);`, "is").exec(sql);
-  if (!match) throw new Error(`No INSERT for ${table} in ${RBAC_MIGRATION}`);
+  if (!match) return [];
   return [...match[1].matchAll(/\(\s*'([^']*)'(?:\s*,\s*'([^']*)')?/g)].map(([, a, b]) =>
     b === undefined ? [a] : [a, b],
+  );
+}
+
+/** The same extraction, but merged across every migration allowed to add reference data. */
+function allInsertedTuples(table: string): string[][] {
+  return ALL_RBAC_MIGRATIONS.flatMap((file) =>
+    insertedTuples(readFileSync(join(migrationsDir, file), "utf8"), table),
   );
 }
 
@@ -31,17 +47,23 @@ describe("RBAC mirror stays in sync with the database reference data", () => {
   });
 
   it("has the same permission keys", () => {
-    const dbKeys = insertedTuples(sql, "permissions").map(([key]) => key);
+    const dbKeys = allInsertedTuples("permissions").map(([key]) => key);
     expect([...dbKeys].sort()).toEqual([...PERMISSIONS].sort());
   });
 
   it("grants each role the same permissions (admin gets everything)", () => {
-    const explicit = insertedTuples(sql, "role_permissions");
+    const explicit = allInsertedTuples("role_permissions");
     for (const role of ["analyst", "viewer"] as const) {
       const dbGrants = explicit.filter(([r]) => r === role).map(([, key]) => key);
       expect([...dbGrants].sort()).toEqual([...ROLE_PERMISSIONS[role]].sort());
     }
     expect(sql).toMatch(/select 'admin', key from public\.permissions/);
+    // Everything the base migration granted admin via the catch-all, plus every permission an
+    // extension migration granted admin explicitly (its catch-all already ran and cannot see them).
+    const explicitAdminGrants = explicit.filter(([r]) => r === "admin").map(([, key]) => key);
+    for (const key of explicitAdminGrants) {
+      expect(ROLE_PERMISSIONS.admin).toContain(key);
+    }
     expect([...ROLE_PERMISSIONS.admin].sort()).toEqual([...PERMISSIONS].sort());
   });
 
@@ -49,9 +71,10 @@ describe("RBAC mirror stays in sync with the database reference data", () => {
     const mutation =
       /(insert\s+into|delete\s+from|update|truncate(?:\s+table)?)\s+(only\s+)?public\.(role_permissions|permissions|roles)\b/i;
     const offenders = readdirSync(migrationsDir)
-      .filter((file) => file.endsWith(".sql") && file !== RBAC_MIGRATION)
+      .filter((file) => file.endsWith(".sql") && !ALL_RBAC_MIGRATIONS.includes(file))
       .filter((file) => mutation.test(readFileSync(join(migrationsDir, file), "utf8")));
-    // If this fails, update src/lib/rbac/permissions.ts and extend this test to read the change.
+    // If this fails, update src/lib/rbac/permissions.ts, add the migration to
+    // RBAC_EXTENSION_MIGRATIONS above, and make sure it only INSERTs (never deletes or updates).
     expect(offenders).toEqual([]);
   });
 });

@@ -5,3 +5,6 @@ package-lock.json
 supabase/.temp
 deploy/nginx/runtime
 AGENTS.md
+# The user's original prompts, kept verbatim.
+docs/HANDOFF_PROMPT.md
+docs/ORIGINAL_PROMPT.md

