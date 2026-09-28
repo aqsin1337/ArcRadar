@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPublicEnv, isSupabaseConfigured } from "@/lib/env/public";
 import type { Database } from "@/types/database";
+import { AUTH_COOKIE_OPTIONS } from "./cookie-options";
 
 export type SessionUpdate = {
   response: NextResponse;
@@ -27,6 +28,7 @@ export async function updateSession(request: NextRequest): Promise<SessionUpdate
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
+      cookieOptions: AUTH_COOKIE_OPTIONS,
       cookies: {
         getAll() {
           return request.cookies.getAll();

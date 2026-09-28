@@ -185,6 +185,35 @@ describe("proxy", () => {
   it("never bounces a signed-in user off the login page (that could loop with the layout guard)", async () => {
     expect((await run("/login", true)).headers.get("location")).toBeNull();
   });
+
+  it("carries a nonce'd Content-Security-Policy on every response, including a redirect", async () => {
+    for (const [path, signedIn] of [
+      ["/dashboard", true],
+      ["/dashboard", false],
+    ] as const) {
+      const response = await run(path, signedIn);
+      const csp = response.headers.get("content-security-policy");
+      expect(csp).toContain("default-src 'self'");
+      expect(csp).toMatch(/'nonce-[A-Za-z0-9+/=]+'/);
+    }
+  });
+
+  it("sets the same nonce on the request Next renders with and on the response the browser sees", async () => {
+    await run("/dashboard", true);
+    const requestSeenByRender = updateSession.mock.calls[0][0] as NextRequest;
+    const requestNonce = requestSeenByRender.headers.get("x-nonce");
+    const requestCsp = requestSeenByRender.headers.get("content-security-policy");
+    expect(requestNonce).toBeTruthy();
+    expect(requestCsp).toContain(`'nonce-${requestNonce}'`);
+  });
+
+  it("uses a fresh nonce for every request", async () => {
+    await run("/dashboard", true);
+    const first = (updateSession.mock.calls[0][0] as NextRequest).headers.get("x-nonce");
+    await run("/dashboard", true);
+    const second = (updateSession.mock.calls[1][0] as NextRequest).headers.get("x-nonce");
+    expect(first).not.toBe(second);
+  });
 });
 
 describe("navigation", () => {

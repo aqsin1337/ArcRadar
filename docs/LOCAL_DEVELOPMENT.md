@@ -1,7 +1,8 @@
 # Local development
 
 ArcRadar runs locally against a **local Supabase stack** (Postgres + Auth in Docker), so you need no
-cloud account to develop. A hosted Supabase project is only needed when you deploy to Vercel.
+cloud account to develop. A hosted Supabase project is only needed when you deploy to Vercel — see
+[`docs/DEPLOYMENT.md`](DEPLOYMENT.md) for that.
 
 ## Requirements
 
@@ -30,8 +31,10 @@ test mailbox `http://127.0.0.1:54324` (password-recovery and confirmation emails
 Open <http://localhost:3000>. It sends you to the sign-in page; on the local stack the page shows
 Admin / Analyst / Viewer buttons that fill in a demo account (controlled by `NEXT_PUBLIC_DEMO_LOGINS=true`,
 which `npm run db:env` sets; leave it empty anywhere else). Signed in, the sidebar shows what the role may
-see; every module through Phase 7 is live (nothing is marked "Soon" right now). `npm run dev` also serves a
-component gallery at <http://localhost:3000/design> (a 404 in production builds).
+see; every module is live (nothing is marked "Soon" right now), including AI analyses on an alert,
+investigation or indicator page (needs a provider key — see below), response-action tracking, investigation
+checklists, and detection rules (admin only). `npm run dev` also serves a component gallery at
+<http://localhost:3000/design> (a 404 in production builds).
 
 The **Overview** page is a real dashboard (real counts, charts, recent records); click your name in the
 header to reach **Profile** (display name, avatar, password), open to every role. Everyone can read
@@ -62,6 +65,15 @@ offered on each page). To try live providers, add a key to `.env.local` and rest
 `VIRUSTOTAL_API_KEY` (IP, domain, URL, hash), `ABUSEIPDB_API_KEY` (IP) or `NVD_API_KEY` (lets an administrator
 import a CVE from the vulnerability list). Live lookups are only for analysts and administrators, only for
 public values, and are audited; without a key nothing ever leaves your machine. Never commit a key.
+
+## AI features (optional)
+
+The AI card on an alert, investigation or indicator page needs an administrator to do two things on the
+**Integrations** page: set a provider's key in `.env.local` (`GROQ_API_KEY` is the quickest to try — a
+free account gives you one in a minute) and restart the server, then pick that provider (and, optionally,
+a model name) as active. Without either step the card explains why it has nothing to offer instead of
+failing; nothing is ever called with no active, configured, enabled provider. Every analysis is rate
+limited to 30 per signed-in person per hour, regardless of provider.
 
 ## Alerts, investigations and threat intelligence
 
@@ -111,22 +123,23 @@ these credentials must never be used in production. All seeded records are marke
 
 ## Commands
 
-| Command                             | What it does                                                    |
-| ----------------------------------- | --------------------------------------------------------------- |
-| `npm run dev` / `build` / `start`   | Next.js dev server / production build / production server       |
-| `npm run lint`, `typecheck`, `test` | ESLint, `next typegen` + `tsc`, Vitest                          |
-| `npm run format` / `format:check`   | Prettier                                                        |
-| `npm run db:start` / `db:stop`      | Start / stop the local Supabase containers (data is kept)       |
-| `npm run db:reset`                  | Rebuild the local database from migrations + seed               |
-| `npm run db:test`                   | Database security and constraint tests (stack must be running)  |
-| `npm run db:types`                  | Regenerate `src/types/database.ts` from the local schema        |
-| `npm run db:env`                    | Refresh Supabase values in `.env.local`                         |
-| `npm run api:smoke`                 | End-to-end API checks (app + local stack must be running)       |
-| `npm run e2e`                       | Browser tests in Chrome (local stack up, `npm run build` first) |
-| `npm run check:contrast`            | WCAG contrast check of the design tokens, both themes           |
-| `npm run apikey:create`             | Make an ingest API key as an administrator (`--url`, `--name`)  |
-| `npm run ingest:sample`             | Send fictional Wazuh alerts to a running app with a key         |
-| `npx supabase migration new <name>` | Create a new empty migration file                               |
+| Command                             | What it does                                                                                                                                                       |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run dev` / `build` / `start`   | Next.js dev server / production build / production server                                                                                                          |
+| `npm run lint`, `typecheck`, `test` | ESLint, `next typegen` + `tsc`, Vitest                                                                                                                             |
+| `npm run format` / `format:check`   | Prettier                                                                                                                                                           |
+| `npm run db:start` / `db:stop`      | Start / stop the local Supabase containers (data is kept)                                                                                                          |
+| `npm run db:reset`                  | Rebuild the local database from migrations + seed                                                                                                                  |
+| `npm run db:test`                   | Database security and constraint tests (stack must be running)                                                                                                     |
+| `npm run db:types`                  | Regenerate `src/types/database.ts` from the local schema                                                                                                           |
+| `npm run db:env`                    | Refresh Supabase values in `.env.local`                                                                                                                            |
+| `npm run api:smoke`                 | End-to-end API checks (app + local stack must be running)                                                                                                          |
+| `npm run e2e`                       | Browser tests in Chrome (local stack up, `npm run build` first)                                                                                                    |
+| `npm run check:contrast`            | WCAG contrast check of the design tokens, both themes                                                                                                              |
+| `npm run apikey:create`             | Make an ingest API key as an administrator (`--url`, `--name`)                                                                                                     |
+| `npm run ingest:sample`             | Send fictional Wazuh alerts to a running app with a key                                                                                                            |
+| `npm run bootstrap:admin`           | Promote an existing account to admin directly (for a fresh hosted deployment with no admin yet — see `docs/DEPLOYMENT.md`; locally the seed already gives you one) |
+| `npx supabase migration new <name>` | Create a new empty migration file                                                                                                                                  |
 
 ## Changing the database
 

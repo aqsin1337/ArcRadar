@@ -80,6 +80,19 @@ describe("postJson", () => {
     expect(body).toEqual({ ok: true });
   });
 
+  it("never sends a request that would resolve outside the provider's own origin", async () => {
+    const { impl, calls } = fakeFetch(() => json({}));
+    // A base address with no path lets a leading "@" turn a path into a user-info host escape --
+    // the same trick src/lib/intel/http.ts's getJson is tested against.
+    const error = await failureOf(
+      postJson(
+        baseRequest({ impl, baseUrl: "https://api.example-provider.test", path: "@evil.test/x" }),
+      ),
+    );
+    expect(error.reason).toBe("bad_response");
+    expect(calls).toHaveLength(0);
+  });
+
   it("maps 401/403 to auth, 429 to rate_limited (with Retry-After), 5xx to unavailable", async () => {
     const { impl: unauthorized } = fakeFetch(() => new Response("{}", { status: 401 }));
     expect((await failureOf(postJson(baseRequest({ impl: unauthorized })))).reason).toBe("auth");

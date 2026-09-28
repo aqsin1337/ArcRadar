@@ -7,14 +7,19 @@ import { ok } from "@/lib/api/response";
 import { toApiError, unwrap } from "@/lib/api/supabase-errors";
 import { EnvError } from "@/lib/env/parse";
 import { writeAuditLog } from "@/lib/audit/write";
+import { enforceRateLimit } from "@/lib/rate-limit/service";
 import { createClient } from "@/lib/supabase/server";
 import { USER_ID, apiRequest, fakeSupabase } from "./helpers/supabase";
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/audit/write", () => ({ writeAuditLog: vi.fn().mockResolvedValue(true) }));
+vi.mock("@/lib/rate-limit/service", () => ({
+  enforceRateLimit: vi.fn().mockResolvedValue(undefined),
+}));
 
 const createClientMock = vi.mocked(createClient);
 const auditMock = vi.mocked(writeAuditLog);
+const rateLimitMock = vi.mocked(enforceRateLimit);
 
 function mockSupabase(options?: Parameters<typeof fakeSupabase>[0]) {
   const supabase = fakeSupabase(options);
@@ -84,6 +89,27 @@ describe("publicRoute", () => {
     const text = await response.text();
     expect(response.status).toBe(503);
     expect(text).not.toContain("NEXT_PUBLIC_SUPABASE_URL");
+  });
+
+  it("checks the rate limit, keyed by whatever `subject` computes, before the handler runs", async () => {
+    const handler = vi.fn(async () => ok(null));
+    const subject = vi.fn(() => "203.0.113.9");
+    const route = publicRoute(handler, { rateLimit: { routeClass: "authByIp", subject } });
+    await route(apiRequest("/api/x"));
+    expect(rateLimitMock).toHaveBeenCalledWith("authByIp", "203.0.113.9");
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("returns 429 and never calls the handler once the rate limit throws", async () => {
+    rateLimitMock.mockRejectedValueOnce(apiErrors.rateLimited(30));
+    const handler = vi.fn(async () => ok(null));
+    const route = publicRoute(handler, {
+      rateLimit: { routeClass: "authByIp", subject: () => "203.0.113.9" },
+    });
+    const response = await route(apiRequest("/api/x"));
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("30");
+    expect(handler).not.toHaveBeenCalled();
   });
 });
 
@@ -198,6 +224,33 @@ describe("protectedRoute", () => {
     const open = protectedRoute({}, async ({ auth }) => ok({ id: auth.user.id }));
     mockSupabase({ profile: { display_name: null, role_name: "viewer", is_active: true } });
     expect((await (await open(apiRequest("/api/x"))).json()).data).toEqual({ id: USER_ID });
+  });
+
+  it("rate-limits by the signed-in caller, after the permission check, before the handler", async () => {
+    mockSupabase({ profile: { display_name: "Root", role_name: "admin", is_active: true } });
+    const handler = vi.fn(async () => ok(null));
+    const route = protectedRoute(
+      {
+        permissions: ["audit:read"],
+        rateLimit: { routeClass: "aiByUser", subject: ({ auth }) => auth!.user.id },
+      },
+      handler,
+    );
+    await route(apiRequest("/api/x"));
+    expect(rateLimitMock).toHaveBeenCalledWith("aiByUser", USER_ID);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("never checks the rate limit when the permission check already failed", async () => {
+    const route = protectedRoute(
+      {
+        permissions: ["audit:read"],
+        rateLimit: { routeClass: "aiByUser", subject: ({ auth }) => auth!.user.id },
+      },
+      async () => ok(null),
+    ); // analysts lack audit:read
+    await route(apiRequest("/api/x"));
+    expect(rateLimitMock).not.toHaveBeenCalled();
   });
 });
 

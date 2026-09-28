@@ -16,19 +16,19 @@ Every JSON response has the same shape (`src/lib/api/response.ts`):
 Every response carries `Cache-Control: no-store` and an `x-request-id` header (also written to the server
 log for unexpected errors). Field names in JSON are `snake_case`, matching the database.
 
-| Status | `error.code`                                           | Meaning                                                    |
-| ------ | ------------------------------------------------------ | ---------------------------------------------------------- |
-| 400    | `BAD_REQUEST`                                          | Malformed body (empty, invalid JSON or UTF-8)              |
-| 401    | `UNAUTHENTICATED`, `INVALID_CREDENTIALS`               | No/invalid session, or wrong email or password             |
-| 403    | `FORBIDDEN`, `ACCOUNT_DISABLED`, `EMAIL_NOT_CONFIRMED` | Missing permission, cross-origin request, disabled account |
-| 404    | `NOT_FOUND`                                            | Unknown endpoint or record                                 |
-| 409    | `CONFLICT`                                             | Unique/foreign-key conflict                                |
-| 413    | `PAYLOAD_TOO_LARGE`                                    | JSON body over 64 KB                                       |
-| 415    | `UNSUPPORTED_MEDIA_TYPE`                               | Body is not `application/json`                             |
-| 422    | `VALIDATION_ERROR`                                     | `details.issues` = `[{ path, message }]`, no echoed values |
-| 429    | `RATE_LIMITED`                                         | Supabase Auth limit hit (`Retry-After` when known)         |
-| 500    | `INTERNAL_ERROR`                                       | Unexpected; details are only in the server log             |
-| 503    | `DEPENDENCY_UNAVAILABLE`                               | Supabase unreachable or the app is not configured          |
+| Status | `error.code`                                           | Meaning                                                       |
+| ------ | ------------------------------------------------------ | ------------------------------------------------------------- |
+| 400    | `BAD_REQUEST`                                          | Malformed body (empty, invalid JSON or UTF-8)                 |
+| 401    | `UNAUTHENTICATED`, `INVALID_CREDENTIALS`               | No/invalid session, or wrong email or password                |
+| 403    | `FORBIDDEN`, `ACCOUNT_DISABLED`, `EMAIL_NOT_CONFIRMED` | Missing permission, cross-origin request, disabled account    |
+| 404    | `NOT_FOUND`                                            | Unknown endpoint or record                                    |
+| 409    | `CONFLICT`                                             | Unique/foreign-key conflict                                   |
+| 413    | `PAYLOAD_TOO_LARGE`                                    | JSON body over 64 KB                                          |
+| 415    | `UNSUPPORTED_MEDIA_TYPE`                               | Body is not `application/json`                                |
+| 422    | `VALIDATION_ERROR`                                     | `details.issues` = `[{ path, message }]`, no echoed values    |
+| 429    | `RATE_LIMITED`                                         | Supabase Auth's own limit, or this app's; see "Rate limiting" |
+| 500    | `INTERNAL_ERROR`                                       | Unexpected; details are only in the server log                |
+| 503    | `DEPENDENCY_UNAVAILABLE`                               | Supabase unreachable or the app is not configured             |
 
 Lists return `{ items, pagination: { page, page_size, total, total_pages } }` and accept
 `?page=1&page_size=25` (`page_size` max 100).
@@ -127,7 +127,30 @@ Auth behavior worth knowing:
 - **Disabled accounts** (`profiles.is_active = false`) get `403 ACCOUNT_DISABLED` on every guarded call, even
   with a live session, and cannot sign in.
 - **CSRF.** Unsafe methods reject a browser `Origin` that differs from the request host; bodies must be JSON;
-  the auth cookies are `SameSite=Lax`.
+  the auth cookies are `SameSite=Lax`, `HttpOnly` and, in production, `Secure`
+  (`src/lib/supabase/cookie-options.ts`; the browser client is not used anywhere, so nothing needs
+  JavaScript access to the cookie).
+
+## Rate limiting
+
+Vercel functions keep no memory between invocations and there is no second store (decision 1), so every
+app-level limit is a shared counter in Postgres: `check_rate_limit()` (`security definer`, service-role only)
+does one atomic upsert per call against a small `rate_limit_buckets` table, keyed by `<route class>:<subject>`.
+`src/lib/rate-limit/` wraps it as `enforceRateLimit()`, wired into `publicRoute`/`protectedRoute`/`ingestRoute`
+as an optional `rateLimit` option checked once the caller is known (after the permission check, so a denied
+request never spends a bucket slot) and before the handler runs. It **fails open**: a broken limiter (a
+database hiccup) logs and lets the request through rather than turning an outage into every request being
+refused, the same posture `writeAuditLog` already takes for audit writes.
+
+| Route class        | Limit          | Keyed by         | Covers                                                                                                                                                                                          |
+| ------------------ | -------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `authByIp`         | 30 / 5 minutes | Caller's IP      | `POST /api/auth/{login,signup,forgot-password}` (matches Supabase Auth's own `sign_in_sign_ups` limit, `supabase/config.toml` — a second, independent layer in front of it, not a stricter one) |
+| `aiByUser`         | 30 / hour      | Signed-in caller | `POST /api/{alerts,investigations,indicators}/:id/ai` (a real, metered cost per call)                                                                                                           |
+| `alertWriteByUser` | 60 / minute    | Signed-in caller | `POST /api/alerts` (every insert also runs the `alerts_dedup_and_rules` trigger)                                                                                                                |
+| `ingestByKey`      | 120 / minute   | The API key's id | `POST /api/ingest/wazuh` (generous — a real sensor delivers steadily; the cap catches a misbehaving or compromised key)                                                                         |
+
+None of these are admin-configurable, the same narrowing decision Phase 10 made for the dedup window: a
+portfolio deployment on free-tier quotas needs a floor, not a dial.
 
 ## Indicators and search
 

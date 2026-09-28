@@ -11,6 +11,8 @@ import {
 } from "@/lib/auth/context";
 import { EnvError } from "@/lib/env/parse";
 import { logError } from "@/lib/log";
+import type { RateLimitClass } from "@/lib/rate-limit/constants";
+import { enforceRateLimit } from "@/lib/rate-limit/service";
 import type { Permission } from "@/lib/rbac/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { ApiError, apiErrors } from "./errors";
@@ -33,7 +35,22 @@ export type ProtectedRouteContext<P = RouteParams> = BaseContext<P> & { auth: Au
 
 type NextRouteContext<P> = { params: Promise<P> };
 
-type RouteOptions = { protected: boolean; permissions: readonly Permission[] };
+/**
+ * Applies one shared, database-backed limit (`src/lib/rate-limit/`) before the handler runs.
+ * `subject` picks what the bucket is keyed by (an IP for a route with no session yet, a user id
+ * for one that has); different endpoints must use different `routeClass`es so their buckets never
+ * collide with each other.
+ */
+type RateLimitOption<P> = {
+  routeClass: RateLimitClass;
+  subject: (context: BaseContext<P> & { auth: AuthContext | undefined }) => string;
+};
+
+type RouteOptions<P> = {
+  protected: boolean;
+  permissions: readonly Permission[];
+  rateLimit?: RateLimitOption<P>;
+};
 
 /** Maps anything a handler threw to the error envelope (shared with `ingestRoute`). */
 export function toErrorResponse(error: unknown, request: Request, requestId: string) {
@@ -67,7 +84,7 @@ export function finalize(response: Response, requestId: string) {
 async function execute<P>(
   request: NextRequest,
   routeContext: NextRouteContext<P> | undefined,
-  options: RouteOptions,
+  options: RouteOptions<P>,
   handler: (context: BaseContext<P> & { auth: AuthContext | undefined }) => Promise<Response>,
 ): Promise<Response> {
   const requestId = crypto.randomUUID();
@@ -101,7 +118,12 @@ async function execute<P>(
       }
     }
 
-    const response = await handler({ request, params, requestId, supabase, auth });
+    const context = { request, params, requestId, supabase, auth };
+    if (options.rateLimit) {
+      await enforceRateLimit(options.rateLimit.routeClass, options.rateLimit.subject(context));
+    }
+
+    const response = await handler(context);
     return finalize(response, requestId);
   } catch (error) {
     // Framework control-flow errors (for example the dynamic-rendering signal from `cookies()`) must
@@ -118,9 +140,15 @@ async function execute<P>(
  */
 export function publicRoute<P = RouteParams>(
   handler: (context: PublicRouteContext<P>) => Promise<Response>,
+  options?: { rateLimit?: RateLimitOption<P> },
 ) {
   return (request: NextRequest, routeContext?: NextRouteContext<P>) =>
-    execute(request, routeContext, { protected: false, permissions: [] }, handler);
+    execute(
+      request,
+      routeContext,
+      { protected: false, permissions: [], rateLimit: options?.rateLimit },
+      handler,
+    );
 }
 
 /**
@@ -129,14 +157,14 @@ export function publicRoute<P = RouteParams>(
  * in the database still decides what the queries can read and write.
  */
 export function protectedRoute<P = RouteParams>(
-  options: { permissions?: readonly Permission[] },
+  options: { permissions?: readonly Permission[]; rateLimit?: RateLimitOption<P> },
   handler: (context: ProtectedRouteContext<P>) => Promise<Response>,
 ) {
   return (request: NextRequest, routeContext?: NextRouteContext<P>) =>
     execute(
       request,
       routeContext,
-      { protected: true, permissions: options.permissions ?? [] },
+      { protected: true, permissions: options.permissions ?? [], rateLimit: options.rateLimit },
       (context) => handler({ ...context, auth: context.auth as AuthContext }),
     );
 }

@@ -5,6 +5,8 @@ import type { ApiKeyScope } from "@/lib/api-keys/constants";
 import { bearerToken } from "@/lib/api-keys/keys";
 import { verifyApiKey } from "@/lib/api-keys/service";
 import type { ApiKeyPrincipal } from "@/lib/api-keys/types";
+import type { RateLimitClass } from "@/lib/rate-limit/constants";
+import { enforceRateLimit } from "@/lib/rate-limit/service";
 import { finalize, toErrorResponse } from "./handler";
 
 export type IngestRouteContext = {
@@ -23,9 +25,13 @@ export type IngestRouteContext = {
  * There are no cookies here, so there is no same-origin check (that defence is for browsers) and no
  * user-scoped Supabase client: a handler writes through a narrow, service-role-only path such as the
  * `ingest_telemetry()` database function. Errors use the same envelope as every other route.
+ *
+ * `rateLimit`, when given, is checked once the key itself is verified (so a bad key never spends a
+ * bucket slot), keyed by the key's own id: a per-account cap, not a per-request-origin one, since a
+ * sensor's address is not meaningful the way a browser's is.
  */
 export function ingestRoute(
-  options: { scope: ApiKeyScope },
+  options: { scope: ApiKeyScope; rateLimit?: RateLimitClass },
   handler: (context: IngestRouteContext) => Promise<Response>,
 ) {
   return async (request: NextRequest): Promise<Response> => {
@@ -35,6 +41,7 @@ export function ingestRoute(
         bearerToken(request.headers.get("authorization")),
         options.scope,
       );
+      if (options.rateLimit) await enforceRateLimit(options.rateLimit, principal.keyId);
       const response = await handler({ request, requestId, principal });
       return finalize(response, requestId);
     } catch (error) {

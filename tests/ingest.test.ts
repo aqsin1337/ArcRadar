@@ -18,6 +18,7 @@ import { apiRequest } from "./helpers/supabase";
 const verify = vi.hoisted(() => vi.fn());
 const store = vi.hoisted(() => vi.fn());
 const audit = vi.hoisted(() => vi.fn());
+const rateLimit = vi.hoisted(() => vi.fn());
 const cookieClient = vi.hoisted(() =>
   vi.fn(() => {
     throw new Error("the cookie-based client must never be used by an ingest route");
@@ -31,6 +32,7 @@ vi.mock("@/lib/telemetry/repository", () => ({
   findEvents: vi.fn(),
 }));
 vi.mock("@/lib/audit/write", () => ({ writeAuditLog: audit }));
+vi.mock("@/lib/rate-limit/service", () => ({ enforceRateLimit: rateLimit }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: cookieClient }));
 vi.mock("@/lib/supabase/session", () => ({ updateSession: vi.fn() }));
 
@@ -70,6 +72,7 @@ beforeEach(() => {
   verify.mockResolvedValue(PRINCIPAL);
   store.mockResolvedValue(SUMMARY);
   audit.mockResolvedValue(true);
+  rateLimit.mockResolvedValue(undefined);
 });
 
 describe("ingestRoute", () => {
@@ -172,6 +175,36 @@ describe("ingestRoute", () => {
     expect(response.status).toBe(403);
     expect(handler).not.toHaveBeenCalled();
   });
+
+  it("rate-limits by the key's own id, once the key itself is verified", async () => {
+    const handler = vi.fn(async () => ok(null));
+    await ingestRoute(
+      { scope: "ingest:wazuh", rateLimit: "ingestByKey" },
+      handler,
+    )(apiRequest("/api/x", { method: "POST", headers: { authorization: `Bearer ${KEY}` } }));
+    expect(rateLimit).toHaveBeenCalledWith("ingestByKey", PRINCIPAL.keyId);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("never spends a rate-limit bucket slot on a key that was refused", async () => {
+    verify.mockRejectedValue(apiErrors.unauthenticated("The API key is not valid."));
+    await ingestRoute({ scope: "ingest:wazuh", rateLimit: "ingestByKey" }, async () => ok(null))(
+      apiRequest("/api/x", { method: "POST" }),
+    );
+    expect(rateLimit).not.toHaveBeenCalled();
+  });
+
+  it("answers 429 and never runs the handler once the caller is over its limit", async () => {
+    rateLimit.mockRejectedValue(apiErrors.rateLimited(15));
+    const handler = vi.fn();
+    const response = await ingestRoute(
+      { scope: "ingest:wazuh", rateLimit: "ingestByKey" },
+      handler,
+    )(apiRequest("/api/x", { method: "POST", headers: { authorization: `Bearer ${KEY}` } }));
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("15");
+    expect(handler).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/ingest/wazuh", () => {
@@ -194,6 +227,7 @@ describe("POST /api/ingest/wazuh", () => {
       "authentication_success",
     ]);
     expect(JSON.stringify(body)).not.toContain(KEY);
+    expect(rateLimit).toHaveBeenCalledWith("ingestByKey", PRINCIPAL.keyId);
   });
 
   it("audits one entry for the batch: who sent it and the counts, never the alerts", async () => {

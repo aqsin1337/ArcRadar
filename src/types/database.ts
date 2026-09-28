@@ -1262,6 +1262,24 @@ export type Database = {
           },
         ];
       };
+      rate_limit_buckets: {
+        Row: {
+          bucket_key: string;
+          count: number;
+          window_start: string;
+        };
+        Insert: {
+          bucket_key: string;
+          count?: number;
+          window_start: string;
+        };
+        Update: {
+          bucket_key?: string;
+          count?: number;
+          window_start?: string;
+        };
+        Relationships: [];
+      };
       reports: {
         Row: {
           content: NonNullable<Json>;
@@ -1780,6 +1798,13 @@ export type Database = {
           status: Database["public"]["Enums"]["alert_status"];
           total: number;
           unassigned: number;
+        }[];
+      };
+      check_rate_limit: {
+        Args: { p_key: string; p_limit: number; p_window_seconds: number };
+        Returns: {
+          allowed: boolean;
+          retry_after_seconds: number;
         }[];
       };
       current_role_name: { Args: Record<PropertyKey, never>; Returns: string };

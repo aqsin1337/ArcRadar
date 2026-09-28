@@ -15,9 +15,13 @@ export const dynamic = "force-dynamic";
  * idempotent: an alert already received (same manager and alert id) is counted as a duplicate and
  * changes nothing, so retries are safe. An alert that cannot be used is listed in `rejected` with a
  * reason; it never fails the request. Answers `{ received, events_created, alerts_created, duplicates,
- * assets_created, indicators_created, rejected }`.
+ * assets_created, indicators_created, rejected }`. Rate-limited per key (`ingestByKey`): a real
+ * sensor delivers steadily, so the cap only bites a misbehaving or compromised key.
  */
-export const POST = ingestRoute({ scope: "ingest:wazuh" }, async ({ request, principal }) => {
-  const body = await parseJsonBody(request, wazuhBatchSchema, MAX_BODY_BYTES);
-  return ok(await ingestBatch(principal, wazuhSource, body.alerts, request));
-});
+export const POST = ingestRoute(
+  { scope: "ingest:wazuh", rateLimit: "ingestByKey" },
+  async ({ request, principal }) => {
+    const body = await parseJsonBody(request, wazuhBatchSchema, MAX_BODY_BYTES);
+    return ok(await ingestBatch(principal, wazuhSource, body.alerts, request));
+  },
+);
