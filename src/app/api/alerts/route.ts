@@ -3,6 +3,7 @@ import { ok } from "@/lib/api/response";
 import { parseJsonBody, parseQuery } from "@/lib/api/validate";
 import { alertListQuerySchema, createAlertSchema } from "@/lib/alerts/schema";
 import { createAlert, listAlerts } from "@/lib/alerts/service";
+import { userSubject } from "@/lib/rate-limit/service";
 
 export const dynamic = "force-dynamic";
 
@@ -19,9 +20,16 @@ export const GET = protectedRoute({ permissions: ["alerts:read"] }, async ({ req
 /**
  * POST /api/alerts  { title, description?, severity?, indicator_id? }
  * Creates a manual, local alert (needs alerts:write). Its source is `manual`; origin and owner are not
- * accepted from the client.
+ * accepted from the client. Rate-limited by caller (`alertWriteByUser`): every insert also runs the
+ * dedup/detection-rule trigger (`alerts_dedup_and_rules`), so a burst of manual alerts is real work.
  */
-export const POST = protectedRoute({ permissions: ["alerts:write"] }, async ({ request, auth }) => {
-  const input = await parseJsonBody(request, createAlertSchema);
-  return ok(await createAlert(auth, input, request), { status: 201 });
-});
+export const POST = protectedRoute(
+  {
+    permissions: ["alerts:write"],
+    rateLimit: { routeClass: "alertWriteByUser", subject: ({ auth }) => userSubject(auth) },
+  },
+  async ({ request, auth }) => {
+    const input = await parseJsonBody(request, createAlertSchema);
+    return ok(await createAlert(auth, input, request), { status: 201 });
+  },
+);

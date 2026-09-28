@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getPublicEnv } from "@/lib/env/public";
 import type { Database } from "@/types/database";
+import { AUTH_COOKIE_OPTIONS } from "./cookie-options";
 
 /**
  * Supabase client for Server Components, Route Handlers and Server Actions. It acts as the signed-in
@@ -17,6 +18,7 @@ export async function createClient() {
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
+      cookieOptions: AUTH_COOKIE_OPTIONS,
       cookies: {
         getAll() {
           return cookieStore.getAll();

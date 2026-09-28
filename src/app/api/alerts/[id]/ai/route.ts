@@ -3,6 +3,7 @@ import { protectedRoute } from "@/lib/api/handler";
 import { ok } from "@/lib/api/response";
 import { parseJsonBody } from "@/lib/api/validate";
 import { generateAlertAnalysis, listAlertAnalyses } from "@/lib/ai/service";
+import { userSubject } from "@/lib/rate-limit/service";
 
 export const dynamic = "force-dynamic";
 
@@ -31,10 +32,14 @@ export const GET = protectedRoute<Params>(
  * POST /api/alerts/:id/ai  { kind }
  * Asks the active AI provider for one kind of analysis on this alert, validates and stores the
  * answer, and audits the call. Needs ai:use and alerts:read. 503 when no provider is configured
- * and ready; 429 when the provider's own rate limit was hit.
+ * and ready; 429 when the provider's own rate limit was hit, or when this analyst has asked too
+ * many times this hour (`aiByUser`, a real metered cost per call).
  */
 export const POST = protectedRoute<Params>(
-  { permissions: ["ai:use", "alerts:read"] },
+  {
+    permissions: ["ai:use", "alerts:read"],
+    rateLimit: { routeClass: "aiByUser", subject: ({ auth }) => userSubject(auth) },
+  },
   async ({ request, auth, params }) => {
     const { kind } = await parseJsonBody(request, bodySchema);
     return ok(await generateAlertAnalysis(auth, params.id, kind, request), { status: 201 });

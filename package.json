@@ -23,6 +23,7 @@
     "api:smoke": "node scripts/api-smoke.mjs",
     "apikey:create": "node scripts/create-api-key.mjs",
     "ingest:sample": "node scripts/send-sample-alerts.mjs",
+    "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
     "e2e": "playwright test --project=setup --project=desktop --project=mobile"
   },
@@ -38,6 +39,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24.13.6",
