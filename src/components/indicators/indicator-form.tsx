@@ -87,16 +87,24 @@ function toIso(local: string): string | undefined {
 type Props = {
   /** Existing tag names, offered as suggestions. */
   tagOptions: string[];
-} & ({ mode: "create"; indicator?: undefined } | { mode: "edit"; indicator: IndicatorListItem });
+} & (
+  | {
+      mode: "create";
+      indicator?: undefined;
+      /** Pre-filled type and value, for example from a lookup page. */
+      defaults?: Partial<Pick<Values, "type" | "value">>;
+    }
+  | { mode: "edit"; indicator: IndicatorListItem; defaults?: undefined }
+);
 
 /**
  * Create and edit form. Type and value identify an indicator, so on edit they are shown but fixed
  * (delete and re-create to fix a typo). Input is validated with the same schemas as the API, so the
  * messages match, and the server still has the last word (duplicates, permissions, constraints).
  */
-export function IndicatorForm({ mode, indicator, tagOptions }: Props) {
+export function IndicatorForm({ mode, indicator, defaults, tagOptions }: Props) {
   const router = useRouter();
-  const initial = indicator ? fromIndicator(indicator) : DEFAULTS;
+  const initial = indicator ? fromIndicator(indicator) : { ...DEFAULTS, ...defaults };
   const [values, setValues] = useState<Values>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);

@@ -1,0 +1,3 @@
+# Store and check out text files with LF on every machine (Prettier and the tests expect LF; Git for
+# Windows would otherwise check them out with CRLF).
+* text=auto eol=lf

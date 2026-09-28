@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@/lib/api/pagination";
+import { blankToUndefined, parseListParams, type RawParams } from "@/lib/validation/query";
 import {
   DATA_ORIGINS,
   INDICATOR_SORT_FIELDS,
@@ -7,6 +8,7 @@ import {
   INDICATOR_TYPES,
   MAX_INDICATOR_TAGS,
   MAX_TAG_LENGTH,
+  RELATIONSHIP_TYPES,
   SEVERITIES,
   VERDICTS,
 } from "./constants";
@@ -125,9 +127,37 @@ export const updateIndicatorSchema = z
 
 export const indicatorIdSchema = z.uuid({ error: "The indicator id is not valid." });
 
-// Form fields arrive as "" when left empty; treat that as "not set".
-const blankToUndefined = <T extends z.ZodType>(schema: T) =>
-  z.preprocess((value) => (value === "" ? undefined : value), schema.optional());
+const linkIds = (noun: string) =>
+  z
+    .array(z.uuid({ error: `A ${noun} id is not valid.` }))
+    .max(200, `At most 200 ${noun}s can be linked.`)
+    .transform((ids) => [...new Set(ids)]);
+
+/**
+ * Body of PUT /api/indicators/:id/links: the threat actors, campaigns and malware families the
+ * indicator is linked to. A list replaces that whole set (an empty list clears it); a list left out is
+ * kept as it is.
+ */
+export const setIndicatorLinksSchema = z
+  .strictObject({
+    actor_ids: linkIds("threat actor").optional(),
+    campaign_ids: linkIds("campaign").optional(),
+    malware_ids: linkIds("malware family").optional(),
+  })
+  .refine((input) => Object.keys(input).length > 0, {
+    message: "Provide at least one list of links to set.",
+  });
+
+/** Body of POST /api/indicators/:id/relationships: this indicator (the source) relates to `target_id`. */
+export const addRelationshipSchema = z.strictObject({
+  target_id: z.uuid({ error: "The target indicator id is not valid." }),
+  relationship: z.enum(RELATIONSHIP_TYPES, { error: "Choose how the indicators are related." }),
+});
+
+export const relationshipIdSchema = z.uuid({ error: "The relationship id is not valid." });
+
+export type SetIndicatorLinksInput = z.output<typeof setIndicatorLinksSchema>;
+export type AddRelationshipInput = z.output<typeof addRelationshipSchema>;
 
 /** Query string of GET /api/indicators and of the /indicators page. */
 export const indicatorListQuerySchema = paginationQuerySchema.extend({
@@ -146,20 +176,7 @@ export type CreateIndicatorInput = z.output<typeof createIndicatorSchema>;
 export type UpdateIndicatorInput = z.output<typeof updateIndicatorSchema>;
 export type IndicatorListQuery = z.output<typeof indicatorListQuerySchema>;
 
-type RawParams = Record<string, string | string[] | undefined>;
-
-/**
- * For the list page, where a hand-edited URL must never crash the page: invalid parameters fall back
- * to the defaults and the caller is told, so it can say so.
- */
-export function parseIndicatorListParams(params: RawParams): {
-  query: IndicatorListQuery;
-  ignoredInvalid: boolean;
-} {
-  const flat = Object.fromEntries(
-    Object.entries(params).map(([key, value]) => [key, Array.isArray(value) ? value[0] : value]),
-  );
-  const parsed = indicatorListQuerySchema.safeParse(flat);
-  if (parsed.success) return { query: parsed.data, ignoredInvalid: false };
-  return { query: indicatorListQuerySchema.parse({}), ignoredInvalid: true };
+/** The list page's query from its `searchParams`; see `parseListParams`. */
+export function parseIndicatorListParams(params: RawParams) {
+  return parseListParams(indicatorListQuerySchema, params);
 }

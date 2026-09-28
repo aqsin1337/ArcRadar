@@ -243,10 +243,12 @@ export function GlobalSearch() {
                     )}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="font-mono text-sm font-medium break-words">{hit.title}</p>
+                      <p className={cn("text-sm font-medium break-words", hit.mono && "font-mono")}>
+                        {hit.title}
+                      </p>
                       <p className="text-xs text-muted">{hit.subtitle}</p>
                     </div>
-                    <OriginBadge origin={hit.origin} />
+                    {hit.origin && <OriginBadge origin={hit.origin} />}
                   </div>
                 );
               })}

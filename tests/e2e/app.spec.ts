@@ -17,26 +17,42 @@ test.describe("viewer", () => {
       "page",
     );
 
-    // Viewers may read alerts, but the page is not built yet: shown as "Soon", not as a link.
-    await expect(nav.getByText("Alerts")).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Alerts" })).toHaveCount(0);
+    // Viewers may read alerts, investigations, reports and threat intelligence: live links.
+    for (const live of [
+      "Alerts",
+      "Investigations",
+      "Reports",
+      "Threat actors",
+      "Campaigns",
+      "Malware",
+    ]) {
+      await expect(nav.getByRole("link", { name: live }), live).toBeVisible();
+    }
     // Admin-only entries are not even shown.
     for (const hidden of ["Audit log", "Settings", "Integrations", "API keys"]) {
       await expect(nav.getByText(hidden, { exact: true }), hidden).toHaveCount(0);
     }
   });
 
-  test("the overview explains the account's access and where data comes from", async ({ page }) => {
+  test("the overview shows real counts, the account's access and where data comes from", async ({
+    page,
+  }) => {
     await page.goto("/dashboard");
     await expect(page.getByTestId("access-role")).toHaveText("Viewer");
     const main = page.getByRole("main");
     await expect(main.getByText("Indicators", { exact: true })).toBeVisible();
     await expect(main.getByText("read", { exact: true }).first()).toBeVisible();
+    // Real, non-zero counts from the seed (a viewer's own permissions already cover every read).
+    await expect(main.getByText("Total indicators")).toBeVisible();
+    const total = await main
+      .getByText("Total indicators")
+      .locator("xpath=following-sibling::*[1]")
+      .textContent();
+    expect(Number(total)).toBeGreaterThan(0);
     // The provenance legend shows all three origins, demo clearly marked.
     for (const label of ["Demo data", "Local", "External provider"]) {
       await expect(main.getByText(label, { exact: true }).first()).toBeVisible();
     }
-    await expect(main.getByText(/Nothing on this page is sample data/)).toBeVisible();
   });
 
   test("has landmarks and headings a screen reader can navigate", async ({ page }) => {

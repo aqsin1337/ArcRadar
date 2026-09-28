@@ -1,7 +1,8 @@
 # Telemetry architecture: Windows 10 → Wazuh → ArcRadar
 
-Status: design note (2026-09-26). Nothing here is built yet. It records the requirement and the rules that
-keep every later phase compatible with it. No decision about which computer runs what is needed yet.
+Status: **ingestion built in Phase 6b (2026-09-27)**, not yet exercised against a real Wazuh Manager. This
+note records the requirement, the rules that keep every phase compatible with it, and what was built. Setup
+of a Manager: `docs/WAZUH_INTEGRATION.md`; endpoints: `docs/API.md` ("Telemetry ingestion and API keys").
 
 ## Requirement
 
@@ -16,6 +17,18 @@ The main computer is resource-limited and runs ArcRadar (and the local Supabase 
 machine and the Wazuh Manager run on the user's two other computers, in any split: one each, or both on
 one. The machines are **not** assumed to share a computer, a subnet or a network.
 
+## The lab as it is now (told by the user, 2026-09-26)
+
+Everything runs in VMware, and hop 1 already works:
+
+- **Windows 10 client** in a VM on the user's main computer (the one that will also run ArcRadar), with the Wazuh Agent installed and enrolled.
+- **Wazuh Manager** in a VM on a friend's computer, joined to the agent over **Tailscale**; the agent's logs reach the Manager without problems.
+- The friend's computer is **switched on only on request**, so the Manager is up in sessions, not around the clock. A second friend's computer is unused.
+- Decision (advice given, no code): ArcRadar runs **directly on the main computer, not in a VM** (Docker Desktop for local Supabase and the Windows 10 VM already use most of its 15.7 GB of RAM; nginx is a local-only convenience because production is Vercel).
+- Hop 2 (Manager → ArcRadar) will use Tailscale until ArcRadar is published, so the **main computer itself needs Tailscale** (so far only the two VMs are known to be on the tailnet) and its address must be reachable by the Manager VM: either `tailscale serve` (HTTPS on the tailnet name, nginx and Next stay on 127.0.0.1) or nginx bound to the Tailscale address with a firewall rule for that interface only.
+- After the Vercel deploy the Manager pushes to the public HTTPS URL of ArcRadar, so Tailscale is only needed between the agent and the Manager. ArcRadar is then always up, which removes the main weakness of the lab setup: while the ArcRadar computer is off, a push from the Manager's integration script would be lost. **The delivery script therefore keeps a small retry spool** (built, see below).
+- Because the Manager is offline between sessions, the UI shows "last received" per source so that a silent pipeline is visible.
+
 ## Facts that shape the design (checked against the Wazuh docs)
 
 - The Wazuh **Manager is Linux-only** (Ubuntu, RHEL, Amazon Linux, ...). Windows only gets the **Agent**.
@@ -28,7 +41,7 @@ one. The machines are **not** assumed to share a computer, a subnet or a network
   `/var/ossec/integrations/` for each alert at or above a configured `level` (also filterable by `rule_id`
   or `group`, `alert_format` json). The script receives the alert file path, an `api_key` and a `hook_url`
   from the config. That is a supported way to push alerts straight to a URL. Re-check the exact options
-  against the installed Wazuh version when implementing.
+  against the installed Wazuh version.
 
 ## Design rules
 
@@ -47,35 +60,39 @@ one. The machines are **not** assumed to share a computer, a subnet or a network
 5. **Telemetry is not enrichment.** Two abstractions, one shared vocabulary: `IntelProvider` (outbound
    lookups: VirusTotal, AbuseIPDB, ...) and `TelemetrySource` (inbound events: Wazuh first, others later).
    Each record keeps its provenance and the UI labels it.
+6. **Honest health.** ArcRadar sees only what arrives, so a source is "receiving", "quiet" or "never
+   delivered", never "connected" or "healthy". Demo feeds are sample data and say so.
 
-## Planned ArcRadar side (later phase, not decided)
+## What was built (Phase 6b)
 
-- **Ingest endpoint** `POST /api/ingest/wazuh` taking a batch of Wazuh alert JSON. A third route wrapper
-  (`ingestRoute`, next to `publicRoute` / `protectedRoute`) authenticates the API key instead of a session:
-  no cookies, so the same-origin check does not apply. Zod-validated, size-limited, rate-limited (Phase 8
-  store), idempotent by a `source_event_id` unique key so retries and duplicates are harmless.
-- **API keys** come from the existing `api_keys` table (creation and verification are Phase 7 work) with a
-  scope such as `ingest:wazuh`. Writing without a user JWT means the service role, so keep it behind a narrow
-  repository (or a `SECURITY DEFINER` function callable only by `service_role`) that can only insert events,
-  alerts and indicators after the key is verified. Audit one `ingest.batch` entry per request, not per event.
-- **Normalization** in a `wazuh` adapter: `rule.level` → severity, `rule.mitre.id` → `mitre_techniques`,
-  `rule.groups` → tags, `agent.*` → the asset, IPs/hashes/domains in `data.win.eventdata` → indicators,
-  a bounded copy of the raw alert kept in `payload` for investigations.
-- **Provenance is already enforced for indicators** (migration `20260926120000`): signed-in users can only create `origin = 'local'` records and nobody can relabel one, so ingested telemetry must be written with the service role (server side, after the API key is verified), which is the only path that may record `origin = 'external'`. Give events and alerts the same treatment when the ingest work starts.
-- **Already in the schema:** `events` and `alerts` have `source` (text, default `manual`), `origin`,
-  `severity`, `occurred_at` and, for events, a `payload jsonb` that can hold the bounded raw alert. Ingested
-  rows have no `created_by` (it is nullable), which is correct for a machine sender.
-- **Schema additions needed** (new migrations, with RLS and DB tests): a `source_event_id` on events and
-  alerts with a unique index on `(source, source_event_id)` for idempotency; an `assets` table (agent id,
-  name, OS, last seen) and a reference to it; a `wazuh` row in `integrations` plus a `telemetry` capability
-  (the current check constraint does not allow it). How `origin` reads for live sensor data (`external`
-  with `source = 'wazuh'` is the likely fit) is decided then; demo and local data must still never look
+| Piece                | Where                                                                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API keys             | `src/lib/api-keys/` (`arc_` + 43 characters, SHA-256 hash stored, scope `ingest:wazuh` ↔ permission `events:write`, re-verified on every request)  |
+| Route wrapper        | `src/lib/api/ingest-route.ts` (`ingestRoute`): key instead of session, no cookies, no same-origin check                                            |
+| Endpoint             | `POST /api/ingest/wazuh` (100 alerts / 1 MiB per request)                                                                                          |
+| Adapter              | `src/lib/telemetry/wazuh.ts` (`TelemetrySource`): severity bands, level ≥ 7 raises an alert, ATT&CK ids, asset from the agent, bounded raw payload |
+| Indicator extraction | `src/lib/telemetry/extract.ts`: public or documentation addresses, hashes, domains, URLs; never private addresses; verdict always `unknown`        |
+| Storage              | `ingest_telemetry()` (migration `20260927110000`): `security definer`, executable only by the service role, one transaction per batch              |
+| Idempotency          | unique `(source, source_event_id)` for external events and alerts; `source_event_id` is `<manager name>:<alert id>`                                |
+| Assets               | `assets` table (read-only for clients); alerts and events reference it; the alert list also finds alerts by machine name or address                |
+| Health               | `telemetry_source_health()` and `src/lib/telemetry/health.ts`; the **Telemetry** page (sources, assets, events)                                    |
+| Manager side         | `deploy/wazuh/custom-arcradar` (POSIX `sh` + `curl`, write-ahead spool, retry, set-aside of refused requests), `ossec-integration.xml`             |
+| Tooling              | `npm run apikey:create`, `npm run ingest:sample` (fictional alerts, no Manager needed)                                                             |
+
+Decisions that were open when this note was written:
+
+- **Provenance.** Ingested rows are `origin = 'external'` with `source = 'wazuh'`. Only the service role can
+  write them (clients can only create `local` rows and cannot relabel), so demo and local data never look
   like live telemetry.
-- **Volume:** Wazuh is chatty and Supabase storage is limited. Start with `level >= 7` in the Manager
-  config, and add a retention job in Phase 8.
-- **Connector health:** surface "last event received" per source so a silent pipeline is visible.
+- **Writing without a user JWT.** Through `ingest_telemetry()` only, after the key is verified; the app uses
+  the admin client for that one call (and for key creation and audit entries). One `ingest.batch` audit
+  entry per request, never per event, never the alerts.
+- **Volume.** The Manager config forwards level 7 and up; lower levels are events only and create no
+  indicators. There is no retention job yet (Phase 8).
+- **Sysmon** and the Wazuh version are still unconfirmed on the lab machines; the adapter reads Sysmon event
+  data when it is present and works without it.
 
-## Reaching ArcRadar from the Manager (pick per environment, later)
+## Reaching ArcRadar from the Manager (pick per environment)
 
 | Situation                          | How the Manager reaches ArcRadar                                                                            |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -87,18 +104,12 @@ Today nginx and the local Supabase stack listen on `127.0.0.1` only, which is ri
 widening nginx is a config toggle for the day remote nodes are connected. The agent → Manager hop needs the
 same kind of choice between those two machines, independent of ArcRadar.
 
-## Impact on current code and phases
+## Still open
 
-- **Nothing to change now.** Server-to-server requests carry no `Origin`, so they already pass the CSRF
-  check; the `events`, `alerts`, `indicators`, `mitre_techniques` and `api_keys` tables and the
-  `events:write` permission already anticipate this.
-- **Phase 3 (UI):** design the events/alerts views so a record can show its source and provenance label and
-  an asset name; no ingestion work.
-- **Ingestion depends on API-key auth (Phase 7).** Proposal, to be decided when the time comes: either build
-  the Wazuh integration right after Phase 7, or pull API-key creation and the `ingestRoute` wrapper forward.
-
-## Open questions (no answer needed yet)
-
-Wazuh version; whether the Windows 10 endpoint is physical or a VM; whether Sysmon will be installed (richer
-process/network events); Manager on a Linux VM, Docker or WSL2; the alert level to forward; whether to also
-surface Wazuh vulnerability-detector and SCA results; retention period.
+- The delivery script and the `<integration>` options were **not run against a real Manager**: confirm the
+  Wazuh version, that the alert file holds one JSON object per line, and that the Manager has `curl`.
+- Whether the Manager VM has its own Tailscale address (the agent reaches it, so it should), and how the
+  Manager will reach ArcRadar on the main computer until it is published (see the table above).
+- Whether Sysmon will be installed (richer process and network events), whether to also surface Wazuh
+  vulnerability-detector and SCA results, and the retention period.
+- No rate limit on the ingest endpoint yet (Phase 8), and no correlation of repeated alerts beyond their id.

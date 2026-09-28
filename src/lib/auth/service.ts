@@ -1,10 +1,11 @@
 import "server-only";
 import type { AuthError } from "@supabase/supabase-js";
 import { ApiError, apiErrors } from "@/lib/api/errors";
+import { toApiError } from "@/lib/api/supabase-errors";
 import { writeAuditLog } from "@/lib/audit/write";
 import { getPublicEnv } from "@/lib/env/public";
 import { logError, logWarn } from "@/lib/log";
-import type { LoginInput, SignupInput } from "@/lib/validation/auth";
+import type { LoginInput, SignupInput, UpdateProfileInput } from "@/lib/validation/auth";
 import {
   buildAuthContext,
   isAuthServiceDown,
@@ -222,4 +223,37 @@ export async function updatePassword(
     },
     request,
   );
+}
+
+/** Updates the caller's own display name and/or avatar URL (RLS grants no other column). */
+export async function updateProfile(
+  auth: AuthContext,
+  input: UpdateProfileInput,
+  request: RequestLike,
+): Promise<SessionInfo> {
+  const patch: { display_name?: string | null; avatar_url?: string | null } = {};
+  if (input.display_name !== undefined) patch.display_name = input.display_name;
+  if (input.avatar_url !== undefined) patch.avatar_url = input.avatar_url;
+
+  const { data, error } = await auth.supabase
+    .from("profiles")
+    .update(patch)
+    .eq("id", auth.user.id)
+    .select("display_name, role_name, is_active")
+    .single();
+  if (error) throw toApiError(error);
+  if (!data.is_active) throw apiErrors.accountDisabled();
+
+  await writeAuditLog(
+    {
+      action: "profile.updated",
+      userId: auth.user.id,
+      entityType: "profile",
+      entityId: auth.user.id,
+      metadata: { fields: Object.keys(patch) },
+    },
+    request,
+  );
+
+  return toSessionInfo({ ...auth, profile: { ...auth.profile, display_name: data.display_name } });
 }

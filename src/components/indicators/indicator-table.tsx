@@ -1,4 +1,3 @@
-import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 import Link from "next/link";
 import { ConfidenceMeter } from "@/components/ui/confidence-meter";
 import {
@@ -7,6 +6,7 @@ import {
   SeverityBadge,
   VerdictBadge,
 } from "@/components/ui/domain-badges";
+import { SortHeader } from "@/components/ui/sort-header";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { INDICATOR_TYPE_LABELS, type IndicatorSortField } from "@/lib/indicators/constants";
 import type { IndicatorListItem } from "@/lib/indicators/types";
@@ -40,35 +40,25 @@ export function IndicatorTable({ items, state }: { items: IndicatorListItem[]; s
       <Table caption="Indicators">
         <THead>
           <tr>
-            {COLUMNS.map(({ label, sort: field, show }) => {
-              if (!field)
-                return (
-                  <Th key={label} className={show}>
-                    {label}
-                  </Th>
-                );
-              const current = sort === field;
-              const nextOrder = current && order === "asc" ? "desc" : "asc";
-              const Icon = !current ? ChevronsUpDown : order === "asc" ? ArrowUp : ArrowDown;
-              return (
-                <Th
+            {COLUMNS.map(({ label, sort: field, show }) =>
+              field ? (
+                <SortHeader
                   key={label}
+                  label={label}
+                  field={field}
+                  sort={sort}
+                  order={order}
                   className={show}
-                  aria-sort={current ? (order === "asc" ? "ascending" : "descending") : undefined}
-                >
-                  <Link
-                    href={indicatorListHref(state, { sort: field, order: nextOrder, page: 1 })}
-                    className="-mx-1 inline-flex items-center gap-1 rounded px-1 hover:text-foreground"
-                  >
-                    {label}
-                    <Icon aria-hidden className={current ? "size-3.5" : "size-3.5 opacity-50"} />
-                    <span className="sr-only">
-                      , sort {nextOrder === "asc" ? "ascending" : "descending"}
-                    </span>
-                  </Link>
+                  hrefFor={(sortField, nextOrder) =>
+                    indicatorListHref(state, { sort: sortField, order: nextOrder, page: 1 })
+                  }
+                />
+              ) : (
+                <Th key={label} className={show}>
+                  {label}
                 </Th>
-              );
-            })}
+              ),
+            )}
           </tr>
         </THead>
         <TBody>

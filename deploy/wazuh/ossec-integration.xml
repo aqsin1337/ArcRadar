@@ -1,0 +1,19 @@
+<!--
+  Add this inside <ossec_config> in /var/ossec/etc/ossec.conf on the Wazuh Manager, then restart it
+  (systemctl restart wazuh-manager). Steps and troubleshooting: docs/WAZUH_INTEGRATION.md.
+
+  <name>       must start with "custom-": Wazuh runs /var/ossec/integrations/<name>
+  <hook_url>   ArcRadar's ingest endpoint. Use https:// (a published ArcRadar) or, while ArcRadar runs on
+               your own computer, its Tailscale address. Never put a password in the URL.
+  <api_key>    an ArcRadar API key with the ingest:wazuh scope (npm run apikey:create). Keep this file
+               readable by root and the wazuh group only.
+  <level>      only alerts of this rule level or higher are forwarded. ArcRadar turns level 7 and up into
+               alerts; lower levels would only add events. Start at 7 to keep the volume small.
+-->
+<integration>
+  <name>custom-arcradar</name>
+  <hook_url>https://arcradar.example.com/api/ingest/wazuh</hook_url>
+  <api_key>arc_REPLACE_WITH_YOUR_KEY</api_key>
+  <level>7</level>
+  <alert_format>json</alert_format>
+</integration>

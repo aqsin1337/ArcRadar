@@ -11,6 +11,7 @@ import {
   loginSchema,
   newPasswordSchema,
   signupSchema,
+  updateProfileSchema,
 } from "@/lib/validation/auth";
 
 function jsonRequest(body: BodyInit | null, headers: Record<string, string> = {}) {
@@ -159,6 +160,19 @@ describe("auth schemas", () => {
     });
     expect(result.success).toBe(false);
     expect(forgotPasswordSchema.safeParse({ email: "a@b.io", extra: 1 }).success).toBe(false);
+  });
+
+  it("updateProfileSchema needs at least one field, and an empty string clears rather than sets", () => {
+    expect(updateProfileSchema.safeParse({}).success).toBe(false);
+    const cleared = updateProfileSchema.parse({ display_name: "" });
+    expect(cleared.display_name).toBeNull();
+    const set = updateProfileSchema.parse({ display_name: "Ada" });
+    expect(set.display_name).toBe("Ada");
+    expect(updateProfileSchema.safeParse({ avatar_url: "not a url" }).success).toBe(false);
+    expect(updateProfileSchema.parse({ avatar_url: "" }).avatar_url).toBeNull();
+    expect(updateProfileSchema.safeParse({ display_name: "Ada", role_name: "admin" }).success).toBe(
+      false,
+    );
   });
 });
 

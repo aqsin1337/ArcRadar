@@ -4,7 +4,7 @@ import { ApiError, apiErrors } from "@/lib/api/errors";
 import { toRange } from "@/lib/api/pagination";
 import { toApiError } from "@/lib/api/supabase-errors";
 import type { AuthClient } from "@/lib/auth/context";
-import type { Indicator, IndicatorType } from "@/types/domain";
+import type { Indicator, IndicatorType, RelationshipType } from "@/types/domain";
 import type { CreateIndicatorInput, IndicatorListQuery, UpdateIndicatorInput } from "./schema";
 import type { IndicatorDetail, IndicatorRelationship, IndicatorTag, LinkedEntity } from "./types";
 import { VALUE_HINTS, normalizeIndicatorValue } from "./value";
@@ -253,6 +253,94 @@ export async function deleteIndicatorRow(
     .delete()
     .eq("id", id)
     .select("id, type, value, origin")
+    .maybeSingle();
+  if (error) throw toApiError(error);
+  return data;
+}
+
+/** Just the columns that identify an indicator, for existence checks and audit entries. */
+export async function findIndicatorIdentity(
+  supabase: AuthClient,
+  id: string,
+): Promise<Pick<Indicator, "id" | "type" | "value"> | null> {
+  const { data, error } = await supabase
+    .from("indicators")
+    .select("id, type, value")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw toApiError(error);
+  return data;
+}
+
+/**
+ * Sets which threat actors, campaigns and malware families an indicator is linked to, atomically,
+ * through set_indicator_links(). A list left out is kept as it is; an empty one clears that kind.
+ */
+export async function replaceIndicatorLinks(
+  supabase: AuthClient,
+  id: string,
+  links: { actors?: string[]; campaigns?: string[]; malware?: string[] },
+): Promise<void> {
+  const { error } = await supabase.rpc("set_indicator_links", {
+    p_indicator_id: id,
+    p_actors: links.actors,
+    p_campaigns: links.campaigns,
+    p_malware: links.malware,
+  });
+  if (error) {
+    if (error.code === "23503") {
+      throw validationIssue("links", "One of the linked records does not exist.");
+    }
+    throw toApiError(error);
+  }
+}
+
+/** Relates two indicators: `sourceId` <relationship> `targetId`. */
+export async function insertRelationship(
+  supabase: AuthClient,
+  sourceId: string,
+  targetId: string,
+  relationship: RelationshipType,
+): Promise<{ id: string }> {
+  const { data, error } = await supabase
+    .from("indicator_relationships")
+    .insert({
+      source_indicator_id: sourceId,
+      target_indicator_id: targetId,
+      relationship,
+    })
+    .select("id")
+    .single();
+  if (error) {
+    if (error.code === "23505")
+      throw apiErrors.conflict("These indicators are already related this way.");
+    if (error.code === "23503")
+      throw validationIssue("target_id", "That indicator does not exist.");
+    if (error.code === "23514") {
+      throw validationIssue("target_id", "An indicator cannot be related to itself.");
+    }
+    throw toApiError(error);
+  }
+  return data;
+}
+
+/** Removes a relationship, but only one that involves `indicatorId` (as source or target). */
+export async function deleteRelationshipRow(
+  supabase: AuthClient,
+  indicatorId: string,
+  relationshipId: string,
+): Promise<{
+  id: string;
+  relationship: RelationshipType;
+  source_indicator_id: string;
+  target_indicator_id: string;
+} | null> {
+  const { data, error } = await supabase
+    .from("indicator_relationships")
+    .delete()
+    .eq("id", relationshipId)
+    .or(`source_indicator_id.eq.${indicatorId},target_indicator_id.eq.${indicatorId}`)
+    .select("id, relationship, source_indicator_id, target_indicator_id")
     .maybeSingle();
   if (error) throw toApiError(error);
   return data;

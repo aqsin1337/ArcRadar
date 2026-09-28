@@ -21,6 +21,8 @@
     "db:env": "node scripts/db-env.mjs",
     "db:test": "node scripts/db-test.mjs",
     "api:smoke": "node scripts/api-smoke.mjs",
+    "apikey:create": "node scripts/create-api-key.mjs",
+    "ingest:sample": "node scripts/send-sample-alerts.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
     "e2e": "playwright test --project=setup --project=desktop --project=mobile"
   },

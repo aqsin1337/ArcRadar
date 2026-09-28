@@ -68,5 +68,34 @@ export const forgotPasswordSchema = z.strictObject({ email: emailSchema });
 
 export const updatePasswordSchema = z.strictObject({ password: newPasswordSchema });
 
+/** Body of PATCH /api/auth/me: display_name/avatar_url, or `null` to clear either. An empty string
+ * from a form field also means "clear it" (a blank name is never stored, unlike `undefined`, which
+ * leaves the field alone). */
+export const updateProfileSchema = z
+  .strictObject({
+    display_name: z.preprocess(
+      (value) => (value === "" ? null : value),
+      z
+        .string()
+        .trim()
+        .min(1, "Enter a name, or leave it blank to clear it.")
+        .max(100, "The name can have at most 100 characters.")
+        .nullable()
+        .optional(),
+    ),
+    avatar_url: z.preprocess(
+      (value) => (value === "" ? null : value),
+      z
+        .url({ error: "Enter a valid URL." })
+        .max(2048, "The URL is too long.")
+        .nullable()
+        .optional(),
+    ),
+  })
+  .refine((value) => value.display_name !== undefined || value.avatar_url !== undefined, {
+    error: "Give a name, an avatar URL, or both.",
+  });
+
 export type LoginInput = z.output<typeof loginSchema>;
 export type SignupInput = z.output<typeof signupSchema>;
+export type UpdateProfileInput = z.output<typeof updateProfileSchema>;

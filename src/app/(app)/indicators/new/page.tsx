@@ -6,11 +6,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { AccessDenied } from "@/components/ui/states";
 import { getPageAuthContext } from "@/lib/auth/session";
+import { INDICATOR_TYPES } from "@/lib/indicators/constants";
 import { listTagOptions } from "@/lib/indicators/service";
+import { firstValues } from "@/lib/validation/query";
 
 export const metadata: Metadata = { title: "New indicator" };
 
-export default async function NewIndicatorPage() {
+export default async function NewIndicatorPage({ searchParams }: PageProps<"/indicators/new">) {
   const auth = await getPageAuthContext();
   if (!auth) return null;
   if (!auth.permissions.has("indicators:write")) {
@@ -27,6 +29,14 @@ export default async function NewIndicatorPage() {
     );
   }
 
+  // A lookup page links here with the type and value it was looking at; anything odd is ignored.
+  const { type, value } = firstValues(await searchParams);
+  const knownType = INDICATOR_TYPES.find((known) => known === type);
+  const defaults = {
+    ...(knownType ? { type: knownType } : {}),
+    ...(value && value.length <= 2048 ? { value: value.trim() } : {}),
+  };
+
   const tags = await listTagOptions(auth.supabase);
   return (
     <>
@@ -36,7 +46,11 @@ export default async function NewIndicatorPage() {
       />
       <Card className="max-w-3xl">
         <CardContent>
-          <IndicatorForm mode="create" tagOptions={tags.map((tag) => tag.name)} />
+          <IndicatorForm
+            mode="create"
+            defaults={defaults}
+            tagOptions={tags.map((tag) => tag.name)}
+          />
         </CardContent>
       </Card>
     </>

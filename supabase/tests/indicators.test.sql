@@ -72,6 +72,17 @@ begin
     raise exception 'FAIL a lone underscore acted as a wildcard';
   end if;
 
+  -- an indicator without a description (a NULL column) must not match every search
+  reset role;
+  insert into public.indicators (id, type, value, description) values
+    ('dddddddd-0000-4000-8000-000000000020', 'domain', 'fxnodescription.example', null);
+  perform set_config('request.jwt.claims', json_build_object('sub', 'bbbbbbbb-0000-4000-8000-000000000003', 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  select count(*) into function_count from public.search_indicators('fxno-such-text-anywhere');
+  if function_count <> 0 then raise exception 'FAIL an indicator without a description matched an unrelated search (%)', function_count; end if;
+  select count(*) into function_count from public.search_indicators('fxnodescription');
+  if function_count <> 1 then raise exception 'FAIL the indicator without a description was not found by its value (%)', function_count; end if;
+
   select count(*) into function_count from public.search_indicators(null);
   if function_count < 4 then raise exception 'FAIL empty search does not return everything (%)', function_count; end if;
   select count(*) into function_count from public.search_indicators('   ');

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -26,8 +27,8 @@ export function AppShell({ session, children }: { session: SessionInfo; children
   const name = session.profile.display_name ?? session.user.email ?? "Signed in";
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
-      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-border bg-surface lg:flex">
+    <div className="min-h-dvh lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] print:block">
+      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-border bg-surface lg:flex print:hidden">
         <div className="flex h-14 shrink-0 items-center border-b border-border px-5">
           <Logo />
         </div>
@@ -37,7 +38,7 @@ export function AppShell({ session, children }: { session: SessionInfo; children
       </aside>
 
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/90 px-3 backdrop-blur sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/90 px-3 backdrop-blur sm:px-6 lg:px-8 print:hidden">
           <MobileNav />
           <div className="lg:hidden">
             <Logo className="[&>span:last-child]:hidden sm:[&>span:last-child]:inline" />
@@ -48,7 +49,10 @@ export function AppShell({ session, children }: { session: SessionInfo; children
           <div className="hidden flex-1 lg:block" />
           <ThemeToggle />
           <div className="mx-1 hidden h-6 w-px bg-border sm:block" aria-hidden />
-          <div className="flex min-w-0 items-center gap-2.5">
+          <Link
+            href="/profile"
+            className="flex min-w-0 items-center gap-2.5 rounded-lg p-1 -m-1 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-ring"
+          >
             <span
               aria-hidden
               className="flex size-8 shrink-0 items-center justify-center rounded-full bg-tone-brand-bg text-xs font-semibold text-tone-brand-fg"
@@ -66,14 +70,14 @@ export function AppShell({ session, children }: { session: SessionInfo; children
                 {humanize(session.profile.role)}
               </Badge>
             </span>
-          </div>
+          </Link>
           <SignOutButton />
         </header>
 
         <main
           id="main"
           tabIndex={-1}
-          className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8"
+          className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8 print:max-w-none print:p-0"
         >
           {children}
         </main>

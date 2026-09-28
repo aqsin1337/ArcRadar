@@ -212,18 +212,42 @@ describe("navigation", () => {
     );
     expect(labels).toEqual(expect.arrayContaining(["Integrations", "API keys"]));
     expect(labels).not.toContain("Audit log");
+    expect(labels).not.toContain("Detection rules");
   });
 
   it("accepts arrays of permissions too", () => {
     const groups = visibleNavGroups(["alerts:read"]);
-    expect(groups.flatMap((g) => g.items.map((i) => i.label))).toEqual(["Overview", "Alerts"]);
+    expect(groups.flatMap((g) => g.items.map((i) => i.label))).toEqual([
+      "Overview",
+      "Alerts",
+      "Response actions",
+    ]);
   });
 
   it("keeps only real pages marked live and every href unique", () => {
     const items = NAV_GROUPS.flatMap((g) => g.items);
     expect(items.filter((i) => i.status === "live").map((i) => i.href)).toEqual([
       "/dashboard",
+      "/alerts",
+      "/investigations",
+      "/telemetry",
+      "/reports",
+      "/response-actions",
       "/indicators",
+      "/intelligence/ip",
+      "/intelligence/domain",
+      "/intelligence/url",
+      "/intelligence/hash",
+      "/vulnerabilities",
+      "/threat-actors",
+      "/campaigns",
+      "/malware",
+      "/mitre",
+      "/integrations",
+      "/api-keys",
+      "/detection-rules",
+      "/audit-log",
+      "/settings",
     ]);
     expect(new Set(items.map((i) => i.href)).size).toBe(items.length);
   });

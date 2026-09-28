@@ -1,5 +1,12 @@
 import { Constants } from "@/types/database";
-import type { DataOrigin, IndicatorStatus, IndicatorType, Severity, Verdict } from "@/types/domain";
+import type {
+  DataOrigin,
+  IndicatorStatus,
+  IndicatorType,
+  RelationshipType,
+  Severity,
+  Verdict,
+} from "@/types/domain";
 
 // Runtime lists come from the generated database types, so a new enum value in a migration shows up
 // here after `npm run db:types` (and TypeScript flags every label map that misses it).
@@ -8,6 +15,7 @@ export const INDICATOR_STATUSES = Constants.public.Enums.indicator_status;
 export const SEVERITIES = Constants.public.Enums.severity;
 export const VERDICTS = Constants.public.Enums.verdict;
 export const DATA_ORIGINS = Constants.public.Enums.data_origin;
+export const RELATIONSHIP_TYPES = Constants.public.Enums.relationship_type;
 
 export const INDICATOR_TYPE_LABELS: Record<IndicatorType, string> = {
   ipv4: "IPv4 address",
@@ -42,6 +50,15 @@ export const INDICATOR_STATUS_LABELS: Record<IndicatorStatus, string> = {
   expired: "Expired",
   whitelisted: "Allow-listed",
   under_review: "Under review",
+};
+
+/** How a relationship reads in a sentence: "<indicator> resolves to <other>". */
+export const RELATIONSHIP_VERBS: Record<RelationshipType, string> = {
+  resolves_to: "resolves to",
+  communicates_with: "communicates with",
+  downloads: "downloads",
+  hosted_on: "is hosted on",
+  related_to: "is related to",
 };
 
 export const SEVERITY_LABELS: Record<Severity, string> = {

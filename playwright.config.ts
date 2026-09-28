@@ -28,7 +28,8 @@ export default defineConfig({
       name: "desktop",
       use: { ...devices["Desktop Chrome"], channel },
       dependencies: ["setup"],
-      testMatch: /(auth|app|indicators)\.spec\.ts/,
+      testMatch:
+        /(auth|app|indicators|intelligence|operations|threat-intel|telemetry|admin)\.spec\.ts/,
     },
     {
       name: "mobile",

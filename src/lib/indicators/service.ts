@@ -3,20 +3,28 @@ import { apiErrors } from "@/lib/api/errors";
 import { buildPage, type Page } from "@/lib/api/pagination";
 import { writeAuditLog } from "@/lib/audit/write";
 import type { AuthClient, AuthContext } from "@/lib/auth/context";
+import { assertLinkTargetsExist } from "@/lib/threat-intel/repository";
 import {
   deleteIndicatorRow,
+  deleteRelationshipRow,
   findAllTags,
   findIndicatorDetail,
+  findIndicatorIdentity,
   findIndicators,
   findTagsByIndicator,
   insertIndicator,
+  insertRelationship,
+  replaceIndicatorLinks,
   replaceIndicatorTags,
   updateIndicatorRow,
 } from "./repository";
 import {
   indicatorIdSchema,
+  relationshipIdSchema,
+  type AddRelationshipInput,
   type CreateIndicatorInput,
   type IndicatorListQuery,
+  type SetIndicatorLinksInput,
   type UpdateIndicatorInput,
 } from "./schema";
 import type { Indicator } from "@/types/domain";
@@ -108,6 +116,127 @@ export async function updateIndicator(
     request,
   );
   return withTags(auth.supabase, row);
+}
+
+/**
+ * Sets which threat actors, campaigns and malware families this indicator is linked to (a list
+ * replaces that whole set; a list left out is kept). Every target must exist, and is checked before
+ * anything changes.
+ */
+export async function setIndicatorLinks(
+  auth: AuthContext,
+  id: string,
+  input: SetIndicatorLinksInput,
+  request: RequestLike,
+): Promise<IndicatorDetail> {
+  if (!isIndicatorId(id)) throw apiErrors.notFound("Indicator not found.");
+  const { supabase } = auth;
+  const indicator = await findIndicatorIdentity(supabase, id);
+  if (!indicator) throw apiErrors.notFound("Indicator not found.");
+
+  await Promise.all([
+    assertLinkTargetsExist(supabase, "threat_actors", input.actor_ids ?? [], "actor_ids"),
+    assertLinkTargetsExist(supabase, "campaigns", input.campaign_ids ?? [], "campaign_ids"),
+    assertLinkTargetsExist(supabase, "malware", input.malware_ids ?? [], "malware_ids"),
+  ]);
+  await replaceIndicatorLinks(supabase, id, {
+    actors: input.actor_ids,
+    campaigns: input.campaign_ids,
+    malware: input.malware_ids,
+  });
+
+  await writeAuditLog(
+    {
+      action: "indicator.links_updated",
+      userId: auth.user.id,
+      entityType: "indicator",
+      entityId: id,
+      metadata: {
+        type: indicator.type,
+        value: indicator.value,
+        threat_actors: input.actor_ids?.length ?? null,
+        campaigns: input.campaign_ids?.length ?? null,
+        malware: input.malware_ids?.length ?? null,
+      },
+    },
+    request,
+  );
+  return getIndicator(supabase, id);
+}
+
+/** Relates this indicator (the source) to another one. The same pair and kind twice is a 409. */
+export async function addRelationship(
+  auth: AuthContext,
+  id: string,
+  input: AddRelationshipInput,
+  request: RequestLike,
+): Promise<IndicatorDetail> {
+  if (!isIndicatorId(id)) throw apiErrors.notFound("Indicator not found.");
+  const { supabase } = auth;
+  if (input.target_id === id) {
+    throw apiErrors.validation({
+      issues: [{ path: "target_id", message: "An indicator cannot be related to itself." }],
+    });
+  }
+
+  const [source, target] = await Promise.all([
+    findIndicatorIdentity(supabase, id),
+    findIndicatorIdentity(supabase, input.target_id),
+  ]);
+  if (!source) throw apiErrors.notFound("Indicator not found.");
+  if (!target) {
+    throw apiErrors.validation({
+      issues: [{ path: "target_id", message: "That indicator does not exist." }],
+    });
+  }
+
+  const row = await insertRelationship(supabase, id, target.id, input.relationship);
+  await writeAuditLog(
+    {
+      action: "indicator.relationship_added",
+      userId: auth.user.id,
+      entityType: "indicator",
+      entityId: id,
+      metadata: {
+        relationship_id: row.id,
+        relationship: input.relationship,
+        source: source.value,
+        target: target.value,
+      },
+    },
+    request,
+  );
+  return getIndicator(supabase, id);
+}
+
+/** Removes a relationship that involves this indicator. */
+export async function removeRelationship(
+  auth: AuthContext,
+  id: string,
+  relationshipId: string,
+  request: RequestLike,
+): Promise<void> {
+  if (!isIndicatorId(id) || !relationshipIdSchema.safeParse(relationshipId).success) {
+    throw apiErrors.notFound("Relationship not found.");
+  }
+  const removed = await deleteRelationshipRow(auth.supabase, id, relationshipId);
+  if (!removed) throw apiErrors.notFound("Relationship not found.");
+
+  await writeAuditLog(
+    {
+      action: "indicator.relationship_removed",
+      userId: auth.user.id,
+      entityType: "indicator",
+      entityId: id,
+      metadata: {
+        relationship_id: removed.id,
+        relationship: removed.relationship,
+        source_id: removed.source_indicator_id,
+        target_id: removed.target_indicator_id,
+      },
+    },
+    request,
+  );
 }
 
 export async function deleteIndicator(

@@ -23,59 +23,183 @@ export type Database = {
   };
   public: {
     Tables: {
+      ai_analyses: {
+        Row: {
+          content: NonNullable<Json>;
+          created_at: string;
+          id: string;
+          kind: string;
+          model: string;
+          prompt_version: number;
+          provider: string;
+          requested_by: string | null;
+          subject_id: string;
+          subject_type: string;
+        };
+        Insert: {
+          content: NonNullable<Json>;
+          created_at?: string;
+          id?: string;
+          kind: string;
+          model: string;
+          prompt_version: number;
+          provider: string;
+          requested_by?: string | null;
+          subject_id: string;
+          subject_type: string;
+        };
+        Update: {
+          content?: NonNullable<Json>;
+          created_at?: string;
+          id?: string;
+          kind?: string;
+          model?: string;
+          prompt_version?: number;
+          provider?: string;
+          requested_by?: string | null;
+          subject_id?: string;
+          subject_type?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_analyses_provider_fkey";
+            columns: ["provider"];
+            isOneToOne: false;
+            referencedRelation: "integrations";
+            referencedColumns: ["provider"];
+          },
+          {
+            foreignKeyName: "ai_analyses_requested_by_fkey";
+            columns: ["requested_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_settings: {
+        Row: {
+          active_model: string | null;
+          active_provider: string | null;
+          id: boolean;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          active_model?: string | null;
+          active_provider?: string | null;
+          id?: boolean;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          active_model?: string | null;
+          active_provider?: string | null;
+          id?: boolean;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_settings_active_provider_fkey";
+            columns: ["active_provider"];
+            isOneToOne: false;
+            referencedRelation: "integrations";
+            referencedColumns: ["provider"];
+          },
+          {
+            foreignKeyName: "ai_settings_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       alerts: {
         Row: {
           acknowledged_at: string | null;
+          ai_fp_score: number | null;
+          asset_id: string | null;
           assigned_to: string | null;
           created_at: string;
           created_by: string | null;
           description: string | null;
+          duplicate_count: number;
+          duplicate_of: string | null;
           event_id: string | null;
+          fingerprint: string | null;
           id: string;
           indicator_id: string | null;
+          matched_rule_id: number | null;
           origin: Database["public"]["Enums"]["data_origin"];
           resolved_at: string | null;
           severity: Database["public"]["Enums"]["severity"];
           source: string;
+          source_event_id: string | null;
           status: Database["public"]["Enums"]["alert_status"];
+          technique_ids: string[];
           title: string;
           updated_at: string;
         };
         Insert: {
           acknowledged_at?: string | null;
+          ai_fp_score?: number | null;
+          asset_id?: string | null;
           assigned_to?: string | null;
           created_at?: string;
           created_by?: string | null;
           description?: string | null;
+          duplicate_count?: number;
+          duplicate_of?: string | null;
           event_id?: string | null;
+          fingerprint?: string | null;
           id?: string;
           indicator_id?: string | null;
+          matched_rule_id?: number | null;
           origin?: Database["public"]["Enums"]["data_origin"];
           resolved_at?: string | null;
           severity?: Database["public"]["Enums"]["severity"];
           source?: string;
+          source_event_id?: string | null;
           status?: Database["public"]["Enums"]["alert_status"];
+          technique_ids?: string[];
           title: string;
           updated_at?: string;
         };
         Update: {
           acknowledged_at?: string | null;
+          ai_fp_score?: number | null;
+          asset_id?: string | null;
           assigned_to?: string | null;
           created_at?: string;
           created_by?: string | null;
           description?: string | null;
+          duplicate_count?: number;
+          duplicate_of?: string | null;
           event_id?: string | null;
+          fingerprint?: string | null;
           id?: string;
           indicator_id?: string | null;
+          matched_rule_id?: number | null;
           origin?: Database["public"]["Enums"]["data_origin"];
           resolved_at?: string | null;
           severity?: Database["public"]["Enums"]["severity"];
           source?: string;
+          source_event_id?: string | null;
           status?: Database["public"]["Enums"]["alert_status"];
+          technique_ids?: string[];
           title?: string;
           updated_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "alerts_asset_id_fkey";
+            columns: ["asset_id"];
+            isOneToOne: false;
+            referencedRelation: "assets";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "alerts_assigned_to_fkey";
             columns: ["assigned_to"];
@@ -91,6 +215,13 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "alerts_duplicate_of_fkey";
+            columns: ["duplicate_of"];
+            isOneToOne: false;
+            referencedRelation: "alerts";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "alerts_event_id_fkey";
             columns: ["event_id"];
             isOneToOne: false;
@@ -102,6 +233,13 @@ export type Database = {
             columns: ["indicator_id"];
             isOneToOne: false;
             referencedRelation: "indicators";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "alerts_matched_rule_id_fkey";
+            columns: ["matched_rule_id"];
+            isOneToOne: false;
+            referencedRelation: "detection_rules";
             referencedColumns: ["id"];
           },
         ];
@@ -152,6 +290,48 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      assets: {
+        Row: {
+          created_at: string;
+          external_id: string;
+          first_seen: string;
+          id: string;
+          ip_address: string | null;
+          last_seen: string;
+          name: string;
+          origin: Database["public"]["Enums"]["data_origin"];
+          os: string | null;
+          source: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          external_id: string;
+          first_seen?: string;
+          id?: string;
+          ip_address?: string | null;
+          last_seen?: string;
+          name: string;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          os?: string | null;
+          source: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          external_id?: string;
+          first_seen?: string;
+          id?: string;
+          ip_address?: string | null;
+          last_seen?: string;
+          name?: string;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          os?: string | null;
+          source?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       audit_logs: {
         Row: {
@@ -236,8 +416,59 @@ export type Database = {
           },
         ];
       };
+      detection_rules: {
+        Row: {
+          conditions: NonNullable<Json>;
+          created_at: string;
+          created_by: string | null;
+          description: string | null;
+          enabled: boolean;
+          id: number;
+          name: string;
+          origin: Database["public"]["Enums"]["data_origin"];
+          priority: number;
+          severity: Database["public"]["Enums"]["severity"] | null;
+          updated_at: string;
+        };
+        Insert: {
+          conditions: NonNullable<Json>;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string | null;
+          enabled?: boolean;
+          id: number;
+          name: string;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          priority?: number;
+          severity?: Database["public"]["Enums"]["severity"] | null;
+          updated_at?: string;
+        };
+        Update: {
+          conditions?: NonNullable<Json>;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string | null;
+          enabled?: boolean;
+          id?: number;
+          name?: string;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          priority?: number;
+          severity?: Database["public"]["Enums"]["severity"] | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "detection_rules_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       events: {
         Row: {
+          asset_id: string | null;
           created_at: string;
           created_by: string | null;
           description: string | null;
@@ -249,9 +480,11 @@ export type Database = {
           payload: NonNullable<Json>;
           severity: Database["public"]["Enums"]["severity"];
           source: string;
+          source_event_id: string | null;
           title: string;
         };
         Insert: {
+          asset_id?: string | null;
           created_at?: string;
           created_by?: string | null;
           description?: string | null;
@@ -263,9 +496,11 @@ export type Database = {
           payload?: NonNullable<Json>;
           severity?: Database["public"]["Enums"]["severity"];
           source?: string;
+          source_event_id?: string | null;
           title: string;
         };
         Update: {
+          asset_id?: string | null;
           created_at?: string;
           created_by?: string | null;
           description?: string | null;
@@ -277,9 +512,17 @@ export type Database = {
           payload?: NonNullable<Json>;
           severity?: Database["public"]["Enums"]["severity"];
           source?: string;
+          source_event_id?: string | null;
           title?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "events_asset_id_fkey";
+            columns: ["asset_id"];
+            isOneToOne: false;
+            referencedRelation: "assets";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "events_created_by_fkey";
             columns: ["created_by"];
@@ -579,18 +822,31 @@ export type Database = {
       };
       investigation_alerts: {
         Row: {
+          added_at: string;
+          added_by: string | null;
           alert_id: string;
           investigation_id: string;
         };
         Insert: {
+          added_at?: string;
+          added_by?: string | null;
           alert_id: string;
           investigation_id: string;
         };
         Update: {
+          added_at?: string;
+          added_by?: string | null;
           alert_id?: string;
           investigation_id?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "investigation_alerts_added_by_fkey";
+            columns: ["added_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "investigation_alerts_alert_id_fkey";
             columns: ["alert_id"];
@@ -600,6 +856,64 @@ export type Database = {
           },
           {
             foreignKeyName: "investigation_alerts_investigation_id_fkey";
+            columns: ["investigation_id"];
+            isOneToOne: false;
+            referencedRelation: "investigations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      investigation_checklist_items: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          done: boolean;
+          done_at: string | null;
+          done_by: string | null;
+          id: string;
+          investigation_id: string;
+          source: string;
+          text: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          done?: boolean;
+          done_at?: string | null;
+          done_by?: string | null;
+          id?: string;
+          investigation_id: string;
+          source: string;
+          text: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          done?: boolean;
+          done_at?: string | null;
+          done_by?: string | null;
+          id?: string;
+          investigation_id?: string;
+          source?: string;
+          text?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "investigation_checklist_items_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "investigation_checklist_items_done_by_fkey";
+            columns: ["done_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "investigation_checklist_items_investigation_id_fkey";
             columns: ["investigation_id"];
             isOneToOne: false;
             referencedRelation: "investigations";
@@ -654,18 +968,31 @@ export type Database = {
       };
       investigation_indicators: {
         Row: {
+          added_at: string;
+          added_by: string | null;
           indicator_id: string;
           investigation_id: string;
         };
         Insert: {
+          added_at?: string;
+          added_by?: string | null;
           indicator_id: string;
           investigation_id: string;
         };
         Update: {
+          added_at?: string;
+          added_by?: string | null;
           indicator_id?: string;
           investigation_id?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "investigation_indicators_added_by_fkey";
+            columns: ["added_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "investigation_indicators_indicator_id_fkey";
             columns: ["indicator_id"];
@@ -689,6 +1016,7 @@ export type Database = {
           created_at: string;
           id: string;
           investigation_id: string;
+          kind: string;
           updated_at: string;
         };
         Insert: {
@@ -697,6 +1025,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           investigation_id: string;
+          kind?: string;
           updated_at?: string;
         };
         Update: {
@@ -705,6 +1034,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           investigation_id?: string;
+          kind?: string;
           updated_at?: string;
         };
         Relationships: [
@@ -979,6 +1309,125 @@ export type Database = {
             columns: ["investigation_id"];
             isOneToOne: false;
             referencedRelation: "investigations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      response_action_log: {
+        Row: {
+          action_id: string;
+          alert_id: string | null;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          investigation_id: string | null;
+          notes: string | null;
+          performed_at: string | null;
+          performed_by: string | null;
+          source: string;
+          status: string;
+        };
+        Insert: {
+          action_id: string;
+          alert_id?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          investigation_id?: string | null;
+          notes?: string | null;
+          performed_at?: string | null;
+          performed_by?: string | null;
+          source: string;
+          status?: string;
+        };
+        Update: {
+          action_id?: string;
+          alert_id?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          investigation_id?: string | null;
+          notes?: string | null;
+          performed_at?: string | null;
+          performed_by?: string | null;
+          source?: string;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "response_action_log_action_id_fkey";
+            columns: ["action_id"];
+            isOneToOne: false;
+            referencedRelation: "response_actions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "response_action_log_alert_id_fkey";
+            columns: ["alert_id"];
+            isOneToOne: false;
+            referencedRelation: "alerts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "response_action_log_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "response_action_log_investigation_id_fkey";
+            columns: ["investigation_id"];
+            isOneToOne: false;
+            referencedRelation: "investigations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "response_action_log_performed_by_fkey";
+            columns: ["performed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      response_actions: {
+        Row: {
+          category: string | null;
+          created_at: string;
+          created_by: string | null;
+          description: string | null;
+          id: string;
+          origin: Database["public"]["Enums"]["data_origin"];
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          category?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string | null;
+          id?: string;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          category?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string | null;
+          id?: string;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "response_actions_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -1309,12 +1758,118 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      activity_series: {
+        Args: { p_days?: number };
+        Returns: {
+          alerts: number;
+          day: string;
+          events: number;
+        }[];
+      };
+      alert_severity_counts: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          severity: Database["public"]["Enums"]["severity"];
+          total: number;
+        }[];
+      };
+      alert_sources: { Args: Record<PropertyKey, never>; Returns: string[] };
+      alert_status_counts: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          status: Database["public"]["Enums"]["alert_status"];
+          total: number;
+          unassigned: number;
+        }[];
+      };
       current_role_name: { Args: Record<PropertyKey, never>; Returns: string };
+      detection_rule_matches: {
+        Args: { p_alert: Database["public"]["Tables"]["alerts"]["Row"]; p_conditions: Json };
+        Returns: boolean;
+      };
       escape_like: { Args: { p_text: string }; Returns: string };
       has_permission: { Args: { p_key: string }; Returns: boolean };
+      import_external_vulnerability: { Args: { p: Json }; Returns: string };
+      indicator_type_counts: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          total: number;
+          type: Database["public"]["Enums"]["indicator_type"];
+        }[];
+      };
+      indicator_verdict_counts: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          total: number;
+          verdict: Database["public"]["Enums"]["verdict"];
+        }[];
+      };
+      ingest_telemetry: { Args: { p_records: Json; p_source: string }; Returns: Json };
+      investigation_status_counts: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          status: Database["public"]["Enums"]["investigation_status"];
+          total: number;
+        }[];
+      };
       is_valid_indicator: {
         Args: { p_type: Database["public"]["Enums"]["indicator_type"]; p_value: string };
         Returns: boolean;
+      };
+      search_alerts: {
+        Args: { p_query?: string };
+        Returns: {
+          acknowledged_at: string | null;
+          ai_fp_score: number | null;
+          asset_id: string | null;
+          assigned_to: string | null;
+          created_at: string;
+          created_by: string | null;
+          description: string | null;
+          duplicate_count: number;
+          duplicate_of: string | null;
+          event_id: string | null;
+          fingerprint: string | null;
+          id: string;
+          indicator_id: string | null;
+          matched_rule_id: number | null;
+          origin: Database["public"]["Enums"]["data_origin"];
+          resolved_at: string | null;
+          severity: Database["public"]["Enums"]["severity"];
+          source: string;
+          source_event_id: string | null;
+          status: Database["public"]["Enums"]["alert_status"];
+          technique_ids: string[];
+          title: string;
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "alerts";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      search_campaigns: {
+        Args: { p_query?: string };
+        Returns: {
+          created_at: string;
+          created_by: string | null;
+          description: string | null;
+          first_seen: string | null;
+          id: string;
+          last_seen: string | null;
+          name: string;
+          origin: Database["public"]["Enums"]["data_origin"];
+          status: Database["public"]["Enums"]["campaign_status"];
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "campaigns";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
       };
       search_indicators: {
         Args: { p_query?: string; p_tag?: string };
@@ -1343,9 +1898,203 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      search_investigations: {
+        Args: { p_query?: string; p_tag?: string };
+        Returns: {
+          analyst_id: string | null;
+          closed_at: string | null;
+          created_at: string;
+          created_by: string | null;
+          description: string | null;
+          id: string;
+          origin: Database["public"]["Enums"]["data_origin"];
+          priority: Database["public"]["Enums"]["priority"];
+          status: Database["public"]["Enums"]["investigation_status"];
+          title: string;
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "investigations";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      search_malware: {
+        Args: { p_query?: string };
+        Returns: {
+          created_at: string;
+          created_by: string | null;
+          description: string | null;
+          id: string;
+          malware_type: string | null;
+          name: string;
+          origin: Database["public"]["Enums"]["data_origin"];
+          platforms: string[];
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "malware";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      search_mitre_techniques: {
+        Args: { p_query?: string };
+        Returns: {
+          description: string | null;
+          id: string;
+          name: string;
+          tactics: string[];
+          url: string | null;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "mitre_techniques";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      search_reports: {
+        Args: { p_query?: string };
+        Returns: {
+          content: NonNullable<Json>;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          investigation_id: string | null;
+          origin: Database["public"]["Enums"]["data_origin"];
+          parameters: NonNullable<Json>;
+          title: string;
+          type: Database["public"]["Enums"]["report_type"];
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "reports";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      search_threat_actors: {
+        Args: { p_query?: string };
+        Returns: {
+          aliases: string[];
+          attribution_country: string | null;
+          created_at: string;
+          created_by: string | null;
+          description: string | null;
+          first_seen: string | null;
+          id: string;
+          last_seen: string | null;
+          motivation: string | null;
+          name: string;
+          origin: Database["public"]["Enums"]["data_origin"];
+          target_countries: string[];
+          target_industries: string[];
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "threat_actors";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      search_vulnerabilities: {
+        Args: { p_query?: string };
+        Returns: {
+          created_at: string;
+          created_by: string | null;
+          cve_id: string;
+          cvss_score: number | null;
+          cvss_vector: string | null;
+          cvss_version: string | null;
+          description: string;
+          exploit_status: Database["public"]["Enums"]["exploit_status"];
+          id: string;
+          modified_at: string | null;
+          origin: Database["public"]["Enums"]["data_origin"];
+          published_at: string | null;
+          reference_urls: string[];
+          remediation: string | null;
+          severity: Database["public"]["Enums"]["severity"];
+          title: string;
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "vulnerabilities";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      set_campaign_actors: {
+        Args: { p_actors: string[]; p_campaign_id: string };
+        Returns: undefined;
+      };
+      set_indicator_links: {
+        Args: {
+          p_actors?: string[];
+          p_campaigns?: string[];
+          p_indicator_id: string;
+          p_malware?: string[];
+        };
+        Returns: undefined;
+      };
       set_indicator_tags: {
         Args: { p_indicator_id: string; p_tags: string[] };
         Returns: undefined;
+      };
+      set_investigation_tags: {
+        Args: { p_investigation_id: string; p_tags: string[] };
+        Returns: undefined;
+      };
+      set_malware_actors: {
+        Args: { p_actors: string[]; p_malware_id: string };
+        Returns: undefined;
+      };
+      set_threat_actor_links: {
+        Args: {
+          p_actor_id: string;
+          p_campaigns?: string[];
+          p_malware?: string[];
+          p_techniques?: string[];
+        };
+        Returns: undefined;
+      };
+      severity_rank: {
+        Args: { p_severity: Database["public"]["Enums"]["severity"] };
+        Returns: number;
+      };
+      telemetry_source_health: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          alerts_total: number;
+          assets_total: number;
+          events_24h: number;
+          events_total: number;
+          last_event_at: string;
+          last_received_at: string;
+          origin: Database["public"]["Enums"]["data_origin"];
+          source: string;
+        }[];
+      };
+      top_threat_actors: {
+        Args: { p_limit?: number };
+        Returns: {
+          id: string;
+          indicator_count: number;
+          name: string;
+        }[];
+      };
+      vulnerability_severity_counts: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          exploited: number;
+          severity: Database["public"]["Enums"]["severity"];
+          total: number;
+        }[];
       };
     };
     Enums: {

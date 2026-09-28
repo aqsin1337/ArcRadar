@@ -1,82 +1,62 @@
 import { ArrowLeft, ArrowRight, Pencil } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { DeleteIndicatorButton } from "@/components/indicators/delete-indicator-button";
+import { IndicatorLinksEditor } from "@/components/indicators/indicator-links-editor";
+import {
+  AddRelationshipForm,
+  RemoveRelationshipButton,
+} from "@/components/indicators/relationship-controls";
 import { TagChips } from "@/components/indicators/tag-chips";
-import { Alert } from "@/components/ui/alert";
+import { VerdictRecommendationPanel } from "@/components/indicators/verdict-recommendation-panel";
+import { RecordChips } from "@/components/threat-intel/linked-records";
 import { Badge } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfidenceMeter } from "@/components/ui/confidence-meter";
+import { DetailRow as Row, TimeText as Time } from "@/components/ui/detail-list";
 import {
   IndicatorStatusBadge,
   OriginBadge,
   SeverityBadge,
   VerdictBadge,
 } from "@/components/ui/domain-badges";
+import { ProvenanceNotice } from "@/components/ui/provenance-notice";
 import { AccessDenied } from "@/components/ui/states";
+import { getAiAvailability, listSubjectAnalyses } from "@/lib/ai/service";
 import { ApiError } from "@/lib/api/errors";
 import { getPageAuthContext } from "@/lib/auth/session";
-import { formatDateTime } from "@/lib/format";
-import { INDICATOR_TYPE_LABELS, INDICATOR_TYPE_SHORT_LABELS } from "@/lib/indicators/constants";
+import {
+  INDICATOR_TYPE_LABELS,
+  INDICATOR_TYPE_SHORT_LABELS,
+  RELATIONSHIP_VERBS,
+} from "@/lib/indicators/constants";
 import { getIndicator, isIndicatorId } from "@/lib/indicators/service";
 import type { IndicatorDetail, LinkedEntity } from "@/lib/indicators/types";
-import type { DataOrigin, RelationshipType } from "@/types/domain";
+import { getLinkOptions } from "@/lib/threat-intel/service";
 
-const RELATIONSHIP_VERBS: Record<RelationshipType, string> = {
-  resolves_to: "resolves to",
-  communicates_with: "communicates with",
-  downloads: "downloads",
-  hosted_on: "is hosted on",
-  related_to: "is related to",
-};
-
-const PROVENANCE_NOTICE: Record<DataOrigin, { tone: "warning" | "info" | null; text: string }> = {
-  demo: {
-    tone: "warning",
-    text: "This is demo data: a sample record for demonstration, not live intelligence.",
-  },
-  local: {
-    tone: "info",
-    text: "Local data: entered by your team and not verified by an external provider.",
-  },
-  external: { tone: null, text: "" },
-};
-
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-2 text-sm">
-      <dt className="text-muted">{label}</dt>
-      <dd className="min-w-0 text-right font-medium break-words">{children}</dd>
-    </div>
-  );
-}
-
-function Time({ iso }: { iso: string }) {
-  return (
-    <time dateTime={iso} title={iso}>
-      {formatDateTime(iso)}
-    </time>
-  );
-}
-
-function EntityList({ title, items }: { title: string; items: LinkedEntity[] }) {
+/** Threat actors, campaigns or malware linked to the indicator, each a link to its page with its provenance. */
+function EntityList({
+  title,
+  items,
+  basePath,
+}: {
+  title: string;
+  items: LinkedEntity[];
+  basePath: string;
+}) {
   return (
     <div className="space-y-1.5">
       <h3 className="text-xs font-semibold tracking-wide text-muted uppercase">{title}</h3>
-      {items.length === 0 ? (
-        <p className="text-sm text-muted">None linked.</p>
-      ) : (
-        <ul className="flex flex-wrap gap-1.5">
-          {items.map((item) => (
-            <li key={item.id} className="inline-flex items-center gap-1.5 text-sm">
-              <span className="font-medium">{item.name}</span>
-              {item.origin === "demo" && <OriginBadge origin="demo" />}
-            </li>
-          ))}
-        </ul>
-      )}
+      <RecordChips
+        empty="None linked."
+        items={items.map((item) => ({
+          id: item.id,
+          label: item.name,
+          href: `${basePath}/${item.id}`,
+          origin: item.origin,
+        }))}
+      />
     </div>
   );
 }
@@ -99,9 +79,17 @@ export default async function IndicatorPage({ params }: PageProps<"/indicators/[
 
   const canWrite = auth.permissions.has("indicators:write");
   const canDelete = auth.permissions.has("indicators:delete");
-  const notice = PROVENANCE_NOTICE[indicator.origin];
-  const hasLinks =
-    indicator.threat_actors.length + indicator.campaigns.length + indicator.malware.length > 0;
+  const canUseAi = auth.permissions.has("ai:use");
+  // Editors need the choices to link to; readers of intelligence records only need the names above.
+  const linkOptions =
+    canWrite && auth.permissions.has("threat_intel:read")
+      ? await getLinkOptions(auth.supabase)
+      : null;
+  const [verdictAnalyses, aiReady] = await Promise.all([
+    listSubjectAnalyses(auth.supabase, "indicator", indicator.id),
+    canUseAi ? getAiAvailability(auth.supabase).then((a) => a.ready) : Promise.resolve(false),
+  ]);
+  const now = new Date();
 
   return (
     <>
@@ -146,11 +134,7 @@ export default async function IndicatorPage({ params }: PageProps<"/indicators/[
         )}
       </div>
 
-      {notice.tone && (
-        <Alert tone={notice.tone} className="mb-6">
-          {notice.text}
-        </Alert>
-      )}
+      <ProvenanceNotice origin={indicator.origin} className="mb-6" />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
@@ -216,13 +200,28 @@ export default async function IndicatorPage({ params }: PageProps<"/indicators/[
                             </span>
                           </>
                         )}
-                        <Badge tone="slate" className="ml-auto">
-                          {INDICATOR_TYPE_SHORT_LABELS[link.other.type]}
-                        </Badge>
+                        <span className="ml-auto inline-flex items-center gap-1">
+                          <Badge tone="slate">{INDICATOR_TYPE_SHORT_LABELS[link.other.type]}</Badge>
+                          {canWrite && (
+                            <RemoveRelationshipButton
+                              indicatorId={indicator.id}
+                              relationshipId={link.id}
+                              label={`Remove the relationship with ${link.other.value}`}
+                            />
+                          )}
+                        </span>
                       </li>
                     );
                   })}
                 </ul>
+              )}
+              {canWrite && (
+                <div className="mt-4">
+                  <AddRelationshipForm
+                    indicatorId={indicator.id}
+                    related={indicator.relationships.map((link) => link.other.id)}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
@@ -232,17 +231,23 @@ export default async function IndicatorPage({ params }: PageProps<"/indicators/[
               <CardTitle>Linked intelligence</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {hasLinks ? null : (
-                <p className="text-sm text-muted">
-                  Not linked to any threat actor, campaign or malware family.
-                </p>
-              )}
-              {hasLinks && (
-                <>
-                  <EntityList title="Threat actors" items={indicator.threat_actors} />
-                  <EntityList title="Campaigns" items={indicator.campaigns} />
-                  <EntityList title="Malware" items={indicator.malware} />
-                </>
+              <EntityList
+                title="Threat actors"
+                items={indicator.threat_actors}
+                basePath="/threat-actors"
+              />
+              <EntityList title="Campaigns" items={indicator.campaigns} basePath="/campaigns" />
+              <EntityList title="Malware" items={indicator.malware} basePath="/malware" />
+              {linkOptions && (
+                <IndicatorLinksEditor
+                  indicatorId={indicator.id}
+                  options={linkOptions}
+                  initial={{
+                    actor_ids: indicator.threat_actors.map((item) => item.id),
+                    campaign_ids: indicator.campaigns.map((item) => item.id),
+                    malware_ids: indicator.malware.map((item) => item.id),
+                  }}
+                />
               )}
             </CardContent>
           </Card>
@@ -270,6 +275,24 @@ export default async function IndicatorPage({ params }: PageProps<"/indicators/[
               </dl>
             </CardContent>
           </Card>
+
+          {(canUseAi || verdictAnalyses.latest.verdict_recommendation) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>AI verdict recommendation</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <VerdictRecommendationPanel
+                  indicatorId={indicator.id}
+                  canUse={canUseAi}
+                  canApply={canWrite}
+                  ready={aiReady}
+                  initial={verdictAnalyses.latest.verdict_recommendation ?? null}
+                  now={now}
+                />
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

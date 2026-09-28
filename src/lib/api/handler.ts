@@ -35,7 +35,8 @@ type NextRouteContext<P> = { params: Promise<P> };
 
 type RouteOptions = { protected: boolean; permissions: readonly Permission[] };
 
-function toErrorResponse(error: unknown, request: Request, requestId: string) {
+/** Maps anything a handler threw to the error envelope (shared with `ingestRoute`). */
+export function toErrorResponse(error: unknown, request: Request, requestId: string) {
   if (error instanceof ApiError) {
     return fail(error.status, error.code, error.message, error.details, error.headers);
   }
@@ -56,7 +57,7 @@ function toErrorResponse(error: unknown, request: Request, requestId: string) {
   return fail(internal.status, internal.code, internal.message);
 }
 
-function finalize(response: Response, requestId: string) {
+export function finalize(response: Response, requestId: string) {
   // Responses depend on the session cookie and must never be cached by a CDN or the browser.
   response.headers.set("Cache-Control", "no-store");
   response.headers.set("x-request-id", requestId);

@@ -211,16 +211,24 @@ test.describe("global search", () => {
     await expect(box).toBeFocused();
 
     await box.fill("harbor");
-    const first = page.getByRole("option", { name: /harbor-lights-c2\.example/ }).first();
-    await expect(first).toContainText("Demo data");
+    const domain = page
+      .getByRole("option")
+      .filter({ has: page.getByText("harbor-lights-c2.example", { exact: true }) });
+    await expect(domain).toContainText("Demo data");
     await expect(page.getByRole("option", { name: /Search indicators for/ })).toBeVisible();
     await expect(box).toHaveAttribute("aria-expanded", "true");
 
-    await box.press("ArrowDown");
-    await expect(box).toHaveAttribute("aria-activedescendant", /option-0$/);
+    // Several demo indicators match "harbor" and share a last_seen, so their order is not fixed:
+    // walk down to the domain instead of assuming it comes first.
+    const domainId = (await domain.getAttribute("id")) ?? "";
+    expect(domainId).toMatch(/-option-\d+$/);
+    for (let step = 0; step <= Number(domainId.split("-option-")[1]); step++) {
+      await box.press("ArrowDown");
+    }
+    await expect(box).toHaveAttribute("aria-activedescendant", domainId);
     await box.press("Enter");
     await expect(page).toHaveURL(/\/indicators\/[0-9a-f-]{36}$/);
-    await expect(page.getByTestId("indicator-value")).toContainText(/harbor/i);
+    await expect(page.getByTestId("indicator-value")).toHaveText("harbor-lights-c2.example");
   });
 
   test("waits for two characters, Enter searches the list, Escape closes then clears", async ({
