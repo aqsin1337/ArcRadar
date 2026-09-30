@@ -63,19 +63,10 @@ export type InvestigationReportContent = {
   evidence: { title: string; location: string; created_at: string }[];
 };
 
-export type ThreatActorReportContent = {
-  actor: { id: string; name: string; description: string | null; motivation: string | null };
-  campaigns: { id: string; name: string; status: string }[];
-  malware: { id: string; name: string; malware_type: string | null }[];
-  techniques: { id: string; name: string }[];
-  indicator_count: number;
-};
-
 export type ReportContent =
   | IndicatorsReportContent
   | AlertsReportContent
   | VulnerabilitiesReportContent
-  | InvestigationReportContent
-  | ThreatActorReportContent;
+  | InvestigationReportContent;
 
 export type ReportDetail = Report & { created_by_name: string | null };

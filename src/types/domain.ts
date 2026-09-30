@@ -18,16 +18,12 @@ export type IndicatorType = EnumValue<"indicator_type">;
 export type IndicatorStatus = EnumValue<"indicator_status">;
 export type RelationshipType = EnumValue<"relationship_type">;
 export type ExploitStatus = EnumValue<"exploit_status">;
-export type CampaignStatus = EnumValue<"campaign_status">;
 export type AlertStatus = EnumValue<"alert_status">;
 export type InvestigationStatus = EnumValue<"investigation_status">;
 export type ReportType = EnumValue<"report_type">;
 
 export type Profile = Row<"profiles">;
 export type Indicator = Row<"indicators">;
-export type ThreatActor = Row<"threat_actors">;
-export type Campaign = Row<"campaigns">;
-export type Malware = Row<"malware">;
 export type MitreTechnique = Row<"mitre_techniques">;
 export type Asset = Row<"assets">;
 export type Vulnerability = Row<"vulnerabilities">;

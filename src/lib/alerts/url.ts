@@ -2,7 +2,16 @@ import { createListUrl } from "@/lib/validation/list-url";
 
 export const alertList = createListUrl({
   path: "/alerts",
-  filterKeys: ["q", "status", "severity", "source", "assignee", "origin", "duplicates"],
+  filterKeys: [
+    "q",
+    "status",
+    "severity",
+    "source",
+    "assignee",
+    "origin",
+    "duplicates",
+    "technique",
+  ],
   defaultSort: "created_at",
 });
 

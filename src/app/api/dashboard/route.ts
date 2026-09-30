@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/dashboard?days&severity — the Overview page's data (counts, distributions, the activity
- * series, top threat actors and malicious indicators, and recent alerts/investigations/indicators).
+ * series, the most-seen ATT&CK techniques and malicious indicators, and recent alerts/investigations/indicators).
  * Available to every signed-in role; the counts are the workspace's real totals.
  */
 export const GET = protectedRoute({}, async ({ request, auth }) => {

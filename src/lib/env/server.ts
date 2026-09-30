@@ -16,7 +16,12 @@ const serverEnvSchema = z.object({
   VIRUSTOTAL_API_KEY: optionalSecret,
   ABUSEIPDB_API_KEY: optionalSecret,
   OTX_API_KEY: optionalSecret,
-  SHODAN_API_KEY: optionalSecret,
+  // "true" switches on Shodan InternetDB, which is free and needs no key. Anything else is off.
+  SHODAN_INTERNETDB: z
+    .string()
+    .trim()
+    .transform((value) => (value.toLowerCase() === "true" ? "true" : undefined))
+    .optional(),
   NVD_API_KEY: optionalSecret,
   GROQ_API_KEY: optionalSecret,
   OPENAI_API_KEY: optionalSecret,

@@ -1,7 +1,6 @@
 import {
   Activity,
   Bell,
-  Biohazard,
   Bug,
   Crosshair,
   FileText,
@@ -14,12 +13,10 @@ import {
   LayoutDashboard,
   Link2,
   ListChecks,
-  Megaphone,
   Network,
   Plug,
   ScrollText,
   Settings,
-  Skull,
   type LucideIcon,
 } from "lucide-react";
 import type { Permission } from "@/lib/rbac/permissions";
@@ -122,27 +119,6 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Bug,
         status: "live",
         permission: "vulnerabilities:read",
-      },
-      {
-        label: "Threat actors",
-        href: "/threat-actors",
-        icon: Skull,
-        status: "live",
-        permission: "threat_intel:read",
-      },
-      {
-        label: "Campaigns",
-        href: "/campaigns",
-        icon: Megaphone,
-        status: "live",
-        permission: "threat_intel:read",
-      },
-      {
-        label: "Malware",
-        href: "/malware",
-        icon: Biohazard,
-        status: "live",
-        permission: "threat_intel:read",
       },
       {
         label: "MITRE ATT&CK",

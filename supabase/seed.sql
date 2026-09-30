@@ -5,8 +5,7 @@
 --   production database.
 -- * Every row is marked origin = 'demo' and is fictional or documentation-range data:
 --   IPs are RFC 5737 / RFC 3849 documentation addresses, domains use reserved TLDs
---   (.example, .test), hashes are digests of made-up strings, threat actors, campaigns and
---   malware are invented and carry no real-world attribution. CVE entries are short
+--   (.example, .test), hashes are digests of made-up strings. CVE entries are short
 --   summaries of public vulnerabilities; verify details against NVD before relying on them.
 --
 -- Demo users (password for all: ArcRadar-Demo-1!):
@@ -17,12 +16,6 @@ create function pg_temp.ind(v text) returns uuid language sql stable as
   $$ select id from public.indicators where value = v $$;
 create function pg_temp.tag(n text) returns uuid language sql stable as
   $$ select id from public.tags where lower(name) = lower(n) $$;
-create function pg_temp.actor(n text) returns uuid language sql stable as
-  $$ select id from public.threat_actors where lower(name) = lower(n) $$;
-create function pg_temp.campaign(n text) returns uuid language sql stable as
-  $$ select id from public.campaigns where lower(name) = lower(n) $$;
-create function pg_temp.malw(n text) returns uuid language sql stable as
-  $$ select id from public.malware where lower(name) = lower(n) $$;
 create function pg_temp.inv(t text) returns uuid language sql stable as
   $$ select id from public.investigations where title = t $$;
 create function pg_temp.alrt(t text) returns uuid language sql stable as
@@ -97,74 +90,6 @@ insert into public.mitre_techniques (id, name, tactics, url) values
   ('T1105', 'Ingress Tool Transfer', array['Command and Control'], 'https://attack.mitre.org/techniques/T1105/'),
   ('T1041', 'Exfiltration Over C2 Channel', array['Exfiltration'], 'https://attack.mitre.org/techniques/T1041/'),
   ('T1486', 'Data Encrypted for Impact', array['Impact'], 'https://attack.mitre.org/techniques/T1486/');
-
--- ---------------------------------------------------------------------------
--- Threat actors, campaigns, malware (all fictional)
--- ---------------------------------------------------------------------------
-insert into public.threat_actors
-  (name, aliases, description, motivation, attribution_country, target_industries, target_countries, first_seen, last_seen, origin)
-values
-  ('Crimson Harbor', array['DEMO-FIN-01'],
-   'Demo data. Fictional financially motivated group used to illustrate actor profiles. No real-world attribution.',
-   'Financial gain', null, array['Finance', 'Retail'], array['United States', 'Germany', 'Japan'],
-   now() - interval '420 days', now() - interval '3 days', 'demo'),
-  ('Silent Lantern', array['DEMO-ESP-02'],
-   'Demo data. Fictional espionage-style actor used to illustrate actor profiles. No real-world attribution.',
-   'Espionage', null, array['Government', 'Energy', 'Telecommunications'], array['Canada', 'France', 'Australia'],
-   now() - interval '800 days', now() - interval '12 days', 'demo'),
-  ('Ashen Tide', array['DEMO-RAN-03'],
-   'Demo data. Fictional ransomware crew used to illustrate actor profiles. No real-world attribution.',
-   'Financial gain (extortion)', null, array['Healthcare', 'Manufacturing'], array['United Kingdom', 'United States'],
-   now() - interval '300 days', now() - interval '2 days', 'demo'),
-  ('Velvet Signal', array['DEMO-HKT-04'],
-   'Demo data. Fictional hacktivist collective used to illustrate actor profiles. No real-world attribution.',
-   'Hacktivism', null, array['Media', 'Government'], array['Netherlands', 'Spain'],
-   now() - interval '200 days', now() - interval '30 days', 'demo'),
-  ('Iron Orchard', array['DEMO-FIN-05'],
-   'Demo data. Fictional card-fraud group used to illustrate actor profiles. No real-world attribution.',
-   'Financial gain', null, array['Hospitality', 'Retail'], array['Brazil', 'Mexico'],
-   now() - interval '560 days', now() - interval '45 days', 'demo');
-
-insert into public.campaigns (name, description, status, first_seen, last_seen, origin) values
-  ('Operation Paper Lantern', 'Demo data. Fictional credential-phishing campaign against government mailboxes.', 'active', now() - interval '60 days', now() - interval '2 days', 'demo'),
-  ('Winter Ledger', 'Demo data. Fictional ransomware campaign against regional healthcare providers.', 'concluded', now() - interval '200 days', now() - interval '120 days', 'demo'),
-  ('Harbor Lights', 'Demo data. Fictional loader and command-and-control campaign targeting finance.', 'active', now() - interval '45 days', now() - interval '1 day', 'demo'),
-  ('Copper Thread', 'Demo data. Fictional card-skimming campaign against online retailers.', 'dormant', now() - interval '300 days', now() - interval '90 days', 'demo');
-
-insert into public.malware (name, malware_type, platforms, description, origin) values
-  ('NightLoader', 'Loader', array['Windows'], 'Demo data. Fictional first-stage loader.', 'demo'),
-  ('EmberLock', 'Ransomware', array['Windows', 'Linux'], 'Demo data. Fictional ransomware family.', 'demo'),
-  ('QuietBeacon', 'Backdoor', array['Windows', 'Linux'], 'Demo data. Fictional low-and-slow backdoor.', 'demo'),
-  ('InkSteal', 'Infostealer', array['Windows', 'macOS'], 'Demo data. Fictional browser credential stealer.', 'demo'),
-  ('LatchBot', 'Botnet', array['Linux', 'IoT'], 'Demo data. Fictional IoT botnet client.', 'demo'),
-  ('HollowShell', 'Web shell', array['Linux', 'Windows'], 'Demo data. Fictional web shell.', 'demo');
-
-insert into public.threat_actor_campaigns (threat_actor_id, campaign_id) values
-  (pg_temp.actor('Crimson Harbor'), pg_temp.campaign('Harbor Lights')),
-  (pg_temp.actor('Silent Lantern'), pg_temp.campaign('Operation Paper Lantern')),
-  (pg_temp.actor('Crimson Harbor'), pg_temp.campaign('Operation Paper Lantern')),
-  (pg_temp.actor('Ashen Tide'), pg_temp.campaign('Winter Ledger')),
-  (pg_temp.actor('Iron Orchard'), pg_temp.campaign('Copper Thread'));
-
-insert into public.threat_actor_malware (threat_actor_id, malware_id) values
-  (pg_temp.actor('Crimson Harbor'), pg_temp.malw('NightLoader')),
-  (pg_temp.actor('Crimson Harbor'), pg_temp.malw('InkSteal')),
-  (pg_temp.actor('Silent Lantern'), pg_temp.malw('QuietBeacon')),
-  (pg_temp.actor('Silent Lantern'), pg_temp.malw('HollowShell')),
-  (pg_temp.actor('Ashen Tide'), pg_temp.malw('EmberLock')),
-  (pg_temp.actor('Ashen Tide'), pg_temp.malw('NightLoader')),
-  (pg_temp.actor('Velvet Signal'), pg_temp.malw('LatchBot')),
-  (pg_temp.actor('Iron Orchard'), pg_temp.malw('InkSteal'));
-
-insert into public.threat_actor_techniques (threat_actor_id, technique_id) values
-  (pg_temp.actor('Crimson Harbor'), 'T1566'), (pg_temp.actor('Crimson Harbor'), 'T1204'),
-  (pg_temp.actor('Crimson Harbor'), 'T1071'), (pg_temp.actor('Crimson Harbor'), 'T1105'),
-  (pg_temp.actor('Silent Lantern'), 'T1190'), (pg_temp.actor('Silent Lantern'), 'T1078'),
-  (pg_temp.actor('Silent Lantern'), 'T1021'), (pg_temp.actor('Silent Lantern'), 'T1041'),
-  (pg_temp.actor('Ashen Tide'), 'T1078'), (pg_temp.actor('Ashen Tide'), 'T1059'),
-  (pg_temp.actor('Ashen Tide'), 'T1003'), (pg_temp.actor('Ashen Tide'), 'T1486'),
-  (pg_temp.actor('Velvet Signal'), 'T1110'), (pg_temp.actor('Velvet Signal'), 'T1190'),
-  (pg_temp.actor('Iron Orchard'), 'T1566'), (pg_temp.actor('Iron Orchard'), 'T1027');
 
 -- ---------------------------------------------------------------------------
 -- Indicators
@@ -257,33 +182,6 @@ insert into public.indicator_tags (indicator_id, tag_id) values
   (pg_temp.ind(pg_temp.sha256_of(5)), pg_temp.tag('credential-theft')),
   (pg_temp.ind('CVE-2021-44228'), pg_temp.tag('exploit')),
   (pg_temp.ind('CVE-2022-22965'), pg_temp.tag('exploit'));
-
-insert into public.indicator_threat_actors (indicator_id, threat_actor_id) values
-  (pg_temp.ind('198.51.100.23'), pg_temp.actor('Crimson Harbor')),
-  (pg_temp.ind('harbor-lights-c2.example'), pg_temp.actor('Crimson Harbor')),
-  (pg_temp.ind('paper-lantern-mail.example'), pg_temp.actor('Silent Lantern')),
-  (pg_temp.ind('hr-notice@paper-lantern-mail.example'), pg_temp.actor('Silent Lantern')),
-  (pg_temp.ind(pg_temp.sha256_of(2)), pg_temp.actor('Ashen Tide')),
-  (pg_temp.ind('wintr-ledger-drop.example'), pg_temp.actor('Ashen Tide')),
-  (pg_temp.ind('copper-thread-relay.test'), pg_temp.actor('Iron Orchard')),
-  (pg_temp.ind(pg_temp.sha256_of(5)), pg_temp.actor('Iron Orchard'));
-
-insert into public.indicator_campaigns (indicator_id, campaign_id) values
-  (pg_temp.ind('198.51.100.23'), pg_temp.campaign('Harbor Lights')),
-  (pg_temp.ind('harbor-lights-c2.example'), pg_temp.campaign('Harbor Lights')),
-  (pg_temp.ind('https://harbor-lights-c2.example/api/v2/poll'), pg_temp.campaign('Harbor Lights')),
-  (pg_temp.ind('paper-lantern-mail.example'), pg_temp.campaign('Operation Paper Lantern')),
-  (pg_temp.ind('login-secure-update.example'), pg_temp.campaign('Operation Paper Lantern')),
-  (pg_temp.ind('wintr-ledger-drop.example'), pg_temp.campaign('Winter Ledger')),
-  (pg_temp.ind('copper-thread-relay.test'), pg_temp.campaign('Copper Thread'));
-
-insert into public.indicator_malware (indicator_id, malware_id) values
-  (pg_temp.ind(pg_temp.sha256_of(1)), pg_temp.malw('NightLoader')),
-  (pg_temp.ind('http://198.51.100.23/gate.php'), pg_temp.malw('NightLoader')),
-  (pg_temp.ind(pg_temp.sha256_of(2)), pg_temp.malw('EmberLock')),
-  (pg_temp.ind(pg_temp.sha256_of(3)), pg_temp.malw('QuietBeacon')),
-  (pg_temp.ind(pg_temp.sha256_of(5)), pg_temp.malw('InkSteal')),
-  (pg_temp.ind(md5('arcradar-demo-sample-6')), pg_temp.malw('HollowShell'));
 
 insert into public.indicator_relationships (source_indicator_id, target_indicator_id, relationship) values
   (pg_temp.ind('harbor-lights-c2.example'), pg_temp.ind('198.51.100.23'), 'resolves_to'),

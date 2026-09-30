@@ -66,6 +66,8 @@ The full list, and why each one matters, is at the bottom of `docs/API.md`.
    - `NEXT_PUBLIC_DEMO_LOGINS` — leave unset (or `false`). Setting it to `true` would show the
      one-click demo-account buttons on the sign-in page, and the local seed's demo accounts do not
      exist on a hosted project anyway.
+   - `OTX_API_KEY` (free, otx.alienvault.com) and `SHODAN_INTERNETDB=true` (free, no key) switch on two
+     more lookup providers; `VIRUSTOTAL_API_KEY` and `ABUSEIPDB_API_KEY` two others.
    - Any intel or AI provider keys you want live from day one (`VIRUSTOTAL_API_KEY`,
      `GROQ_API_KEY`, ...) — all optional; the app works with none of them set. `OLLAMA_BASE_URL`
      needs a server your Vercel deployment can actually reach over the network, which a laptop's
@@ -93,6 +95,17 @@ anyone through the app itself (`PATCH /api/users/:id` needs an admin session).
    up; it cannot create one.
 3. Sign in again (or refresh) — you now have the `admin` role and can promote or manage anyone else
    from **Settings**, the ordinary way, for good.
+
+## 4b. Load the reference data
+
+A hosted project starts empty. Two things fill it without any typing:
+
+- **Threat feeds** are imported by an administrator pressing **Import now** on the Integrations page (abuse.ch indicators, CISA known-exploited vulnerabilities).
+- **MITRE ATT&CK** (the technique catalog the matrix page lays out) is loaded once from your machine:
+  ```bash
+  SUPABASE_SERVICE_ROLE_KEY=<hosted service role key> \n    npm run import:mitre -- --url <hosted project URL>
+  ```
+  It downloads the official 54 MB STIX file and can be rerun any time to pick up a newer release.
 
 ## 5. Verify
 

@@ -468,11 +468,10 @@ async function main() {
 
   const detail = await call(viewer.jar, "GET", `/api/indicators/${indicator?.id}`);
   check(
-    "detail returns the indicator with tags, links and relationships",
+    "detail returns the indicator with tags and relationships",
     detail.status === 200 &&
       detail.json.data.id === indicator?.id &&
-      Array.isArray(detail.json.data.relationships) &&
-      Array.isArray(detail.json.data.threat_actors),
+      Array.isArray(detail.json.data.relationships),
     detail.json?.error,
   );
   const seeded = await call(
@@ -486,14 +485,11 @@ async function main() {
     `/api/indicators/${seeded.json?.data?.items?.find((i) => i.value === "198.51.100.23")?.id}`,
   );
   check(
-    "a seeded indicator shows its linked actors and relationships",
+    "a seeded indicator shows its relationships and is labelled demo",
     seededDetail.status === 200 &&
-      seededDetail.json.data.threat_actors.length > 0 &&
+      seededDetail.json.data.relationships.length > 0 &&
       seededDetail.json.data.origin === "demo",
-    seededDetail.json?.data && {
-      actors: seededDetail.json.data.threat_actors,
-      rel: seededDetail.json.data.relationships,
-    },
+    seededDetail.json?.data && { rel: seededDetail.json.data.relationships },
   );
 
   const patched = await call(analyst.jar, "PATCH", `/api/indicators/${indicator?.id}`, {
@@ -1530,145 +1526,47 @@ async function main() {
     [adminDeletesAlert.status, adminDeletesWorkAlert.status, alertAfterDelete.status],
   );
 
-  section("Threat intelligence: actors, campaigns, malware, MITRE (read)");
-  const anonActors = await call(null, "GET", "/api/threat-actors");
+  section("MITRE ATT&CK matrix (catalog and technique pages)");
+  const anonMatrix = await call(null, "GET", "/api/mitre");
+  check("GET /api/mitre without a session is 401", anonMatrix.status === 401, anonMatrix.status);
+  const matrix = await call(viewer.jar, "GET", "/api/mitre");
+  const tactics = matrix.json?.data?.tactics ?? [];
   check(
-    "GET /api/threat-actors without a session is 401",
-    anonActors.status === 401,
-    anonActors.status,
+    "the matrix has a column per tactic, each with techniques, and a summary",
+    matrix.status === 200 &&
+      tactics.length > 0 &&
+      tactics.every((t) => t.name && Array.isArray(t.techniques) && t.techniques.length > 0) &&
+      matrix.json.data.summary.total_techniques >= 10,
+    matrix.json?.data?.summary,
   );
-  const actorList = await call(viewer.jar, "GET", "/api/threat-actors");
-  const actorItems = actorList.json?.data?.items ?? [];
+  const phishing = tactics.flatMap((t) => t.techniques).find((t) => t.id === "T1566");
   check(
-    "viewer lists threat actors with provenance and link counts, sorted by name",
-    actorList.status === 200 &&
-      actorItems.length > 0 &&
-      actorItems.every(
-        (a) =>
-          a.origin &&
-          a.counts &&
-          ["malware", "campaigns", "techniques", "indicators"].every(
-            (k) => typeof a.counts[k] === "number",
-          ),
-      ) &&
-      actorItems.map((a) => a.name).join("|") ===
-        [...actorItems.map((a) => a.name)].sort((x, y) => x.localeCompare(y)).join("|"),
-    actorList.json?.data?.pagination,
+    "a technique carries its name, a reference link and what alerts say about it (null when nothing)",
+    phishing?.name === "Phishing" &&
+      phishing.url?.startsWith("https://attack.mitre.org/") &&
+      "observed" in phishing &&
+      Array.isArray(phishing.subtechniques),
+    phishing,
   );
-  const demoActor = actorItems.find((a) => a.name === "Crimson Harbor") ?? actorItems[0];
-  const actorSearch = await call(viewer.jar, "GET", "/api/threat-actors?q=crimson%20finance");
+  const observedOnly = await call(viewer.jar, "GET", "/api/mitre?observed=1");
   check(
-    "actor search covers names and target industries, all words must match",
-    actorSearch.json?.data?.items?.some((a) => a.name === "Crimson Harbor"),
-    actorSearch.json?.data?.items?.map((a) => a.name),
-  );
-  const aliasSearch = await call(viewer.jar, "GET", "/api/threat-actors?q=DEMO-FIN-01");
-  check(
-    "actor search finds an alias",
-    aliasSearch.json?.data?.items?.[0]?.name === "Crimson Harbor",
-    aliasSearch.json?.data?.items?.map((a) => a.name),
-  );
-  const actorWildcard = await call(viewer.jar, "GET", "/api/threat-actors?q=%25");
-  check(
-    "a literal % matches no actor",
-    actorWildcard.json?.data?.pagination?.total === 0,
-    actorWildcard.json?.data?.pagination,
-  );
-  const badActorSort = await call(viewer.jar, "GET", "/api/threat-actors?sort=motivation");
-  check("an unknown actor sort is 422", badActorSort.status === 422, badActorSort.status);
-  const actorDetail = await call(viewer.jar, "GET", `/api/threat-actors/${demoActor?.id}`);
-  check(
-    "an actor opens with malware, campaigns, techniques and indicators, all with provenance",
-    actorDetail.status === 200 &&
-      actorDetail.json.data.malware.length > 0 &&
-      actorDetail.json.data.campaigns.length > 0 &&
-      actorDetail.json.data.techniques.length > 0 &&
-      actorDetail.json.data.malware.every((m) => m.origin) &&
-      typeof actorDetail.json.data.indicators.total === "number",
-    actorDetail.json?.data && Object.keys(actorDetail.json.data),
-  );
-  const malformedActor = await call(viewer.jar, "GET", "/api/threat-actors/not-a-uuid");
-  check("a malformed actor id is 404", malformedActor.status === 404, malformedActor.status);
-
-  const campaignList = await call(viewer.jar, "GET", "/api/campaigns?status=active");
-  check(
-    "campaigns filter by status and carry link counts and provenance",
-    campaignList.status === 200 &&
-      campaignList.json.data.items.length > 0 &&
-      campaignList.json.data.items.every(
-        (c) => c.status === "active" && c.origin && typeof c.counts.actors === "number",
+    "observed=1 keeps only techniques an alert named",
+    observedOnly.status === 200 &&
+      observedOnly.json.data.tactics.every((t) =>
+        t.techniques.every((c) => c.observed || c.subtechniques.some((s) => s.observed)),
       ),
-    campaignList.json?.data?.pagination,
+    observedOnly.json?.data?.summary,
   );
-  const badCampaignStatus = await call(viewer.jar, "GET", "/api/campaigns?status=finished");
-  check(
-    "an unknown campaign status is 422",
-    badCampaignStatus.status === 422,
-    badCampaignStatus.status,
-  );
-  const malwareList = await call(viewer.jar, "GET", "/api/malware?type=Ransomware");
-  check(
-    "malware filters by type",
-    malwareList.status === 200 &&
-      malwareList.json.data.items.length > 0 &&
-      malwareList.json.data.items.every((m) => m.malware_type === "Ransomware"),
-    malwareList.json?.data?.items?.map((m) => m.malware_type),
-  );
-  const platformSearch = await call(viewer.jar, "GET", "/api/malware?q=macos");
-  check(
-    "malware search covers platforms",
-    platformSearch.json?.data?.items?.some((m) => m.platforms.includes("macOS")),
-    platformSearch.json?.data?.items?.map((m) => m.name),
-  );
-  const campaignDetail = await call(
-    viewer.jar,
-    "GET",
-    `/api/campaigns/${campaignList.json?.data?.items?.[0]?.id}`,
-  );
-  const malwareDetail = await call(
-    viewer.jar,
-    "GET",
-    `/api/malware/${malwareList.json?.data?.items?.[0]?.id}`,
-  );
-  check(
-    "campaign and malware details list their actors and indicators",
-    campaignDetail.status === 200 &&
-      Array.isArray(campaignDetail.json.data.actors) &&
-      malwareDetail.status === 200 &&
-      Array.isArray(malwareDetail.json.data.actors) &&
-      typeof malwareDetail.json.data.indicators.total === "number",
-    [campaignDetail.status, malwareDetail.status],
-  );
-
-  const mitreList = await call(viewer.jar, "GET", "/api/mitre?page_size=100");
-  check(
-    "MITRE techniques list, sorted by id, each with tactics",
-    mitreList.status === 200 &&
-      mitreList.json.data.items.length >= 10 &&
-      mitreList.json.data.items.every(
-        (t) => /^T\d{4}(\.\d{3})?$/.test(t.id) && Array.isArray(t.tactics),
-      ),
-    mitreList.json?.data?.pagination,
-  );
-  const tacticFilter = await call(viewer.jar, "GET", "/api/mitre?tactic=Initial%20Access");
-  check(
-    "a tactic filter keeps only techniques of that tactic",
-    tacticFilter.json?.data?.items?.length > 0 &&
-      tacticFilter.json.data.items.every((t) => t.tactics.includes("Initial Access")),
-    tacticFilter.json?.data?.items?.map((t) => t.id),
-  );
-  const mitreSearch = await call(viewer.jar, "GET", "/api/mitre?q=phishing");
-  check(
-    "technique search finds by name",
-    mitreSearch.json?.data?.items?.some((t) => t.id === "T1566"),
-    mitreSearch.json?.data?.items?.map((t) => t.id),
-  );
+  const badFlag = await call(viewer.jar, "GET", "/api/mitre?observed=maybe");
+  check("an unknown observed flag is 422", badFlag.status === 422, badFlag.status);
   const technique = await call(viewer.jar, "GET", "/api/mitre/t1566");
   check(
-    "a technique opens by id in either case, with the actors known to use it",
+    "a technique opens by id in either case, with its tactics, sub-techniques and alerts",
     technique.status === 200 &&
       technique.json.data.id === "T1566" &&
-      Array.isArray(technique.json.data.actors),
+      Array.isArray(technique.json.data.tactics) &&
+      Array.isArray(technique.json.data.subtechniques) &&
+      Array.isArray(technique.json.data.alerts),
     technique.json,
   );
   const badTechnique = await call(viewer.jar, "GET", "/api/mitre/T9");
@@ -1678,268 +1576,18 @@ async function main() {
     badTechnique.status === 404 && unknownTechnique.status === 404,
     [badTechnique.status, unknownTechnique.status],
   );
-
-  section("Threat intelligence: curation is administrators only");
-  const actorBody = {
-    name: `Smoke Actor ${stamp}`,
-    aliases: ["SMOKE-1", "smoke-1", " "],
-    description: "",
-    motivation: "Testing",
-  };
-  const viewerCreatesActor = await call(viewer.jar, "POST", "/api/threat-actors", {
-    body: actorBody,
-  });
-  const analystCreatesActor = await call(analyst.jar, "POST", "/api/threat-actors", {
-    body: actorBody,
-  });
-  check(
-    "viewers and analysts cannot create threat actors (403)",
-    viewerCreatesActor.status === 403 && analystCreatesActor.status === 403,
-    [viewerCreatesActor.status, analystCreatesActor.status],
-  );
-  const analystEditsActor = await call(
-    analyst.jar,
-    "PATCH",
-    `/api/threat-actors/${demoActor?.id}`,
-    {
-      body: { motivation: "Vandalism" },
-    },
-  );
-  const analystDeletesActor = await call(
-    analyst.jar,
-    "DELETE",
-    `/api/threat-actors/${demoActor?.id}`,
+  const removed = await Promise.all(
+    ["threat-actors", "campaigns", "malware"].map((name) =>
+      call(viewer.jar, "GET", `/api/${name}`),
+    ),
   );
   check(
-    "analysts cannot edit or delete one either (403)",
-    analystEditsActor.status === 403 && analystDeletesActor.status === 403,
-    [analystEditsActor.status, analystDeletesActor.status],
-  );
-  const untouched = await call(viewer.jar, "GET", `/api/threat-actors/${demoActor?.id}`);
-  check(
-    "and the demo actor is untouched",
-    untouched.json?.data?.motivation === actorDetail.json?.data?.motivation,
-    untouched.json?.data?.motivation,
+    "threat actors, campaigns and malware are gone (404)",
+    removed.every((r) => r.status === 404),
+    removed.map((r) => r.status),
   );
 
-  const someMalware = malwareList.json?.data?.items?.[0]?.id;
-  const madeActor = await call(admin.jar, "POST", "/api/threat-actors", {
-    body: {
-      ...actorBody,
-      malware_ids: [someMalware, someMalware],
-      technique_ids: ["T1566", "T1078"],
-      target_industries: ["Finance", "finance"],
-    },
-  });
-  const smokeActor = madeActor.json?.data;
-  check(
-    "an administrator creates an actor (201): local, tidy lists, links set once",
-    madeActor.status === 201 &&
-      smokeActor?.origin === "local" &&
-      smokeActor.description === null &&
-      smokeActor.aliases.join("|") === "SMOKE-1" &&
-      smokeActor.target_industries.join("|") === "Finance" &&
-      smokeActor.malware.length === 1 &&
-      smokeActor.techniques.map((t) => t.id).join("|") === "T1078|T1566",
-    madeActor.json,
-  );
-  for (const [name, body, field] of [
-    ["origin", { name: "x", origin: "external" }, null],
-    ["an owner", { name: "x", created_by: analystId }, null],
-    ["a bad technique id", { name: "x", technique_ids: ["T15"] }, "technique_ids"],
-    [
-      "reversed dates",
-      { name: "x", first_seen: "2026-06-01T00:00:00.000Z", last_seen: "2026-01-01T00:00:00.000Z" },
-      "last_seen",
-    ],
-  ]) {
-    const rejected = await call(admin.jar, "POST", "/api/threat-actors", { body });
-    check(
-      `an actor with ${name} is rejected (422${field ? ` on ${field}` : ""})`,
-      rejected.status === 422 &&
-        (!field || problems(rejected).some((p) => p === field || p.startsWith(`${field}.`))),
-      rejected.json,
-    );
-  }
-  const duplicateActor = await call(admin.jar, "POST", "/api/threat-actors", {
-    body: { name: actorBody.name.toUpperCase() },
-  });
-  check("a duplicate name (any case) is 409", duplicateActor.status === 409, duplicateActor.json);
-  const ghostLink = await call(admin.jar, "POST", "/api/threat-actors", {
-    body: { name: `Ghost ${stamp}`, malware_ids: [NIL_UUID] },
-  });
-  const ghostSearch = await call(
-    admin.jar,
-    "GET",
-    `/api/threat-actors?q=${encodeURIComponent(`Ghost ${stamp}`)}`,
-  );
-  check(
-    "a link to something that does not exist is 422 and nothing is created",
-    ghostLink.status === 422 &&
-      problems(ghostLink).includes("malware_ids") &&
-      ghostSearch.json?.data?.pagination?.total === 0,
-    [ghostLink.status, ghostSearch.json?.data?.pagination],
-  );
-
-  const actorBase = `/api/threat-actors/${smokeActor?.id}`;
-  const emptyActorPatch = await call(admin.jar, "PATCH", actorBase, { body: {} });
-  check("an empty actor update is 422", emptyActorPatch.status === 422, emptyActorPatch.status);
-  const clearedMalware = await call(admin.jar, "PATCH", actorBase, {
-    body: { malware_ids: [], technique_ids: ["T1059"] },
-  });
-  check(
-    "a link list replaces the whole set (an empty one clears it); lists left out are kept",
-    clearedMalware.status === 200 &&
-      clearedMalware.json.data.malware.length === 0 &&
-      clearedMalware.json.data.techniques.map((t) => t.id).join("|") === "T1059" &&
-      clearedMalware.json.data.aliases.join("|") === "SMOKE-1",
-    clearedMalware.json?.data,
-  );
-  const badLinkPatch = await call(admin.jar, "PATCH", actorBase, {
-    body: { motivation: "Changed", campaign_ids: [NIL_UUID] },
-  });
-  const afterBadPatch = await call(admin.jar, "GET", actorBase);
-  check(
-    "a failed link check changes nothing at all, not even the other fields (422)",
-    badLinkPatch.status === 422 && afterBadPatch.json?.data?.motivation === "Testing",
-    [badLinkPatch.status, afterBadPatch.json?.data?.motivation],
-  );
-  const datesSet = await call(admin.jar, "PATCH", actorBase, {
-    body: { first_seen: "2026-01-01T00:00:00.000Z", last_seen: "2026-06-01T00:00:00.000Z" },
-  });
-  const datesNulled = await call(admin.jar, "PATCH", actorBase, { body: { first_seen: null } });
-  check(
-    "dates are set, and null clears one",
-    datesSet.status === 200 &&
-      !!datesSet.json.data.first_seen &&
-      datesNulled.status === 200 &&
-      datesNulled.json.data.first_seen === null,
-    [datesSet.status, datesNulled.json?.data?.first_seen],
-  );
-
-  const madeCampaign = await call(admin.jar, "POST", "/api/campaigns", {
-    body: { name: `Smoke Campaign ${stamp}`, status: "dormant", actor_ids: [smokeActor?.id] },
-  });
-  const smokeCampaign = madeCampaign.json?.data;
-  check(
-    "an administrator creates a campaign (201): local, its status kept, actor linked",
-    madeCampaign.status === 201 &&
-      smokeCampaign?.origin === "local" &&
-      smokeCampaign.status === "dormant" &&
-      smokeCampaign.actors.map((a) => a.id).join() === smokeActor?.id,
-    madeCampaign.json,
-  );
-  const badCampaign = await call(admin.jar, "POST", "/api/campaigns", {
-    body: { name: "x", status: "finished" },
-  });
-  check("a campaign with an unknown status is 422", badCampaign.status === 422, badCampaign.status);
-  const campaignUpdate = await call(admin.jar, "PATCH", `/api/campaigns/${smokeCampaign?.id}`, {
-    body: { status: "concluded", actor_ids: [] },
-  });
-  check(
-    "a campaign is updated and its actors cleared",
-    campaignUpdate.status === 200 &&
-      campaignUpdate.json.data.status === "concluded" &&
-      campaignUpdate.json.data.actors.length === 0,
-    campaignUpdate.json?.data,
-  );
-
-  const madeMalware = await call(admin.jar, "POST", "/api/malware", {
-    body: {
-      name: `SmokeLoader ${stamp}`,
-      malware_type: " Loader ",
-      platforms: ["Windows", "windows"],
-      actor_ids: [smokeActor?.id],
-    },
-  });
-  const smokeMalware = madeMalware.json?.data;
-  check(
-    "an administrator creates a malware family (201): local, tidy platforms, actor linked",
-    madeMalware.status === 201 &&
-      smokeMalware?.origin === "local" &&
-      smokeMalware.malware_type === "Loader" &&
-      smokeMalware.platforms.join() === "Windows" &&
-      smokeMalware.actors.length === 1,
-    madeMalware.json,
-  );
-  const malwareUpdate = await call(admin.jar, "PATCH", `/api/malware/${smokeMalware?.id}`, {
-    body: { malware_type: "", actor_ids: [] },
-  });
-  check(
-    "a malware family is updated: an empty type becomes null, actors cleared",
-    malwareUpdate.status === 200 &&
-      malwareUpdate.json.data.malware_type === null &&
-      malwareUpdate.json.data.actors.length === 0,
-    malwareUpdate.json?.data,
-  );
-  // Re-link the actor so the indicator checks below can see it from both sides.
-  await call(admin.jar, "PATCH", `/api/malware/${smokeMalware?.id}`, {
-    body: { actor_ids: [smokeActor?.id] },
-  });
-
-  section("Indicators: linked intelligence and relationships");
-  const viewerLinks = await call(viewer.jar, "PUT", `/api/indicators/${indA?.id}/links`, {
-    body: { actor_ids: [smokeActor?.id] },
-  });
-  check("a viewer cannot link an indicator (403)", viewerLinks.status === 403, viewerLinks.json);
-  const emptyLinks = await call(analyst.jar, "PUT", `/api/indicators/${indA?.id}/links`, {
-    body: {},
-  });
-  const forgedLinks = await call(analyst.jar, "PUT", `/api/indicators/${indA?.id}/links`, {
-    body: { actor_ids: [], origin: "demo" },
-  });
-  check(
-    "an empty or over-wide links body is 422",
-    emptyLinks.status === 422 && forgedLinks.status === 422,
-    [emptyLinks.status, forgedLinks.status],
-  );
-  const linked = await call(analyst.jar, "PUT", `/api/indicators/${indA?.id}/links`, {
-    body: {
-      actor_ids: [smokeActor?.id, smokeActor?.id],
-      campaign_ids: [smokeCampaign?.id],
-      malware_ids: [smokeMalware?.id],
-    },
-  });
-  check(
-    "an analyst links an indicator to an actor, a campaign and a malware family",
-    linked.status === 200 &&
-      linked.json.data.threat_actors.length === 1 &&
-      linked.json.data.campaigns.length === 1 &&
-      linked.json.data.malware.length === 1,
-    linked.json?.data && [
-      linked.json.data.threat_actors,
-      linked.json.data.campaigns,
-      linked.json.data.malware,
-    ],
-  );
-  const actorSeesIndicator = await call(viewer.jar, "GET", actorBase);
-  check(
-    "and the actor shows the indicator, from the other side",
-    actorSeesIndicator.json?.data?.indicators?.total === 1 &&
-      actorSeesIndicator.json.data.indicators.items[0].id === indA?.id,
-    actorSeesIndicator.json?.data?.indicators,
-  );
-  const relinked = await call(analyst.jar, "PUT", `/api/indicators/${indA?.id}/links`, {
-    body: { campaign_ids: [] },
-  });
-  check(
-    "a list left out is kept; an empty one clears just that kind",
-    relinked.status === 200 &&
-      relinked.json.data.campaigns.length === 0 &&
-      relinked.json.data.threat_actors.length === 1 &&
-      relinked.json.data.malware.length === 1,
-    relinked.json?.data,
-  );
-  const ghostLinks = await call(analyst.jar, "PUT", `/api/indicators/${indA?.id}/links`, {
-    body: { actor_ids: [], malware_ids: [NIL_UUID] },
-  });
-  const afterGhost = await call(analyst.jar, "GET", `/api/indicators/${indA?.id}`);
-  check(
-    "a link to something that does not exist is 422 and changes nothing",
-    ghostLinks.status === 422 && afterGhost.json?.data?.threat_actors?.length === 1,
-    [ghostLinks.status, afterGhost.json?.data?.threat_actors?.length],
-  );
-
+  section("Indicators: relationships");
   const relBody = { target_id: indB?.id, relationship: "resolves_to" };
   const viewerRel = await call(viewer.jar, "POST", `/api/indicators/${indA?.id}/relationships`, {
     body: relBody,
@@ -2025,48 +1673,11 @@ async function main() {
     [unrelated.status, unrelatedAgain.status],
   );
 
-  section("Threat intelligence: deletion, and what it leaves behind");
-  const linksBefore = (await call(viewer.jar, "GET", `/api/indicators/${indA?.id}`)).json?.data
-    ?.threat_actors?.length;
-  const deletedActor = await call(admin.jar, "DELETE", actorBase);
-  const goneActor = await call(admin.jar, "GET", actorBase);
-  const indicatorAfter = await call(analyst.jar, "GET", `/api/indicators/${indA?.id}`);
-  const campaignAfter = await call(admin.jar, "GET", `/api/campaigns/${smokeCampaign?.id}`);
-  check(
-    "deleting an actor removes its links but not the indicator, campaign or malware",
-    linksBefore === 1 &&
-      deletedActor.status === 200 &&
-      goneActor.status === 404 &&
-      indicatorAfter.json?.data?.threat_actors?.length === 0 &&
-      campaignAfter.status === 200,
-    [
-      linksBefore,
-      deletedActor.status,
-      goneActor.status,
-      indicatorAfter.json?.data?.threat_actors?.length,
-      campaignAfter.status,
-    ],
-  );
-  const deletedCampaign = await call(admin.jar, "DELETE", `/api/campaigns/${smokeCampaign?.id}`);
-  const deletedMalware = await call(admin.jar, "DELETE", `/api/malware/${smokeMalware?.id}`);
-  const deletedAgain = await call(admin.jar, "DELETE", `/api/malware/${smokeMalware?.id}`);
-  check(
-    "campaigns and malware families delete the same way (200, then 404)",
-    deletedCampaign.status === 200 && deletedMalware.status === 200 && deletedAgain.status === 404,
-    [deletedCampaign.status, deletedMalware.status, deletedAgain.status],
-  );
   for (const indicatorToRemove of smokeIndicators) {
     await call(admin.jar, "DELETE", `/api/indicators/${indicatorToRemove?.id}`);
   }
-  const demoStillThere = await call(viewer.jar, "GET", `/api/threat-actors/${demoActor?.id}`);
-  check(
-    "demo intelligence is still all there",
-    demoStillThere.status === 200 &&
-      demoStillThere.json.data.malware.length === actorDetail.json.data.malware.length,
-    demoStillThere.status,
-  );
 
-  section("Audit trail for alerts, investigations and threat intelligence");
+  section("Audit trail for alerts and investigations");
   // One query per action: the trail is newest-first and this section alone writes dozens of entries.
   const phase6Entries = [];
   for (const action of [
@@ -2084,16 +1695,6 @@ async function main() {
     "investigation.link_added",
     "investigation.link_removed",
     "investigation.deleted",
-    "threat_actor.created",
-    "threat_actor.updated",
-    "threat_actor.deleted",
-    "campaign.created",
-    "campaign.updated",
-    "campaign.deleted",
-    "malware.created",
-    "malware.updated",
-    "malware.deleted",
-    "indicator.links_updated",
     "indicator.relationship_added",
     "indicator.relationship_removed",
     "authz.denied",
@@ -2124,19 +1725,17 @@ async function main() {
     !phase6Trail.includes("Confirmed in the proxy") && !phase6Trail.includes("ticket #4711"),
   );
 
-  section("Global search: alerts, investigations and threat intelligence");
+  section("Global search: alerts, investigations and techniques");
   const wideSearch = await call(viewer.jar, "GET", "/api/search?q=harbor");
   const kinds = new Map((wideSearch.json?.data?.groups ?? []).map((g) => [g.kind, g]));
   check(
-    "one search finds alerts, investigations, actors and campaigns, each linked and labelled with its origin",
-    ["alert", "investigation", "threat_actor", "campaign"].every(
-      (kind) => kinds.get(kind)?.hits?.length > 0,
-    ) &&
-      kinds.get("threat_actor").hits[0].href.startsWith("/threat-actors/") &&
-      kinds.get("campaign").hits[0].href.startsWith("/campaigns/") &&
+    "one search finds alerts and investigations, each linked and labelled with its origin",
+    ["alert", "investigation"].every((kind) => kinds.get(kind)?.hits?.length > 0) &&
       kinds.get("investigation").hits[0].href.startsWith("/investigations/") &&
       kinds.get("alert").hits[0].href.startsWith("/alerts/") &&
-      kinds.get("threat_actor").hits[0].origin === "demo",
+      !kinds.has("threat_actor") &&
+      !kinds.has("campaign") &&
+      !kinds.has("malware"),
     [...kinds.keys()],
   );
   const techniqueSearch = await call(viewer.jar, "GET", "/api/search?q=T1566");
@@ -2146,14 +1745,6 @@ async function main() {
     "a technique id finds the technique, without a made-up origin",
     techniqueHit?.href === "/mitre/T1566" && techniqueHit.origin === null,
     techniqueHit,
-  );
-  const malwareSearch = await call(viewer.jar, "GET", "/api/search?q=nightloader");
-  check(
-    "malware is searchable too",
-    malwareSearch.json?.data?.groups?.some(
-      (g) => g.kind === "malware" && g.hits[0].href.startsWith("/malware/"),
-    ),
-    malwareSearch.json?.data?.groups?.map((g) => g.kind),
   );
 
   // ---------------------------------------------------------------------------------------------
@@ -2477,6 +2068,42 @@ async function main() {
     techniqueDetail.json?.data?.techniques?.[0]?.id === "T1059.001" &&
       techniqueDetail.json.data.techniques[0].name === null,
     techniqueDetail.json?.data?.techniques,
+  );
+  const seenMatrix = await call(viewer.jar, "GET", "/api/mitre?observed=1");
+  const seenColumn = seenMatrix.json?.data?.tactics?.find((t) =>
+    t.techniques.some((c) => c.id === "T1110"),
+  );
+  const seenBrute = seenColumn?.techniques.find((c) => c.id === "T1110");
+  check(
+    "a technique the ingested alerts named is highlighted on the matrix, under its tactic, with a count",
+    seenColumn?.name === "Credential Access" &&
+      seenBrute?.observed?.alert_count >= 1 &&
+      ["low", "medium", "high", "critical", "info"].includes(seenBrute.observed.max_severity) &&
+      seenMatrix.json.data.summary.observed_techniques >= 1,
+    seenBrute,
+  );
+  const byTechnique = await call(viewer.jar, "GET", "/api/alerts?technique=t1110&page_size=100");
+  check(
+    "the alert list filters by technique (any case), and only those alerts come back",
+    byTechnique.status === 200 &&
+      byTechnique.json.data.items.length >= 1 &&
+      byTechnique.json.data.items.every((a) => a.technique_ids.includes("T1110")),
+    byTechnique.json?.data?.pagination,
+  );
+  const badTechniqueFilter = await call(viewer.jar, "GET", "/api/alerts?technique=nope");
+  check(
+    "a malformed technique filter is 422",
+    badTechniqueFilter.status === 422,
+    badTechniqueFilter.status,
+  );
+  const bruteDetail = await call(viewer.jar, "GET", "/api/mitre/T1110");
+  check(
+    "the technique page lists the alerts that name it, and how many there are",
+    bruteDetail.status === 200 &&
+      bruteDetail.json.data.alert_total >= 1 &&
+      bruteDetail.json.data.alerts.length >= 1 &&
+      bruteDetail.json.data.observed?.alert_count >= 1,
+    bruteDetail.json?.data && { total: bruteDetail.json.data.alert_total },
   );
   const ipIndicator = await call(viewer.jar, "GET", `/api/indicators?q=198.51.100.199`);
   const noiseIndicator = await call(viewer.jar, "GET", `/api/indicators?q=198.51.100.198`);
@@ -2902,6 +2529,78 @@ async function main() {
       "(cleanup) turned it back on",
       on.status === 200 && on.json?.data?.enabled === true,
       on.json,
+    );
+  }
+
+  section("Automatic data: public feeds and lookups (no network needed)");
+  {
+    const catalog = await call(analyst.jar, "GET", "/api/integrations");
+    for (const provider of ["abusech", "cisa_kev"]) {
+      const row = catalog.json?.data?.find((r) => r.provider === provider);
+      check(
+        `the ${provider} feed is in the catalog, needs no key and is on by default`,
+        row?.configured === true && row?.enabled === true,
+        row,
+      );
+    }
+
+    const anonymous = await call(null, "POST", "/api/feeds/import", { body: {} });
+    check("importing feeds needs a session (401)", anonymous.status === 401, anonymous.status);
+    for (const [name, who] of [
+      ["a viewer", viewer],
+      ["an analyst", analyst],
+    ]) {
+      const denied = await call(who.jar, "POST", "/api/feeds/import", { body: {} });
+      check(`${name} cannot import feeds (403)`, denied.status === 403, denied.status);
+    }
+    const badGroup = await call(admin.jar, "POST", "/api/feeds/import", {
+      body: { groups: ["not-a-feed"] },
+    });
+    check("an unknown feed group is refused (422)", badGroup.status === 422, badGroup.json);
+    const extra = await call(admin.jar, "POST", "/api/feeds/import", {
+      body: { groups: ["abusech"], url: "http://169.254.169.254/" },
+    });
+    check("a body cannot smuggle in an address (422)", extra.status === 422, extra.json);
+
+    // Pause both groups, so "import now" does its bookkeeping without touching the network.
+    for (const provider of ["abusech", "cisa_kev"]) {
+      await call(admin.jar, "PATCH", `/api/integrations/${provider}`, { body: { enabled: false } });
+    }
+    const paused = await call(admin.jar, "POST", "/api/feeds/import", { body: {} });
+    check(
+      "a paused group is skipped by Import now (every feed reports disabled)",
+      paused.status === 200 &&
+        paused.json?.data?.length === 4 &&
+        paused.json.data.every((r) => r.status === "disabled" && r.fetched === 0),
+      paused.json,
+    );
+    for (const provider of ["abusech", "cisa_kev"]) {
+      const back = await call(admin.jar, "PATCH", `/api/integrations/${provider}`, {
+        body: { enabled: true },
+      });
+      check(`(cleanup) ${provider} turned back on`, back.json?.data?.enabled === true, back.json);
+    }
+
+    const audit = await call(admin.jar, "GET", "/api/audit-logs?action=feeds.imported&page_size=5");
+    check(
+      "an import is audited, saying who asked",
+      audit.json?.data?.items?.some(
+        (e) => e.action === "feeds.imported" && e.metadata?.trigger === "manual" && e.user_id,
+      ),
+      audit.json?.data?.items?.[0],
+    );
+
+    const lookup = await call(analyst.jar, "GET", "/api/intel/ip?value=8.8.4.4");
+    check(
+      "a demo answer is never recorded as an indicator",
+      lookup.status === 200 && lookup.json?.data?.recorded === null,
+      lookup.json?.data?.recorded,
+    );
+    const stored = await call(analyst.jar, "GET", "/api/indicators?q=8.8.4.4");
+    check(
+      "...and the value did not appear in the indicator list",
+      stored.status === 200 && stored.json?.data?.items?.length === 0,
+      stored.json?.data?.items?.length,
     );
   }
 

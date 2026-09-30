@@ -4,15 +4,25 @@ import { writeAuditLog } from "@/lib/audit/write";
 import type { AuthContext } from "@/lib/auth/context";
 import type { AuthClient } from "@/lib/auth/context";
 import { getServerEnv, type ServerEnv } from "@/lib/env/server";
+import { FEED_GROUPS } from "@/lib/feeds/groups";
 import { INTEGRATION_PROVIDERS, PROVIDER_ENV_KEYS } from "./constants";
 import { findDisabledProviders, findIntegrationRows, updateIntegrationEnabled } from "./repository";
 import type { IntegrationRow } from "./types";
 
 type RequestLike = { headers: Headers };
 
-/** demo always works with no key; wazuh is configured per API key, not one shared server secret. */
+/**
+ * demo always works with no key; wazuh is configured per API key, not one shared server secret; the
+ * public feeds (abuse.ch, CISA KEV) are free and need no key at all.
+ */
 function isConfigured(provider: string, env: ServerEnv): boolean {
-  if (provider === "demo" || provider === "wazuh") return true;
+  if (
+    provider === "demo" ||
+    provider === "wazuh" ||
+    (FEED_GROUPS as readonly string[]).includes(provider)
+  ) {
+    return true;
+  }
   const key = PROVIDER_ENV_KEYS[provider as keyof typeof PROVIDER_ENV_KEYS];
   return key !== undefined && Boolean(env[key]);
 }

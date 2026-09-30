@@ -369,53 +369,6 @@ export type Database = {
         };
         Relationships: [];
       };
-      campaigns: {
-        Row: {
-          created_at: string;
-          created_by: string | null;
-          description: string | null;
-          first_seen: string | null;
-          id: string;
-          last_seen: string | null;
-          name: string;
-          origin: Database["public"]["Enums"]["data_origin"];
-          status: Database["public"]["Enums"]["campaign_status"];
-          updated_at: string;
-        };
-        Insert: {
-          created_at?: string;
-          created_by?: string | null;
-          description?: string | null;
-          first_seen?: string | null;
-          id?: string;
-          last_seen?: string | null;
-          name: string;
-          origin?: Database["public"]["Enums"]["data_origin"];
-          status?: Database["public"]["Enums"]["campaign_status"];
-          updated_at?: string;
-        };
-        Update: {
-          created_at?: string;
-          created_by?: string | null;
-          description?: string | null;
-          first_seen?: string | null;
-          id?: string;
-          last_seen?: string | null;
-          name?: string;
-          origin?: Database["public"]["Enums"]["data_origin"];
-          status?: Database["public"]["Enums"]["campaign_status"];
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "campaigns_created_by_fkey";
-            columns: ["created_by"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       detection_rules: {
         Row: {
           conditions: NonNullable<Json>;
@@ -539,66 +492,6 @@ export type Database = {
           },
         ];
       };
-      indicator_campaigns: {
-        Row: {
-          campaign_id: string;
-          indicator_id: string;
-        };
-        Insert: {
-          campaign_id: string;
-          indicator_id: string;
-        };
-        Update: {
-          campaign_id?: string;
-          indicator_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "indicator_campaigns_campaign_id_fkey";
-            columns: ["campaign_id"];
-            isOneToOne: false;
-            referencedRelation: "campaigns";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "indicator_campaigns_indicator_id_fkey";
-            columns: ["indicator_id"];
-            isOneToOne: false;
-            referencedRelation: "indicators";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      indicator_malware: {
-        Row: {
-          indicator_id: string;
-          malware_id: string;
-        };
-        Insert: {
-          indicator_id: string;
-          malware_id: string;
-        };
-        Update: {
-          indicator_id?: string;
-          malware_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "indicator_malware_indicator_id_fkey";
-            columns: ["indicator_id"];
-            isOneToOne: false;
-            referencedRelation: "indicators";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "indicator_malware_malware_id_fkey";
-            columns: ["malware_id"];
-            isOneToOne: false;
-            referencedRelation: "malware";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       indicator_relationships: {
         Row: {
           created_at: string;
@@ -678,36 +571,6 @@ export type Database = {
           },
         ];
       };
-      indicator_threat_actors: {
-        Row: {
-          indicator_id: string;
-          threat_actor_id: string;
-        };
-        Insert: {
-          indicator_id: string;
-          threat_actor_id: string;
-        };
-        Update: {
-          indicator_id?: string;
-          threat_actor_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "indicator_threat_actors_indicator_id_fkey";
-            columns: ["indicator_id"];
-            isOneToOne: false;
-            referencedRelation: "indicators";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "indicator_threat_actors_threat_actor_id_fkey";
-            columns: ["threat_actor_id"];
-            isOneToOne: false;
-            referencedRelation: "threat_actors";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       indicators: {
         Row: {
           confidence: number;
@@ -718,6 +581,7 @@ export type Database = {
           id: string;
           last_seen: string;
           origin: Database["public"]["Enums"]["data_origin"];
+          researched_at: string | null;
           severity: Database["public"]["Enums"]["severity"];
           source: string;
           status: Database["public"]["Enums"]["indicator_status"];
@@ -736,6 +600,7 @@ export type Database = {
           id?: string;
           last_seen?: string;
           origin?: Database["public"]["Enums"]["data_origin"];
+          researched_at?: string | null;
           severity?: Database["public"]["Enums"]["severity"];
           source?: string;
           status?: Database["public"]["Enums"]["indicator_status"];
@@ -754,6 +619,7 @@ export type Database = {
           id?: string;
           last_seen?: string;
           origin?: Database["public"]["Enums"]["data_origin"];
+          researched_at?: string | null;
           severity?: Database["public"]["Enums"]["severity"];
           source?: string;
           status?: Database["public"]["Enums"]["indicator_status"];
@@ -1141,50 +1007,6 @@ export type Database = {
           },
         ];
       };
-      malware: {
-        Row: {
-          created_at: string;
-          created_by: string | null;
-          description: string | null;
-          id: string;
-          malware_type: string | null;
-          name: string;
-          origin: Database["public"]["Enums"]["data_origin"];
-          platforms: string[];
-          updated_at: string;
-        };
-        Insert: {
-          created_at?: string;
-          created_by?: string | null;
-          description?: string | null;
-          id?: string;
-          malware_type?: string | null;
-          name: string;
-          origin?: Database["public"]["Enums"]["data_origin"];
-          platforms?: string[];
-          updated_at?: string;
-        };
-        Update: {
-          created_at?: string;
-          created_by?: string | null;
-          description?: string | null;
-          id?: string;
-          malware_type?: string | null;
-          name?: string;
-          origin?: Database["public"]["Enums"]["data_origin"];
-          platforms?: string[];
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "malware_created_by_fkey";
-            columns: ["created_by"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       mitre_techniques: {
         Row: {
           description: string | null;
@@ -1519,155 +1341,6 @@ export type Database = {
         };
         Relationships: [];
       };
-      threat_actor_campaigns: {
-        Row: {
-          campaign_id: string;
-          threat_actor_id: string;
-        };
-        Insert: {
-          campaign_id: string;
-          threat_actor_id: string;
-        };
-        Update: {
-          campaign_id?: string;
-          threat_actor_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "threat_actor_campaigns_campaign_id_fkey";
-            columns: ["campaign_id"];
-            isOneToOne: false;
-            referencedRelation: "campaigns";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "threat_actor_campaigns_threat_actor_id_fkey";
-            columns: ["threat_actor_id"];
-            isOneToOne: false;
-            referencedRelation: "threat_actors";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      threat_actor_malware: {
-        Row: {
-          malware_id: string;
-          threat_actor_id: string;
-        };
-        Insert: {
-          malware_id: string;
-          threat_actor_id: string;
-        };
-        Update: {
-          malware_id?: string;
-          threat_actor_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "threat_actor_malware_malware_id_fkey";
-            columns: ["malware_id"];
-            isOneToOne: false;
-            referencedRelation: "malware";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "threat_actor_malware_threat_actor_id_fkey";
-            columns: ["threat_actor_id"];
-            isOneToOne: false;
-            referencedRelation: "threat_actors";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      threat_actor_techniques: {
-        Row: {
-          technique_id: string;
-          threat_actor_id: string;
-        };
-        Insert: {
-          technique_id: string;
-          threat_actor_id: string;
-        };
-        Update: {
-          technique_id?: string;
-          threat_actor_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "threat_actor_techniques_technique_id_fkey";
-            columns: ["technique_id"];
-            isOneToOne: false;
-            referencedRelation: "mitre_techniques";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "threat_actor_techniques_threat_actor_id_fkey";
-            columns: ["threat_actor_id"];
-            isOneToOne: false;
-            referencedRelation: "threat_actors";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      threat_actors: {
-        Row: {
-          aliases: string[];
-          attribution_country: string | null;
-          created_at: string;
-          created_by: string | null;
-          description: string | null;
-          first_seen: string | null;
-          id: string;
-          last_seen: string | null;
-          motivation: string | null;
-          name: string;
-          origin: Database["public"]["Enums"]["data_origin"];
-          target_countries: string[];
-          target_industries: string[];
-          updated_at: string;
-        };
-        Insert: {
-          aliases?: string[];
-          attribution_country?: string | null;
-          created_at?: string;
-          created_by?: string | null;
-          description?: string | null;
-          first_seen?: string | null;
-          id?: string;
-          last_seen?: string | null;
-          motivation?: string | null;
-          name: string;
-          origin?: Database["public"]["Enums"]["data_origin"];
-          target_countries?: string[];
-          target_industries?: string[];
-          updated_at?: string;
-        };
-        Update: {
-          aliases?: string[];
-          attribution_country?: string | null;
-          created_at?: string;
-          created_by?: string | null;
-          description?: string | null;
-          first_seen?: string | null;
-          id?: string;
-          last_seen?: string | null;
-          motivation?: string | null;
-          name?: string;
-          origin?: Database["public"]["Enums"]["data_origin"];
-          target_countries?: string[];
-          target_industries?: string[];
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "threat_actors_created_by_fkey";
-            columns: ["created_by"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       vulnerabilities: {
         Row: {
           created_at: string;
@@ -1814,7 +1487,9 @@ export type Database = {
       };
       escape_like: { Args: { p_text: string }; Returns: string };
       has_permission: { Args: { p_key: string }; Returns: boolean };
+      import_external_vulnerabilities: { Args: { p_records: Json }; Returns: Json };
       import_external_vulnerability: { Args: { p: Json }; Returns: string };
+      import_mitre_attack: { Args: { p: Json }; Returns: Json };
       indicator_type_counts: {
         Args: Record<PropertyKey, never>;
         Returns: {
@@ -1841,6 +1516,16 @@ export type Database = {
         Args: { p_type: Database["public"]["Enums"]["indicator_type"]; p_value: string };
         Returns: boolean;
       };
+      mitre_observed_techniques: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          alert_count: number;
+          last_seen: string;
+          max_severity: Database["public"]["Enums"]["severity"];
+          technique_id: string;
+        }[];
+      };
+      record_external_indicators: { Args: { p_records: Json; p_source: string }; Returns: Json };
       search_alerts: {
         Args: { p_query?: string };
         Returns: {
@@ -1875,27 +1560,6 @@ export type Database = {
           isSetofReturn: true;
         };
       };
-      search_campaigns: {
-        Args: { p_query?: string };
-        Returns: {
-          created_at: string;
-          created_by: string | null;
-          description: string | null;
-          first_seen: string | null;
-          id: string;
-          last_seen: string | null;
-          name: string;
-          origin: Database["public"]["Enums"]["data_origin"];
-          status: Database["public"]["Enums"]["campaign_status"];
-          updated_at: string;
-        }[];
-        SetofOptions: {
-          from: "*";
-          to: "campaigns";
-          isOneToOne: false;
-          isSetofReturn: true;
-        };
-      };
       search_indicators: {
         Args: { p_query?: string; p_tag?: string };
         Returns: {
@@ -1907,6 +1571,7 @@ export type Database = {
           id: string;
           last_seen: string;
           origin: Database["public"]["Enums"]["data_origin"];
+          researched_at: string | null;
           severity: Database["public"]["Enums"]["severity"];
           source: string;
           status: Database["public"]["Enums"]["indicator_status"];
@@ -1941,26 +1606,6 @@ export type Database = {
         SetofOptions: {
           from: "*";
           to: "investigations";
-          isOneToOne: false;
-          isSetofReturn: true;
-        };
-      };
-      search_malware: {
-        Args: { p_query?: string };
-        Returns: {
-          created_at: string;
-          created_by: string | null;
-          description: string | null;
-          id: string;
-          malware_type: string | null;
-          name: string;
-          origin: Database["public"]["Enums"]["data_origin"];
-          platforms: string[];
-          updated_at: string;
-        }[];
-        SetofOptions: {
-          from: "*";
-          to: "malware";
           isOneToOne: false;
           isSetofReturn: true;
         };
@@ -2001,31 +1646,6 @@ export type Database = {
           isSetofReturn: true;
         };
       };
-      search_threat_actors: {
-        Args: { p_query?: string };
-        Returns: {
-          aliases: string[];
-          attribution_country: string | null;
-          created_at: string;
-          created_by: string | null;
-          description: string | null;
-          first_seen: string | null;
-          id: string;
-          last_seen: string | null;
-          motivation: string | null;
-          name: string;
-          origin: Database["public"]["Enums"]["data_origin"];
-          target_countries: string[];
-          target_industries: string[];
-          updated_at: string;
-        }[];
-        SetofOptions: {
-          from: "*";
-          to: "threat_actors";
-          isOneToOne: false;
-          isSetofReturn: true;
-        };
-      };
       search_vulnerabilities: {
         Args: { p_query?: string };
         Returns: {
@@ -2054,38 +1674,12 @@ export type Database = {
           isSetofReturn: true;
         };
       };
-      set_campaign_actors: {
-        Args: { p_actors: string[]; p_campaign_id: string };
-        Returns: undefined;
-      };
-      set_indicator_links: {
-        Args: {
-          p_actors?: string[];
-          p_campaigns?: string[];
-          p_indicator_id: string;
-          p_malware?: string[];
-        };
-        Returns: undefined;
-      };
       set_indicator_tags: {
         Args: { p_indicator_id: string; p_tags: string[] };
         Returns: undefined;
       };
       set_investigation_tags: {
         Args: { p_investigation_id: string; p_tags: string[] };
-        Returns: undefined;
-      };
-      set_malware_actors: {
-        Args: { p_actors: string[]; p_malware_id: string };
-        Returns: undefined;
-      };
-      set_threat_actor_links: {
-        Args: {
-          p_actor_id: string;
-          p_campaigns?: string[];
-          p_malware?: string[];
-          p_techniques?: string[];
-        };
         Returns: undefined;
       };
       severity_rank: {
@@ -2105,13 +1699,9 @@ export type Database = {
           source: string;
         }[];
       };
-      top_threat_actors: {
-        Args: { p_limit?: number };
-        Returns: {
-          id: string;
-          indicator_count: number;
-          name: string;
-        }[];
+      verdict_rank: {
+        Args: { p_verdict: Database["public"]["Enums"]["verdict"] };
+        Returns: number;
       };
       vulnerability_severity_counts: {
         Args: Record<PropertyKey, never>;
@@ -2124,7 +1714,6 @@ export type Database = {
     };
     Enums: {
       alert_status: "new" | "acknowledged" | "investigating" | "resolved" | "false_positive";
-      campaign_status: "active" | "dormant" | "concluded";
       data_origin: "demo" | "local" | "external";
       exploit_status: "unknown" | "none" | "poc_available" | "exploited_in_wild";
       indicator_status: "active" | "inactive" | "expired" | "whitelisted" | "under_review";
@@ -2252,7 +1841,6 @@ export const Constants = {
   public: {
     Enums: {
       alert_status: ["new", "acknowledged", "investigating", "resolved", "false_positive"],
-      campaign_status: ["active", "dormant", "concluded"],
       data_origin: ["demo", "local", "external"],
       exploit_status: ["unknown", "none", "poc_available", "exploited_in_wild"],
       indicator_status: ["active", "inactive", "expired", "whitelisted", "under_review"],

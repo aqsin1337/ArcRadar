@@ -1,6 +1,7 @@
 import type { AlertListItem } from "@/lib/alerts/types";
 import type { IndicatorListItem } from "@/lib/indicators/types";
 import type { InvestigationListItem } from "@/lib/investigations/types";
+import type { TopTechnique } from "@/lib/mitre/service";
 import type { IndicatorType, Severity, Verdict } from "@/types/domain";
 
 /** Headline numbers. `events_recent` and `alerts_recent` respect the selected date window; the rest
@@ -21,7 +22,6 @@ export type SeverityCount = { severity: Severity; total: number };
 export type IndicatorTypeCount = { type: IndicatorType; total: number };
 export type IndicatorVerdictCount = { verdict: Verdict; total: number };
 export type ActivityPoint = { day: string; alerts: number; events: number };
-export type TopThreatActor = { id: string; name: string; indicator_count: number };
 
 export type DashboardData = {
   counts: DashboardCounts;
@@ -29,7 +29,7 @@ export type DashboardData = {
   ioc_distribution: IndicatorTypeCount[];
   verdict_distribution: IndicatorVerdictCount[];
   activity: ActivityPoint[];
-  top_threat_actors: TopThreatActor[];
+  top_techniques: TopTechnique[];
   top_malicious_indicators: IndicatorListItem[];
   recent_indicators: IndicatorListItem[];
   recent_alerts: AlertListItem[];

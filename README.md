@@ -1,16 +1,17 @@
 # ArcRadar
 
 An incident-response and threat-intelligence workspace for a small security team: indicators (IOCs),
-IP/domain/URL/hash intelligence lookups, a vulnerability catalog, threat actors/campaigns/malware/MITRE
-ATT&CK reference data, alerts with a real lifecycle and automatic deduplication, investigations (case
+IP/domain/URL/hash intelligence lookups, a vulnerability catalog, an MITRE ATT&CK matrix built from what
+your own alerts point at, alerts with a real lifecycle and automatic deduplication, investigations (case
 management), generated reports, and an AI layer that drafts analyses and checklists for a person to
 review — never anything that acts on its own. Built as a Holberton portfolio project across twelve
 phases; every decision behind it is in [`docs/ARCRADAR_PROGRESS.md`](docs/ARCRADAR_PROGRESS.md).
 
 ## What it does
 
-- **Indicators.** Track IPs, domains, URLs and file hashes with a verdict, confidence, tags, and links to
-  the threat actors, campaigns and malware that use them. Search, filter, sort and paginate; every record
+- **Indicators.** Track IPs, domains, URLs and file hashes with a verdict, confidence and tags. They arrive
+  by themselves: an indicator in a sensor alert is researched at VirusTotal, OTX, AbuseIPDB and Shodan when
+  the alert lands, an analyst's lookup is recorded, and free public feeds can be imported. Search, filter, sort and paginate; every record
   carries its provenance (`demo`, `local`, or `external`) so nobody mistakes a sample for a live finding.
 - **Intelligence lookups.** Ask what is known about an IP, domain, URL or hash. Works out of the box on a
   built-in demo dataset; add a VirusTotal, AbuseIPDB or NVD key to ask real providers too — private and
@@ -20,8 +21,8 @@ phases; every decision behind it is in [`docs/ARCRADAR_PROGRESS.md`](docs/ARCRAD
   as a duplicate instead of opening a fresh row, and admin-curated detection rules can raise (never
   lower) an alert's severity. Investigations are the case file: notes, evidence references, a
   server-written history, and an AI-assisted checklist.
-- **Threat intelligence.** Threat actors, campaigns, malware families and MITRE ATT&CK techniques,
-  curated by administrators and linked to indicators, alerts and each other.
+- **MITRE ATT&CK.** A matrix of the attack techniques, by tactic in the order of an attack, in which the
+  techniques your alerts named are colored by severity with an alert count; a click opens those alerts.
 - **Telemetry.** A real endpoint pipeline: a Wazuh Manager pushes alerts over HTTPS with an API key
   (`docs/WAZUH_INTEGRATION.md`); ArcRadar never polls a sensor and never stores Wazuh credentials.
 - **AI, governed not automated.** An alert, investigation or indicator page can ask a configured AI

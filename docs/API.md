@@ -35,87 +35,85 @@ Lists return `{ items, pagination: { page, page_size, total, total_pages } }` an
 
 ## Endpoints
 
-| Method | Path                                                                 | Access                           | Notes                                                                                                                      |
-| ------ | -------------------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/api/health`                                                        | public                           | Liveness + Supabase reachability, no config values                                                                         |
-| POST   | `/api/auth/login`                                                    | public                           | `{ email, password }`; sets session cookies; returns `me`                                                                  |
-| POST   | `/api/auth/logout`                                                   | public                           | Ends the current session; succeeds when already signed out                                                                 |
-| POST   | `/api/auth/signup`                                                   | public                           | `{ email, password, display_name? }`; always `201`, see below                                                              |
-| POST   | `/api/auth/forgot-password`                                          | public                           | `{ email }`; always `200 { sent: true }`                                                                                   |
-| POST   | `/api/auth/update-password`                                          | signed in                        | `{ password }`; revokes the user's other sessions                                                                          |
-| GET    | `/api/auth/me`                                                       | signed in                        | `{ user, profile: { display_name, role }, permissions }`                                                                   |
-| PATCH  | `/api/auth/me`                                                       | signed in                        | `{ display_name?, avatar_url? }`; `""` clears a field, `undefined` leaves it; at least one required                        |
-| GET    | `/api/audit-logs`                                                    | `audit:read` (admin)             | Filters: `action`, `user_id`, `entity_type`, `entity_id`, `from`, `to`                                                     |
-| GET    | `/auth/callback`                                                     | public (email links)             | Exchanges the emailed `code`, redirects to a same-site `next`                                                              |
-| GET    | `/api/indicators`                                                    | `indicators:read`                | Search, filter, sort, paginate; see below                                                                                  |
-| POST   | `/api/indicators`                                                    | `indicators:write`               | Creates a local indicator; `409` names a duplicate                                                                         |
-| GET    | `/api/indicators/:id`                                                | `indicators:read`                | With tags, linked entities and relationships                                                                               |
-| PATCH  | `/api/indicators/:id`                                                | `indicators:write`               | Fields and tags; type and value are fixed                                                                                  |
-| DELETE | `/api/indicators/:id`                                                | `indicators:delete`              | Admins                                                                                                                     |
-| GET    | `/api/search`                                                        | signed in                        | Global search across readable record types                                                                                 |
-| GET    | `/api/intel/:kind`                                                   | `indicators:read`                | Look up an IP, domain, URL or hash (`kind`: `ip domain url hash`)                                                          |
-| GET    | `/api/vulnerabilities`                                               | `vulnerabilities:read`           | Search, filter, sort, paginate CVEs; see below                                                                             |
-| GET    | `/api/vulnerabilities/stats`                                         | `vulnerabilities:read`           | Record counts per severity and how many are exploited                                                                      |
-| GET    | `/api/vulnerabilities/:cve`                                          | `vulnerabilities:read`           | One CVE with affected products and the indicator that tracks it                                                            |
-| POST   | `/api/vulnerabilities/import`                                        | `vulnerabilities:write`          | Fetch a CVE from the connected provider (NVD) and record it                                                                |
-| PUT    | `/api/indicators/:id/links`                                          | `indicators:write`               | Set the linked threat actors, campaigns and malware; see below                                                             |
-| POST   | `/api/indicators/:id/relationships`                                  | `indicators:write`               | Relate this indicator to another; `DELETE .../relationships/:relationshipId` removes one                                   |
-| GET    | `/api/indicators/:id/ai`                                             | `indicators:read`                | The latest AI analysis per kind for this indicator, plus a short history; see "AI analysis"                                |
-| POST   | `/api/indicators/:id/ai`                                             | `ai:use` + `indicators:read`     | `{ kind: "verdict_recommendation" }`; no side effect — applying it is a normal `PATCH` the analyst makes                   |
-| GET    | `/api/alerts`                                                        | `alerts:read`                    | Search, filter, sort, paginate alerts; see below                                                                           |
-| POST   | `/api/alerts`                                                        | `alerts:write`                   | Creates a manual, local alert                                                                                              |
-| GET    | `/api/alerts/stats`                                                  | `alerts:read`                    | Alerts per status and how many nobody has picked up                                                                        |
-| GET    | `/api/alerts/:id`                                                    | `alerts:read`                    | With indicator, event, assignee, investigations, matched rule and duplicate links                                          |
-| PATCH  | `/api/alerts/:id`                                                    | `alerts:write`                   | `{ status?, assigned_to? }`; the lifecycle is enforced (`409`)                                                             |
-| DELETE | `/api/alerts/:id`                                                    | `alerts:delete`                  | Admins                                                                                                                     |
-| GET    | `/api/alerts/:id/ai`                                                 | `alerts:read`                    | The latest AI analysis per kind for this alert, plus a short history; see "AI analysis"                                    |
-| POST   | `/api/alerts/:id/ai`                                                 | `ai:use` + `alerts:read`         | `{ kind }`; asks the active AI provider, validates and stores the answer; `503` with none configured                       |
-| GET    | `/api/alerts/:id/response-actions`                                   | `alerts:read`                    | Every recommendation/execution logged for this alert; see "Response orchestration"                                         |
-| POST   | `/api/alerts/:id/response-actions`                                   | `alerts:write`                   | `{ action_id }`; recommends an existing catalog action (`source: "analyst"`, starts `recommended`)                         |
-| PATCH  | `/api/alerts/:id/response-actions/:logId`                            | `alerts:write`                   | `{ status, notes? }`; moves it forward only (`409` for a move the workflow does not allow)                                 |
-| DELETE | `/api/alerts/:id/response-actions/:logId`                            | `alerts:write`                   | Removes a mistaken recommendation                                                                                          |
-| GET    | `/api/investigations`                                                | `investigations:read`            | Search, filter, sort, paginate; see below                                                                                  |
-| POST   | `/api/investigations`                                                | `investigations:write`           | Opens a local investigation, optionally with tags, indicators, alerts                                                      |
-| GET    | `/api/investigations/stats`                                          | `investigations:read`            | Investigations per status                                                                                                  |
-| GET    | `/api/investigations/:id`                                            | `investigations:read`            | With indicators, alerts, notes, evidence and the timeline                                                                  |
-| PATCH  | `/api/investigations/:id`                                            | `investigations:write`           | Status, priority, analyst, title, description, tags                                                                        |
-| DELETE | `/api/investigations/:id`                                            | `investigations:delete`          | Admins                                                                                                                     |
-| POST   | `/api/investigations/:id/{indicators,alerts,notes,evidence}`         | `investigations:write`           | Attach an indicator or alert, add a note or evidence; the item is removed with `DELETE .../:itemId` (notes also `PATCH`)   |
-| GET    | `/api/investigations/:id/ai`                                         | `investigations:read`            | The latest AI analysis per kind for this investigation, plus a short history; see "AI analysis"                            |
-| POST   | `/api/investigations/:id/ai`                                         | `ai:use` + `investigations:read` | `{ kind: "investigation_checklist" }`; also seeds trackable checklist items                                                |
-| GET    | `/api/investigations/:id/checklist`                                  | `investigations:read`            | Every checklist item, oldest first; see "Investigation checklists"                                                         |
-| POST   | `/api/investigations/:id/checklist`                                  | `investigations:write`           | `{ text }`; adds an item by hand (`source: "analyst"`)                                                                     |
-| PATCH  | `/api/investigations/:id/checklist/:itemId`                          | `investigations:write`           | `{ done }`; the server stamps who and when                                                                                 |
-| DELETE | `/api/investigations/:id/checklist/:itemId`                          | `investigations:write`           | Removes an item                                                                                                            |
-| GET    | `/api/threat-actors`, `/api/campaigns`, `/api/malware`, `/api/mitre` | `threat_intel:read`              | Lists with search and filters; `/:id` for one record (`/api/mitre/:id` takes a technique id such as `T1566`)               |
-| POST   | `/api/threat-actors`, `/api/campaigns`, `/api/malware`               | `threat_intel:write` (admins)    | Creates a local record; `PATCH` and `DELETE` on `/:id` need the same                                                       |
-| POST   | `/api/ingest/wazuh`                                                  | API key `ingest:wazuh`           | A Wazuh Manager pushes alerts; no session, no cookies; see "Telemetry ingestion"                                           |
-| GET    | `/api/api-keys`                                                      | `api_keys:manage_own`            | Your keys (an administrator sees every key); never the key itself or its hash                                              |
-| POST   | `/api/api-keys`                                                      | `api_keys:manage_own`            | `{ name, scopes, expires_in_days? }`; the key is in the response **once**; the `ingest:wazuh` scope needs an administrator |
-| DELETE | `/api/api-keys/:id`                                                  | `api_keys:manage_own`            | Revokes a key (yours, or any for an administrator); revoking twice is harmless                                             |
-| GET    | `/api/telemetry/sources`                                             | `events:read`                    | Every telemetry source with its status (receiving, quiet, never, demo) and last delivery                                   |
-| GET    | `/api/events`                                                        | `events:read`                    | Filters `source`, `severity`, `origin`, `asset`; sort `occurred_at`, `created_at`, `severity`; paginated                   |
-| GET    | `/api/assets`                                                        | `events:read`                    | Machines that report telemetry; filters `source`, `origin`; sort `last_seen`, `name`, `first_seen`                         |
-| GET    | `/api/dashboard`                                                     | signed in                        | `?days&severity`; counts, distributions, activity series, top actors/indicators, recent records; see "Dashboard"           |
-| GET    | `/api/reports`                                                       | `reports:read`                   | `?q&type`; search by title, filter by type, newest first                                                                   |
-| POST   | `/api/reports`                                                       | `reports:write`                  | `{ type, title?, ...fields the type needs }`; generates and stores a snapshot; see "Reports"                               |
-| GET    | `/api/reports/:id`                                                   | `reports:read`                   | The generated snapshot (`content`) and the inputs it was made from (`parameters`)                                          |
-| DELETE | `/api/reports/:id`                                                   | `reports:write`                  | Any holder may delete any report (like the other write actions)                                                            |
-| GET    | `/api/integrations`                                                  | `integrations:read`              | Every provider, whether a key is configured, and whether it is enabled; never a key value                                  |
-| PATCH  | `/api/integrations/:provider`                                        | `integrations:manage`            | `{ enabled }`; the demo provider cannot be turned off; `404` for an unknown provider                                       |
-| GET    | `/api/ai/settings`                                                   | `ai:use`                         | Every AI-capable provider, whether configured/enabled, and which one (if any) is active; see "AI analysis"                 |
-| PATCH  | `/api/ai/settings`                                                   | `ai:manage` (admin)              | `{ active_provider, active_model }`; the provider must be configured and enabled; `409` otherwise                          |
-| GET    | `/api/response-actions`                                              | `alerts:read`                    | The response-action catalog; see "Response orchestration"                                                                  |
-| POST   | `/api/response-actions`                                              | `investigations:write`           | `{ title, description?, category? }`; adds a local catalog entry                                                           |
-| PATCH  | `/api/response-actions/:id`                                          | `investigations:write`           | Edits a catalog entry's fields                                                                                             |
-| DELETE | `/api/response-actions/:id`                                          | `investigations:write`           | `409` if an alert has already recommended or logged it                                                                     |
-| GET    | `/api/detection-rules`                                               | `alerts:read`                    | The rule catalog; see "Detection rules and alert deduplication"                                                            |
-| POST   | `/api/detection-rules`                                               | `rules:manage` (admin)           | `{ id, name, description?, conditions, severity?, priority?, enabled? }`; `id` is 100000-999999                            |
-| PATCH  | `/api/detection-rules/:id`                                           | `rules:manage` (admin)           | Edits a rule's fields; the id itself is fixed                                                                              |
-| DELETE | `/api/detection-rules/:id`                                           | `rules:manage` (admin)           | Any alert it had matched keeps its history; only `matched_rule_id` is cleared                                              |
-| GET    | `/api/users`                                                         | `users:read` (admin)             | Every account (email, role, active, last sign-in); needs the service role to read `auth.users`                             |
-| PATCH  | `/api/users/:id`                                                     | `users:manage` (admin)           | `{ role_name?, is_active? }`; `409` on your own account or on the last active administrator                                |
-| any    | `/api/<unknown>`                                                     | -                                | `404` in the envelope (`src/app/api/[...path]`)                                                                            |
+| Method | Path                                                         | Access                           | Notes                                                                                                                                               |
+| ------ | ------------------------------------------------------------ | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/health`                                                | public                           | Liveness + Supabase reachability, no config values                                                                                                  |
+| POST   | `/api/auth/login`                                            | public                           | `{ email, password }`; sets session cookies; returns `me`                                                                                           |
+| POST   | `/api/auth/logout`                                           | public                           | Ends the current session; succeeds when already signed out                                                                                          |
+| POST   | `/api/auth/signup`                                           | public                           | `{ email, password, display_name? }`; always `201`, see below                                                                                       |
+| POST   | `/api/auth/forgot-password`                                  | public                           | `{ email }`; always `200 { sent: true }`                                                                                                            |
+| POST   | `/api/auth/update-password`                                  | signed in                        | `{ password }`; revokes the user's other sessions                                                                                                   |
+| GET    | `/api/auth/me`                                               | signed in                        | `{ user, profile: { display_name, role }, permissions }`                                                                                            |
+| PATCH  | `/api/auth/me`                                               | signed in                        | `{ display_name?, avatar_url? }`; `""` clears a field, `undefined` leaves it; at least one required                                                 |
+| GET    | `/api/audit-logs`                                            | `audit:read` (admin)             | Filters: `action`, `user_id`, `entity_type`, `entity_id`, `from`, `to`                                                                              |
+| GET    | `/auth/callback`                                             | public (email links)             | Exchanges the emailed `code`, redirects to a same-site `next`                                                                                       |
+| GET    | `/api/indicators`                                            | `indicators:read`                | Search, filter, sort, paginate; see below                                                                                                           |
+| POST   | `/api/indicators`                                            | `indicators:write`               | Creates a local indicator; `409` names a duplicate                                                                                                  |
+| GET    | `/api/indicators/:id`                                        | `indicators:read`                | With tags, linked entities and relationships                                                                                                        |
+| PATCH  | `/api/indicators/:id`                                        | `indicators:write`               | Fields and tags; type and value are fixed                                                                                                           |
+| DELETE | `/api/indicators/:id`                                        | `indicators:delete`              | Admins                                                                                                                                              |
+| GET    | `/api/search`                                                | signed in                        | Global search across readable record types                                                                                                          |
+| GET    | `/api/intel/:kind`                                           | `indicators:read`                | Look up an IP, domain, URL or hash (`kind`: `ip domain url hash`)                                                                                   |
+| GET    | `/api/vulnerabilities`                                       | `vulnerabilities:read`           | Search, filter, sort, paginate CVEs; see below                                                                                                      |
+| GET    | `/api/vulnerabilities/stats`                                 | `vulnerabilities:read`           | Record counts per severity and how many are exploited                                                                                               |
+| GET    | `/api/vulnerabilities/:cve`                                  | `vulnerabilities:read`           | One CVE with affected products and the indicator that tracks it                                                                                     |
+| POST   | `/api/vulnerabilities/import`                                | `vulnerabilities:write`          | Fetch a CVE from the connected provider (NVD) and record it                                                                                         |
+| POST   | `/api/indicators/:id/relationships`                          | `indicators:write`               | Relate this indicator to another; `DELETE .../relationships/:relationshipId` removes one                                                            |
+| GET    | `/api/indicators/:id/ai`                                     | `indicators:read`                | The latest AI analysis per kind for this indicator, plus a short history; see "AI analysis"                                                         |
+| POST   | `/api/indicators/:id/ai`                                     | `ai:use` + `indicators:read`     | `{ kind: "verdict_recommendation" }`; no side effect — applying it is a normal `PATCH` the analyst makes                                            |
+| GET    | `/api/alerts`                                                | `alerts:read`                    | Search, filter, sort, paginate alerts; see below                                                                                                    |
+| POST   | `/api/alerts`                                                | `alerts:write`                   | Creates a manual, local alert                                                                                                                       |
+| GET    | `/api/alerts/stats`                                          | `alerts:read`                    | Alerts per status and how many nobody has picked up                                                                                                 |
+| GET    | `/api/alerts/:id`                                            | `alerts:read`                    | With indicator, event, assignee, investigations, matched rule and duplicate links                                                                   |
+| PATCH  | `/api/alerts/:id`                                            | `alerts:write`                   | `{ status?, assigned_to? }`; the lifecycle is enforced (`409`)                                                                                      |
+| DELETE | `/api/alerts/:id`                                            | `alerts:delete`                  | Admins                                                                                                                                              |
+| GET    | `/api/alerts/:id/ai`                                         | `alerts:read`                    | The latest AI analysis per kind for this alert, plus a short history; see "AI analysis"                                                             |
+| POST   | `/api/alerts/:id/ai`                                         | `ai:use` + `alerts:read`         | `{ kind }`; asks the active AI provider, validates and stores the answer; `503` with none configured                                                |
+| GET    | `/api/alerts/:id/response-actions`                           | `alerts:read`                    | Every recommendation/execution logged for this alert; see "Response orchestration"                                                                  |
+| POST   | `/api/alerts/:id/response-actions`                           | `alerts:write`                   | `{ action_id }`; recommends an existing catalog action (`source: "analyst"`, starts `recommended`)                                                  |
+| PATCH  | `/api/alerts/:id/response-actions/:logId`                    | `alerts:write`                   | `{ status, notes? }`; moves it forward only (`409` for a move the workflow does not allow)                                                          |
+| DELETE | `/api/alerts/:id/response-actions/:logId`                    | `alerts:write`                   | Removes a mistaken recommendation                                                                                                                   |
+| GET    | `/api/investigations`                                        | `investigations:read`            | Search, filter, sort, paginate; see below                                                                                                           |
+| POST   | `/api/investigations`                                        | `investigations:write`           | Opens a local investigation, optionally with tags, indicators, alerts                                                                               |
+| GET    | `/api/investigations/stats`                                  | `investigations:read`            | Investigations per status                                                                                                                           |
+| GET    | `/api/investigations/:id`                                    | `investigations:read`            | With indicators, alerts, notes, evidence and the timeline                                                                                           |
+| PATCH  | `/api/investigations/:id`                                    | `investigations:write`           | Status, priority, analyst, title, description, tags                                                                                                 |
+| DELETE | `/api/investigations/:id`                                    | `investigations:delete`          | Admins                                                                                                                                              |
+| POST   | `/api/investigations/:id/{indicators,alerts,notes,evidence}` | `investigations:write`           | Attach an indicator or alert, add a note or evidence; the item is removed with `DELETE .../:itemId` (notes also `PATCH`)                            |
+| GET    | `/api/investigations/:id/ai`                                 | `investigations:read`            | The latest AI analysis per kind for this investigation, plus a short history; see "AI analysis"                                                     |
+| POST   | `/api/investigations/:id/ai`                                 | `ai:use` + `investigations:read` | `{ kind: "investigation_checklist" }`; also seeds trackable checklist items                                                                         |
+| GET    | `/api/investigations/:id/checklist`                          | `investigations:read`            | Every checklist item, oldest first; see "Investigation checklists"                                                                                  |
+| POST   | `/api/investigations/:id/checklist`                          | `investigations:write`           | `{ text }`; adds an item by hand (`source: "analyst"`)                                                                                              |
+| PATCH  | `/api/investigations/:id/checklist/:itemId`                  | `investigations:write`           | `{ done }`; the server stamps who and when                                                                                                          |
+| DELETE | `/api/investigations/:id/checklist/:itemId`                  | `investigations:write`           | Removes an item                                                                                                                                     |
+| GET    | `/api/mitre`, `/api/mitre/:id`                               | `threat_intel:read`              | The ATT&CK matrix with what your alerts named; one technique (`T1566`) with the alerts that name it; see "MITRE ATT&CK"                             |
+| POST   | `/api/ingest/wazuh`                                          | API key `ingest:wazuh`           | A Wazuh Manager pushes alerts; no session, no cookies; see "Telemetry ingestion"                                                                    |
+| GET    | `/api/api-keys`                                              | `api_keys:manage_own`            | Your keys (an administrator sees every key); never the key itself or its hash                                                                       |
+| POST   | `/api/api-keys`                                              | `api_keys:manage_own`            | `{ name, scopes, expires_in_days? }`; the key is in the response **once**; the `ingest:wazuh` scope needs an administrator                          |
+| DELETE | `/api/api-keys/:id`                                          | `api_keys:manage_own`            | Revokes a key (yours, or any for an administrator); revoking twice is harmless                                                                      |
+| GET    | `/api/telemetry/sources`                                     | `events:read`                    | Every telemetry source with its status (receiving, quiet, never, demo) and last delivery                                                            |
+| GET    | `/api/events`                                                | `events:read`                    | Filters `source`, `severity`, `origin`, `asset`; sort `occurred_at`, `created_at`, `severity`; paginated                                            |
+| GET    | `/api/assets`                                                | `events:read`                    | Machines that report telemetry; filters `source`, `origin`; sort `last_seen`, `name`, `first_seen`                                                  |
+| GET    | `/api/dashboard`                                             | signed in                        | `?days&severity`; counts, distributions, activity series, the most-seen ATT&CK techniques and malicious indicators, recent records; see "Dashboard" |
+| GET    | `/api/reports`                                               | `reports:read`                   | `?q&type`; search by title, filter by type, newest first                                                                                            |
+| POST   | `/api/reports`                                               | `reports:write`                  | `{ type, title?, ...fields the type needs }`; generates and stores a snapshot; see "Reports"                                                        |
+| GET    | `/api/reports/:id`                                           | `reports:read`                   | The generated snapshot (`content`) and the inputs it was made from (`parameters`)                                                                   |
+| DELETE | `/api/reports/:id`                                           | `reports:write`                  | Any holder may delete any report (like the other write actions)                                                                                     |
+| GET    | `/api/integrations`                                          | `integrations:read`              | Every provider, whether a key is configured, and whether it is enabled; never a key value                                                           |
+| PATCH  | `/api/integrations/:provider`                                | `integrations:manage`            | `{ enabled }`; the demo provider cannot be turned off; `404` for an unknown provider                                                                |
+| GET    | `/api/ai/settings`                                           | `ai:use`                         | Every AI-capable provider, whether configured/enabled, and which one (if any) is active; see "AI analysis"                                          |
+| PATCH  | `/api/ai/settings`                                           | `ai:manage` (admin)              | `{ active_provider, active_model }`; the provider must be configured and enabled; `409` otherwise                                                   |
+| GET    | `/api/response-actions`                                      | `alerts:read`                    | The response-action catalog; see "Response orchestration"                                                                                           |
+| POST   | `/api/response-actions`                                      | `investigations:write`           | `{ title, description?, category? }`; adds a local catalog entry                                                                                    |
+| PATCH  | `/api/response-actions/:id`                                  | `investigations:write`           | Edits a catalog entry's fields                                                                                                                      |
+| DELETE | `/api/response-actions/:id`                                  | `investigations:write`           | `409` if an alert has already recommended or logged it                                                                                              |
+| GET    | `/api/detection-rules`                                       | `alerts:read`                    | The rule catalog; see "Detection rules and alert deduplication"                                                                                     |
+| POST   | `/api/detection-rules`                                       | `rules:manage` (admin)           | `{ id, name, description?, conditions, severity?, priority?, enabled? }`; `id` is 100000-999999                                                     |
+| PATCH  | `/api/detection-rules/:id`                                   | `rules:manage` (admin)           | Edits a rule's fields; the id itself is fixed                                                                                                       |
+| DELETE | `/api/detection-rules/:id`                                   | `rules:manage` (admin)           | Any alert it had matched keeps its history; only `matched_rule_id` is cleared                                                                       |
+| GET    | `/api/users`                                                 | `users:read` (admin)             | Every account (email, role, active, last sign-in); needs the service role to read `auth.users`                                                      |
+| PATCH  | `/api/users/:id`                                             | `users:manage` (admin)           | `{ role_name?, is_active? }`; `409` on your own account or on the last active administrator                                                         |
+| any    | `/api/<unknown>`                                             | -                                | `404` in the envelope (`src/app/api/[...path]`)                                                                                                     |
 
 Auth behavior worth knowing:
 
@@ -180,8 +178,8 @@ Writes:
 - `PATCH /api/indicators/:id` needs `indicators:write`. Any of `severity`, `verdict`, `status`,
   `confidence`, `source`, `description` (`""` or `null` clears it), `first_seen`, `last_seen`, `tags`
   (replaces the whole set atomically). `type` and `value` cannot change; an empty body is `422`.
-- `DELETE /api/indicators/:id` needs `indicators:delete` (admins). Tags, links and relationships go with it.
-- `GET /api/indicators/:id` returns the record with `tags`, `threat_actors`, `campaigns`, `malware`,
+- `DELETE /api/indicators/:id` needs `indicators:delete` (admins). Tags and relationships go with it.
+- `GET /api/indicators/:id` returns the record with `tags`,
   `relationships` (each with `direction` and the other indicator) and `created_by_name`. A malformed or
   unknown id is `404`.
 
@@ -190,7 +188,7 @@ type and value in `metadata`.
 
 `GET /api/search?q=<2-200 characters>&limit=<1-10>` (any signed-in user) searches every record type the
 caller may read and returns `{ query, groups: [{ kind, label, total, hits: [{ id, title, subtitle, href,
-origin }] }] }`. Indicators, vulnerabilities, alerts, investigations, threat actors, campaigns, malware and
+origin }] }] }`. Indicators, vulnerabilities, alerts, investigations and
 ATT&CK techniques are searchable (each source is skipped for a caller without its read permission, and searches
 with the same query schema and repository as its list page; a technique has `origin: null`, it is public
 reference data); new record types register in `src/lib/search/service.ts` once their pages exist. When the text is, by structure alone, an IP address,
@@ -247,7 +245,7 @@ naming `value`.
 - **`fallback`**: `true` when live providers are connected but none delivered, so demo data is shown.
   Demo data is only used when no live provider produced an answer.
 - **`local`**: what the workspace knows: the tracked indicator (`IndicatorDetail`, with relationships and
-  linked actors, campaigns and malware), other indicators that mention the subject, its alerts, events and
+  its relationships), other indicators that mention the subject, its alerts, events and
   investigations, and a merged `timeline` (newest first, at most 25 entries).
 
 Rules that hold for every lookup:
@@ -382,55 +380,17 @@ Every write returns the investigation (or its detail) and is audited: `investiga
 `investigation.evidence_added|evidence_removed`. Note and evidence text is never copied into the audit trail
 (only ids and the evidence title).
 
-## Threat intelligence
+## MITRE ATT&CK
 
-Threat actors, campaigns, malware families and MITRE ATT&CK techniques. Everyone who may read intelligence
-(`threat_intel:read`) can browse it; **only administrators write it** (`threat_intel:write`). Records carry
-`origin` (the demo seed is fictional and labelled); created records are always `local`, the database refuses
-another origin and any relabelling.
+There are no threat actor, campaign or malware records in ArcRadar (they were removed on 2026-09-30: a catalog of who might be behind attacks in general says nothing about your own machines). What remains is the ATT&CK **technique catalog** as reference data, and what your own alerts say about it. Needs `threat_intel:read`.
 
-| Endpoint                 | Filters (all optional)                          | Sort fields                                                    | Text search covers                                                                          |
-| ------------------------ | ----------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `GET /api/threat-actors` | `origin`                                        | `name` (default, asc), `last_seen`, `first_seen`, `updated_at` | name, aliases, description, motivation, attributed country, target industries and countries |
-| `GET /api/campaigns`     | `status` (`active dormant concluded`), `origin` | `last_seen` (default, desc), `name`, `first_seen`, `status`    | name, description                                                                           |
-| `GET /api/malware`       | `type` (exact malware type), `origin`           | `name` (default, asc), `malware_type`, `updated_at`            | name, type, platforms, description                                                          |
-| `GET /api/mitre`         | `tactic` (exact tactic name)                    | `id` (default, asc), `name`                                    | technique id, name, description, tactics                                                    |
+- `GET /api/mitre[?observed=1]` returns the matrix: `{ tactics: [{ name, techniques: [...], observed_techniques }], summary: { observed_techniques, total_techniques } }`. Columns run in the order of an attack (Reconnaissance to Impact); a technique belonging to several tactics appears in each. Each technique has `{ id, name, url, observed, subtechniques }`; `observed` is `{ alert_count, max_severity, last_seen }` when at least one alert (a duplicate does not count) names the technique, and `null` otherwise. A sub-technique (`T1110.003`) also counts for its parent (`T1110`), once per alert. `observed=1` keeps only what was observed (a parent stays when a sub-technique was); anything else for `observed` is `422`.
+- `GET /api/mitre/:id` (`T1566` or `T1078.001`, any case) returns the technique with `description`, `tactics`, `url`, `parent_id`, `subtechniques`, `observed`, the newest 25 `alerts` that name it (a parent includes its sub-techniques' alerts; only alerts the caller may read) and `alert_total`. A malformed or unknown id is `404`.
+- `GET /api/alerts?technique=T1110` lists the alerts that name a technique (a parent also matches its sub-techniques); a malformed id is `422`. This is what a click on a highlighted technique of the matrix opens.
+- The technique catalog is read-only through the API; it is loaded with `npm run import:mitre` (the seed only carries a few techniques). `mitre_observed_techniques()` is the SQL function behind the highlighting, with the caller's own row level security.
 
-All accept `q` (every word at most 8 must match, `%` and `_` literal), `order`, `page` and `page_size`. List rows
-carry link counts (`counts`: malware, campaigns, techniques, indicators for an actor; actors and indicators for a
-campaign or malware family). `GET /api/<kind>/:id` returns the record with what it is linked to: an actor has
-`malware`, `campaigns`, `techniques` and its first 25 `indicators` (`{ items, total }`), a campaign or family has
-`actors` and `indicators`, a technique (`/api/mitre/T1566`, any case) has the `actors` known to use it. A
-malformed or unknown id is `404`.
+## Indicator relationships
 
-Writes (administrators; the body is strict, so `origin`, `created_by` and ids are refused with `422`):
-
-- `POST /api/threat-actors  { name, aliases?, description?, motivation?, attribution_country?, target_industries?,
-target_countries?, first_seen?, last_seen?, malware_ids?, campaign_ids?, technique_ids? }`;
-  `POST /api/campaigns  { name, description?, status?, first_seen?, last_seen?, actor_ids? }`;
-  `POST /api/malware  { name, malware_type?, platforms?, description?, actor_ids? }`. Names are unique ignoring
-  case (`409`); text lists are trimmed with blanks and duplicates (ignoring case) dropped; blank text becomes
-  `null`; `last_seen` before `first_seen` is `422` on `last_seen`; technique ids look like `T1566` or `T1078.001`.
-  Only documented attribution belongs in `attribution_country`: leave it empty when unknown.
-- `PATCH /api/<kind>/:id` takes any of the same fields (dates may be set to `null`). **A link list replaces the
-  whole set** (an empty list clears it) and a list left out is kept.
-- Every linked id is checked to exist **before anything is written** (`422` naming the list), and links are
-  replaced by atomic SQL functions (`set_threat_actor_links`, `set_campaign_actors`, `set_malware_actors`). If
-  linking a just-created record still fails, the record is removed again, so a failed request does not leave a
-  half-saved record behind.
-- `DELETE /api/<kind>/:id` removes the record and its links; the records it was linked to stay.
-- ATT&CK techniques are read-only through the API: the table holds public reference data (a hand-picked
-  subset in the demo seed), which is why a technique has no provenance label of its own.
-
-Audited: `threat_actor.*`, `campaign.*` and `malware.*` (`created`, `updated` with the changed field names and
-link kinds, `deleted`).
-
-## Indicator links and relationships
-
-- `PUT /api/indicators/:id/links  { actor_ids?, campaign_ids?, malware_ids? }` needs `indicators:write`. Each
-  list replaces that whole set (an empty list clears it); a list left out is kept; at least one is required.
-  Every id must exist (`422` naming the list, nothing changes). Returns the indicator. Audited as
-  `indicator.links_updated` (how many links of each kind, `null` for a kind left alone).
 - `POST /api/indicators/:id/relationships  { target_id, relationship }` needs `indicators:write`: this
   indicator (the source) `resolves_to`, `communicates_with`, `downloads`, `hosted_on` or `related_to` the
   target. The same pair and kind twice is `409`; an indicator related to itself, a target that does not exist
@@ -521,7 +481,9 @@ number to match a filter would be misleading. Available to every signed-in role 
   "ioc_distribution": [{ "type": "ipv4", "total": 10 }],
   "verdict_distribution": [{ "verdict": "malicious", "total": 23 }],
   "activity": [{ "day": "2026-09-14", "alerts": 2, "events": 3 }],
-  "top_threat_actors": [{ "id": "...", "name": "...", "indicator_count": 2 }],
+  "top_techniques": [
+    { "id": "T1110", "name": "Brute Force", "alert_count": 2, "max_severity": "high" }
+  ],
   "top_malicious_indicators": ["..."],
   "recent_indicators": ["..."],
   "recent_alerts": ["..."],
@@ -535,13 +497,12 @@ A report is a **snapshot**: `POST /api/reports` computes it from the workspace's
 creation time, and stores it (`content`) alongside what was asked for (`parameters`). It never changes
 afterwards; generate a new one to refresh it. `type` picks the shape and what else the body needs:
 
-| `type`            | Extra field        | What `content` holds                                                                      |
-| ----------------- | ------------------ | ----------------------------------------------------------------------------------------- |
-| `indicators`      | —                  | Total, counts by type and verdict, the most recently seen malicious indicators            |
-| `alerts`          | —                  | Total, counts by status and severity, the alerts still open                               |
-| `vulnerabilities` | —                  | Total, counts by severity (with how many are exploited), CVEs exploited in the wild       |
-| `investigation`   | `investigation_id` | The investigation's status, priority, analyst, linked indicators/alerts, notes, evidence  |
-| `threat_actor`    | `threat_actor_id`  | The actor's description, motivation, linked campaigns/malware/techniques, indicator count |
+| `type`            | Extra field        | What `content` holds                                                                     |
+| ----------------- | ------------------ | ---------------------------------------------------------------------------------------- |
+| `indicators`      | —                  | Total, counts by type and verdict, the most recently seen malicious indicators           |
+| `alerts`          | —                  | Total, counts by status and severity, the alerts still open                              |
+| `vulnerabilities` | —                  | Total, counts by severity (with how many are exploited), CVEs exploited in the wild      |
+| `investigation`   | `investigation_id` | The investigation's status, priority, analyst, linked indicators/alerts, notes, evidence |
 
 `title` is optional (a reasonable one is generated, for example "Alert summary — 2026-09-27" or
 "Investigation report: Harbor Lights C2 infrastructure"). Reports are always `origin = local`; the workspace
@@ -566,6 +527,26 @@ is_active? }`** changes either or both; it refuses to act on the caller's own ac
 accidental self-lockout) and refuses to leave the workspace with no active administrator (`409`; there is no
 separate "root" account to recover with). Audited as `user.role_changed` (`from`, `to`) and
 `user.activated`/`user.deactivated`, only when the value actually changed.
+
+## Automatic data: lookups that record themselves, public feeds
+
+**Lookups record themselves.** When `GET /api/intel/:kind` is answered by at least one _live_ provider (never
+the demo one) for a caller with `indicators:write`, the subject is stored as an `external` indicator and the
+response says `recorded: "created" | "updated" | "untouched" | null` (`untouched`: the workspace already
+tracks it as its own, `null`: nothing real to record). The verdict is the worst any provider reached; an
+existing `local`/`demo` indicator is never changed and a verdict only moves up. Audited as
+`indicator.recorded_from_lookup`. Providers today: VirusTotal, AbuseIPDB, AlienVault OTX (`OTX_API_KEY`) and
+Shodan InternetDB (`SHODAN_INTERNETDB=true`, no key, IPs only).
+
+**`POST /api/feeds/import { groups? }`** (`integrations:manage`; `groups`: `abusech` and/or `cisa_kev`, both by
+default; rate limited, `feedImportByUser`). Downloads the public feeds now and answers one entry per feed:
+`{ feed, group, status: ok | failed | disabled, fetched, created, updated, untouched, skipped, error? }`. A
+group an administrator paused on the Integrations page is `disabled`; one feed failing does not stop the
+others (`error` is a short, safe reason). Audited as `feeds.imported`. Nothing runs on a timer: feeds are imported only when an administrator presses Import now.
+
+**Research on arrival.** When a Wazuh delivery (`POST /api/ingest/wazuh`) creates alerts, the new indicators in them (public IPs, domains, URLs, file hashes) are researched at the live providers that are set up and switched on, right after the response is sent (`after()`, so the sender never waits): the worst verdict any provider reached, a confidence and a summary are recorded on the indicator (`researched_at` says when). At most 4 indicators per delivery (VirusTotal's free plan allows 4 requests a minute), each only once (`researched_at` is null until then; providers that all failed leave it null so a later delivery retries; providers that all answered "unknown to me" still count as researched), never a private or reserved address, never an indicator somebody tracks as their own (local or demo), and never at all when no provider is configured. Audited as `indicator.researched` (`trigger: ingest`, the providers' outcomes, never the values).
+
+MITRE ATT&CK is loaded with the `npm run import:mitre` script (see `docs/LOCAL_DEVELOPMENT.md`), not an endpoint.
 
 ## AI analysis
 

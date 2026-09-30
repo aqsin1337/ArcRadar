@@ -35,15 +35,6 @@ insert into public.indicators (id, type, value, severity, verdict, source, first
   ('44444444-0000-4000-8000-000000000002', 'ipv4', '203.0.113.221', 'high', 'malicious', 'manual', now(), now(), 'local'),
   ('44444444-0000-4000-8000-000000000003', 'domain', 'fxboard-sus.example', 'medium', 'suspicious', 'manual', now(), now(), 'local');
 
--- Two threat actors: one with two linked indicators, one with none. The busier one is named to
--- sort AFTER the quiet one, so a mutation that ranks by name instead of by count is caught.
-insert into public.threat_actors (id, name, origin) values
-  ('55555555-0000-4000-8000-000000000001', 'Fxboard Zulu Actor', 'local'),
-  ('55555555-0000-4000-8000-000000000002', 'Fxboard Alpha Actor', 'local');
-insert into public.indicator_threat_actors (indicator_id, threat_actor_id) values
-  ('44444444-0000-4000-8000-000000000001', '55555555-0000-4000-8000-000000000001'),
-  ('44444444-0000-4000-8000-000000000002', '55555555-0000-4000-8000-000000000001');
-
 -- 1. aggregate functions: anon blocked, a viewer (who holds every *:read they touch) sees the fixture
 -- ---------------------------------------------------------------------------------------------
 do $$
@@ -62,9 +53,6 @@ begin
   blocked := false;
   begin perform public.activity_series(7); exception when insufficient_privilege then blocked := true; end;
   if not blocked then raise exception 'FAIL anon could call activity_series'; end if;
-  blocked := false;
-  begin perform public.top_threat_actors(5); exception when insufficient_privilege then blocked := true; end;
-  if not blocked then raise exception 'FAIL anon could call top_threat_actors'; end if;
   reset role;
 
   -- anon is also blocked from the underlying tables, so the calls above stay blocked even if a
@@ -80,9 +68,6 @@ begin
   end if;
   if has_function_privilege('anon', 'public.activity_series(int)', 'execute') then
     raise exception 'FAIL anon holds execute on activity_series';
-  end if;
-  if has_function_privilege('anon', 'public.top_threat_actors(int)', 'execute') then
-    raise exception 'FAIL anon holds execute on top_threat_actors';
   end if;
 
   perform set_config('request.jwt.claims', json_build_object('sub', '11111111-0000-4000-8000-000000000003', 'role', 'authenticated')::text, true);
@@ -134,39 +119,6 @@ begin
 
   reset role;
   raise notice 'ok - activity_series buckets by day, includes today, and clamps its window to 1-90 days';
-end $$;
-
--- 3. top_threat_actors: ranked by linked indicators, most active first, limit respected
--- (the seed's own actors have up to 2 links too, so this compares the two fixture actors to each
--- other rather than assuming either is the global first place.)
--- ---------------------------------------------------------------------------------------------
-do $$
-declare busy_rank int; quiet_rank int; busy_count bigint; n int;
-begin
-  perform set_config('request.jwt.claims', json_build_object('sub', '11111111-0000-4000-8000-000000000003', 'role', 'authenticated')::text, true);
-  set local role authenticated;
-
-  -- 20 is the function's own clamp (least(greatest(p_limit, 1), 20)); there are only 7 actors in
-  -- this transaction (the seed's 5 plus these 2), so both fixture actors are well within it.
-  select row_number, indicator_count into busy_rank, busy_count
-    from (select id, indicator_count, row_number() over () from public.top_threat_actors(20)) t
-    where id = '55555555-0000-4000-8000-000000000001';
-  select row_number into quiet_rank
-    from (select id, row_number() over () from public.top_threat_actors(20)) t
-    where id = '55555555-0000-4000-8000-000000000002';
-  if busy_count < 2 then raise exception 'FAIL the busy actor''s indicator_count was %', busy_count; end if;
-  if busy_rank is null or quiet_rank is null then
-    raise exception 'FAIL one of the fixture actors did not appear at all';
-  end if;
-  if busy_rank >= quiet_rank then
-    raise exception 'FAIL the actor with more indicators (rank %) did not rank above the one with none (rank %)', busy_rank, quiet_rank;
-  end if;
-
-  select count(*) into n from public.top_threat_actors(1);
-  if n <> 1 then raise exception 'FAIL top_threat_actors(1) returned % rows, expected 1', n; end if;
-
-  reset role;
-  raise notice 'ok - top_threat_actors ranks by linked indicators and respects its limit';
 end $$;
 
 -- 4. reports: provenance, as for every other record table

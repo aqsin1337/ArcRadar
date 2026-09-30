@@ -7,7 +7,6 @@ import type {
   IndicatorTypeCount,
   IndicatorVerdictCount,
   SeverityCount,
-  TopThreatActor,
 } from "./types";
 
 const ACTIVE_ALERT_STATUSES = ["new", "acknowledged", "investigating"] as const;
@@ -90,18 +89,5 @@ export async function findActivity(supabase: AuthClient, days: number): Promise<
     day: row.day,
     alerts: Number(row.alerts),
     events: Number(row.events),
-  }));
-}
-
-export async function findTopThreatActors(
-  supabase: AuthClient,
-  limit: number,
-): Promise<TopThreatActor[]> {
-  const { data, error } = await supabase.rpc("top_threat_actors", { p_limit: limit });
-  if (error) throw toApiError(error);
-  return data.map((row) => ({
-    id: row.id,
-    name: row.name,
-    indicator_count: Number(row.indicator_count),
   }));
 }
