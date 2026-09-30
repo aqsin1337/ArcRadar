@@ -30,6 +30,11 @@ const serverEnvSchema = z.object({
   // A local server address, not a secret, but still never sent to the client and never editable
   // from the admin UI (see docs/AI_AND_ORCHESTRATION_ARCHITECTURE.md, "Ollama and SSRF").
   OLLAMA_BASE_URL: optionalSecret,
+  // The rules repository (Wazuh detection-as-code): a token with "Contents: Read and write" on that
+  // one repository, its name as owner/name, and the branch (default main). All three are needed to push.
+  GITHUB_TOKEN: optionalSecret,
+  GITHUB_RULES_REPO: optionalSecret,
+  GITHUB_RULES_BRANCH: optionalSecret,
 });
 
 export type ServerEnv = z.output<typeof serverEnvSchema>;

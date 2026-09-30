@@ -59,6 +59,12 @@ export const AUDIT_ACTIONS = [
   "detection_rule.created",
   "detection_rule.updated",
   "detection_rule.deleted",
+  "wazuh_rule.created",
+  "wazuh_rule.generated",
+  "wazuh_rule.updated",
+  "wazuh_rule.rejected",
+  "wazuh_rule.pushed",
+  "wazuh_rule.deleted",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

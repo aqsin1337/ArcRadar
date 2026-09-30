@@ -1444,6 +1444,102 @@ export type Database = {
           },
         ];
       };
+      wazuh_rules: {
+        Row: {
+          ai_model: string | null;
+          ai_prompt: string | null;
+          ai_provider: string | null;
+          changed_since_push: boolean;
+          conditions: NonNullable<Json>;
+          created_at: string;
+          created_by: string | null;
+          description: string | null;
+          github_commit: string | null;
+          github_path: string | null;
+          id: number;
+          level: number;
+          mitre_ids: string[];
+          name: string;
+          origin: Database["public"]["Enums"]["data_origin"];
+          parent_kind: string;
+          parent_value: string;
+          pushed_at: string | null;
+          pushed_by: string | null;
+          reject_reason: string | null;
+          rejected_at: string | null;
+          source: string;
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          ai_model?: string | null;
+          ai_prompt?: string | null;
+          ai_provider?: string | null;
+          changed_since_push?: boolean;
+          conditions: NonNullable<Json>;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string | null;
+          github_commit?: string | null;
+          github_path?: string | null;
+          id: number;
+          level: number;
+          mitre_ids?: string[];
+          name: string;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          parent_kind?: string;
+          parent_value?: string;
+          pushed_at?: string | null;
+          pushed_by?: string | null;
+          reject_reason?: string | null;
+          rejected_at?: string | null;
+          source: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Update: {
+          ai_model?: string | null;
+          ai_prompt?: string | null;
+          ai_provider?: string | null;
+          changed_since_push?: boolean;
+          conditions?: NonNullable<Json>;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string | null;
+          github_commit?: string | null;
+          github_path?: string | null;
+          id?: number;
+          level?: number;
+          mitre_ids?: string[];
+          name?: string;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          parent_kind?: string;
+          parent_value?: string;
+          pushed_at?: string | null;
+          pushed_by?: string | null;
+          reject_reason?: string | null;
+          rejected_at?: string | null;
+          source?: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "wazuh_rules_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "wazuh_rules_pushed_by_fkey";
+            columns: ["pushed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -1709,6 +1805,14 @@ export type Database = {
           exploited: number;
           severity: Database["public"]["Enums"]["severity"];
           total: number;
+        }[];
+      };
+      wazuh_rule_trigger_stats: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          last_triggered: string;
+          rule_id: number;
+          triggers: number;
         }[];
       };
     };

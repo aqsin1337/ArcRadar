@@ -250,6 +250,29 @@ Next.js 16.3.6 (App Router, `src/` layout; the file convention is `src/proxy.ts`
 
 29. **Sections removed, an ATT&CK matrix, research on arrival (2026-09-30).** The user looked at decision 28's result and said it was the wrong system: he did not want ready-made catalogs poured in, he wanted ArcRadar to learn from attacks on his own Windows machine (the Wazuh lab): what an alert contains is researched at the intel platforms and then lands here, and MITRE should be a table like the ATT&CK matrix, showing which technique an attack mapped to and under which tactic, clickable into the alerts. Decisions: (a) **Threat actors, campaigns and malware are removed entirely** (pages, API, tables, links, dashboard panel, report type, seed, tests): migration `20260930120000` drops nine tables and the functions that served them (the `report_type` enum keeps its "threat_actor" value because Postgres cannot drop one; the app no longer offers it; the `threat_intel:read/write` permission keys stay, the matrix reads techniques with `threat_intel:read`). (b) **`/mitre` is the ATT&CK matrix**: a column per tactic in attack order, techniques under it (sub-techniques behind a switch), the ones an alert named colored by their worst severity with an alert count; a click opens `/alerts?technique=T…`, an unseen technique opens its reference page; `mitre_observed_techniques()` (migration `20260930130000`, invoker rights, duplicates excluded, a sub-technique also counts for its parent once per alert) feeds it; the dashboard's "top threat actors" became "most seen ATT&CK techniques". The technique catalog stays as plain reference data (`npm run import:mitre` now imports techniques only; tactic names are written "Command and Control", and the matrix compares them case-insensitively so the older "Command And Control" import still lands in the right column). (c) **Research on arrival** (`src/lib/telemetry/enrich.ts`): after `POST /api/ingest/wazuh` stores a batch, `after()` asks the live providers about the new unresearched indicators of the alerts (max 4 per delivery, one indicator at a time, public values only, never a local/demo indicator) and records the worst verdict; `indicators.researched_at` (migration `20260930140000`, set by `record_external_indicators()` for any `lookup:` source) makes it once per indicator; providers that all failed leave it null so a later delivery retries, providers that all said "unknown to me" still count as researched; no provider configured means nothing happens; failures are logged, never returned to the sender. (d) The bulk data decision 28 imported (about 600 feed indicators, 1729 CISA KEV CVEs) is left in place for now; whether to keep it is an open question for the user.
 
+30. **Wazuh detection rules as code (2026-09-30, a change request outside the numbered phases).** The
+    user asked for the Detection rules section to become ArcRadar's own feature: rules written by hand or
+    drafted by the AI, reviewed, sent to a GitHub repository and pulled by the Wazuh Manager (the way he
+    deployed rules to Splunk and QRadar from GitHub before). Decisions: (a) **the old severity rules
+    stay**: the page has two tabs, "Wazuh rules" (new, default) and "Severity rules" (the Phase 10
+    `detection_rules`, untouched); nothing was removed. (b) Rules are stored as **structured fields**
+    (`wazuh_rules`, migration `20260930150000`: level, `if_group`/`if_sid`, up to 10 conditions, MITRE
+    ids) and the **XML is always rendered by ArcRadar** (`src/lib/wazuh-rules/xml.ts`), never accepted from
+    a person or the AI, so an active response or a command element cannot exist; the AI returns the same
+    fields and goes through the same zod checks (a regex guard refuses lookarounds, back-references and
+    nested repetition). (c) Status is draft → pushed / rejected; a pushed rule cannot be deleted; `origin`
+    is enforced like every record table. (d) **ArcRadar reaches only GitHub, never the Manager**: Vercel
+    cannot reach a lab VM, and this keeps the existing "the Manager calls out" direction. The push goes
+    through `src/lib/github/contents.ts` (fixed base, encoded path, no redirects, deadline, size cap,
+    token never in errors); it needs `GITHUB_TOKEN` (fine-grained, Contents read/write on the one
+    repository), `GITHUB_RULES_REPO`, `GITHUB_RULES_BRANCH`. The repository is public by the user's
+    choice. (e) The Manager side is `deploy/wazuh/apply-arcradar-rules.sh` (`arcradar-apply-rules`):
+    pulls, refuses any file with an element ArcRadar never generates, installs only `arcradar_<id>.xml`,
+    runs `wazuh-analysisd -t`, rolls back if Wazuh refuses, restarts only on change; run by hand for now
+    (a cron line is documented). (f) Response actions are not attached to rules and nothing executes: the
+    ChatGPT-suggested "Approve response → Active Response" idea was deliberately left out (the AI
+    recommends and tracks, never executes). Setup and workflow: `docs/WAZUH_RULES.md`.
+
 ## What exists after Phase 12
 
 ```

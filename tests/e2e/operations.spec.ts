@@ -24,6 +24,10 @@ async function cleanUp() {
     method: "DELETE",
     headers: { prefer: "return=minimal" },
   });
+  await adminFetch("/rest/v1/wazuh_rules?name=like.E2E*", {
+    method: "DELETE",
+    headers: { prefer: "return=minimal" },
+  });
   await adminFetch("/rest/v1/tags?name=ilike.e2e-*", {
     method: "DELETE",
     headers: { prefer: "return=minimal" },
@@ -604,7 +608,7 @@ test.describe("Detection rules and alert deduplication (Phase 10)", () => {
       const ruleName = `E2E rule ${stamp}`;
       const marker = `e2edr${stamp}`;
 
-      await page.goto("/detection-rules");
+      await page.goto("/detection-rules?tab=severity");
       await page.getByLabel("Rule id").fill(ruleId);
       await page.getByLabel("Name").fill(ruleName);
       // The condition builder defaults to field "Title" / comparison "contains".
@@ -620,12 +624,64 @@ test.describe("Detection rules and alert deduplication (Phase 10)", () => {
       await page.goto(`/alerts/${alertId}`);
       await expect(page.getByTestId("alert-matched-rule")).toContainText(ruleName);
 
-      await page.goto("/detection-rules");
+      await page.goto("/detection-rules?tab=severity");
       await card.getByRole("checkbox").uncheck();
       await expect(card.getByText("Disabled")).toBeVisible();
 
       await card.getByRole("button", { name: `Delete ${ruleName}` }).click();
       await expect(card).toHaveCount(0);
+    });
+
+    test("an admin drafts a Wazuh rule, reads its XML, edits it, rejects it and deletes it", async ({
+      page,
+    }) => {
+      const name = `E2E wazuh rule ${stamp}`;
+      const renamed = `${name} edited`;
+
+      await page.goto("/detection-rules");
+      await expect(page.getByRole("link", { name: "Wazuh rules" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      await page.getByRole("button", { name: "Manual rule" }).click();
+      await page.getByLabel("Name", { exact: true }).fill(name);
+      await page.getByLabel("Condition 1 value").fill(`e2ewz${stamp}`);
+      await page.getByRole("button", { name: "Save as draft" }).click();
+
+      const card = page.locator("li", { hasText: name });
+      await expect(card).toBeVisible();
+      await expect(card.getByText("Draft", { exact: true })).toBeVisible();
+      await expect(card.getByText("Manual", { exact: true })).toBeVisible();
+      await expect(card.locator("pre")).toContainText("<if_group>windows</if_group>");
+      await expect(card.locator("pre")).toContainText(`e2ewz${stamp}`);
+      // Nothing is connected to GitHub in the test environment: the button is there but disabled.
+      await expect(page.getByText("GitHub is not connected")).toBeVisible();
+      await expect(card.getByRole("button", { name: "Send to GitHub" })).toBeDisabled();
+
+      await card.getByRole("button", { name: "Edit", exact: true }).click();
+      await card.getByLabel("Name", { exact: true }).fill(renamed);
+      await card.getByRole("button", { name: "Save changes" }).click();
+      const edited = page.locator("li", { hasText: renamed });
+      await expect(edited).toBeVisible();
+
+      await edited.getByRole("button", { name: "Reject", exact: true }).click();
+      await edited.getByLabel("Reason (optional)").fill("e2e");
+      await edited.getByRole("button", { name: "Confirm reject" }).click();
+      await expect(edited.getByText("Rejected", { exact: true })).toBeVisible();
+      await expect(edited.getByText("rejected: e2e")).toBeVisible();
+
+      await edited.getByRole("button", { name: `Delete ${renamed}` }).click();
+      await expect(edited).toHaveCount(0);
+    });
+
+    test("an unsafe pattern is refused on the form", async ({ page }) => {
+      await page.goto("/detection-rules");
+      await page.getByRole("button", { name: "Manual rule" }).click();
+      await page.getByLabel("Name", { exact: true }).fill(`E2E unsafe ${stamp}`);
+      await page.getByLabel("Condition 1 comparison").selectOption({ label: "matches regex" });
+      await page.getByLabel("Condition 1 value").fill("(a+)+");
+      await page.getByRole("button", { name: "Save as draft" }).click();
+      await expect(page.getByText("can make matching very slow")).toBeVisible();
     });
 
     test("a viewer cannot reach the page at all", async ({ browser, baseURL }) => {

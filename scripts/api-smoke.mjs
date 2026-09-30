@@ -3111,6 +3111,149 @@ async function main() {
     );
   }
 
+  section("Wazuh rules (detection-as-code)");
+  {
+    const body = {
+      name: `Smoke wazuh rule ${stamp}`,
+      description: "Created by the smoke test.",
+      level: 9,
+      parent_kind: "group",
+      parent_value: "windows",
+      conditions: [{ field: "win.eventdata.commandLine", op: "contains", value: `smk${stamp}` }],
+      mitre_ids: ["T1562.001"],
+    };
+
+    for (const [label, who] of [
+      ["a viewer", viewer],
+      ["an analyst", analyst],
+    ]) {
+      const listed = await call(who.jar, "GET", "/api/wazuh-rules");
+      check(`${label} cannot list Wazuh rules (403)`, listed.status === 403, listed.json);
+      const created = await call(who.jar, "POST", "/api/wazuh-rules", { body });
+      check(`${label} cannot create a Wazuh rule (403)`, created.status === 403, created.json);
+    }
+
+    const unsafe = await call(admin.jar, "POST", "/api/wazuh-rules", {
+      body: { ...body, conditions: [{ field: "win.a.b", op: "regex", value: "(a+)+" }] },
+    });
+    check("an unsafe regex is refused (422)", unsafe.status === 422, unsafe.json);
+    const badField = await call(admin.jar, "POST", "/api/wazuh-rules", {
+      body: { ...body, conditions: [{ field: "full_log", op: "contains", value: "x" }] },
+    });
+    check("a field outside the known prefixes is refused (422)", badField.status === 422);
+    const lowId = await call(admin.jar, "POST", "/api/wazuh-rules", {
+      body: { ...body, id: 100001 },
+    });
+    check("an id below the reserved floor is refused (422)", lowId.status === 422);
+    const forged = await call(admin.jar, "POST", "/api/wazuh-rules", {
+      body: { ...body, origin: "external", status: "pushed" },
+    });
+    check("origin and status are not the client's to set (422)", forged.status === 422);
+    const injected = await call(admin.jar, "POST", "/api/wazuh-rules", {
+      body: { ...body, parent_value: "windows</if_group><active-response>" },
+    });
+    check("an XML fragment in the parent group is refused (422)", injected.status === 422);
+
+    const made = await call(admin.jar, "POST", "/api/wazuh-rules", { body });
+    const rule = made.json?.data;
+    check(
+      "an admin creates a draft; the server picks the id and renders the XML",
+      made.status === 201 &&
+        rule?.status === "draft" &&
+        rule?.source === "manual" &&
+        rule?.id >= 100100 &&
+        rule?.xml?.includes(`<rule id="${rule?.id}" level="9">`) &&
+        rule?.xml?.includes("<if_group>windows</if_group>") &&
+        !rule?.xml?.includes("active-response"),
+      made.json,
+    );
+    const ruleId = rule?.id;
+
+    if (ruleId) {
+      const listed = await call(admin.jar, "GET", "/api/wazuh-rules");
+      check(
+        "the list contains the new rule",
+        listed.status === 200 && listed.json?.data?.some((item) => item.id === ruleId),
+      );
+      const edited = await call(admin.jar, "PATCH", `/api/wazuh-rules/${ruleId}`, {
+        body: { level: 11 },
+      });
+      check(
+        "an edit changes the level and the XML",
+        edited.status === 200 &&
+          edited.json?.data?.level === 11 &&
+          edited.json?.data?.xml?.includes('level="11"'),
+        edited.json,
+      );
+      const idChange = await call(admin.jar, "PATCH", `/api/wazuh-rules/${ruleId}`, {
+        body: { id: 100999 },
+      });
+      check("the id cannot be changed (422)", idChange.status === 422);
+
+      const pushNoGithub = await call(admin.jar, "POST", `/api/wazuh-rules/${ruleId}/push`);
+      check(
+        "sending to GitHub is refused (503) while the server has no GitHub token",
+        pushNoGithub.status === 503,
+        pushNoGithub.json,
+      );
+      const stillDraft = await call(admin.jar, "GET", `/api/wazuh-rules/${ruleId}`);
+      check("a failed push leaves the rule a draft", stillDraft.json?.data?.status === "draft");
+
+      const rejected = await call(admin.jar, "POST", `/api/wazuh-rules/${ruleId}/reject`, {
+        body: { reason: "smoke" },
+      });
+      check(
+        "rejecting a draft records the reason",
+        rejected.status === 200 &&
+          rejected.json?.data?.status === "rejected" &&
+          rejected.json?.data?.reject_reason === "smoke",
+        rejected.json,
+      );
+      const rejectAgain = await call(admin.jar, "POST", `/api/wazuh-rules/${ruleId}/reject`, {
+        body: {},
+      });
+      check("a rejected rule cannot be rejected again (409)", rejectAgain.status === 409);
+      const pushRejected = await call(admin.jar, "POST", `/api/wazuh-rules/${ruleId}/push`);
+      check("a rejected rule cannot be pushed (409)", pushRejected.status === 409);
+      const restored = await call(admin.jar, "PATCH", `/api/wazuh-rules/${ruleId}`, {
+        body: { level: 8 },
+      });
+      check(
+        "editing a rejected rule brings it back to a draft",
+        restored.status === 200 && restored.json?.data?.status === "draft",
+        restored.json,
+      );
+
+      const removed = await call(admin.jar, "DELETE", `/api/wazuh-rules/${ruleId}`);
+      check("an admin deletes a draft", removed.status === 200, removed.json);
+      const gone = await call(admin.jar, "GET", `/api/wazuh-rules/${ruleId}`);
+      check("a deleted rule is gone (404)", gone.status === 404);
+    }
+
+    const shortPrompt = await call(admin.jar, "POST", "/api/wazuh-rules/generate", {
+      body: { prompt: "x" },
+    });
+    check("a too-short AI request is refused (422)", shortPrompt.status === 422);
+    const viewerGenerates = await call(viewer.jar, "POST", "/api/wazuh-rules/generate", {
+      body: { prompt: "Detect PowerShell disabling Defender." },
+    });
+    check("a viewer cannot ask the AI for a rule (403)", viewerGenerates.status === 403);
+    const generated = await call(admin.jar, "POST", "/api/wazuh-rules/generate", {
+      body: { prompt: `Detect the marker smk${stamp} in a PowerShell command line.` },
+    });
+    check(
+      "generating a rule is either a draft (a provider is ready) or a clear 503 (none is)",
+      generated.status === 503 ||
+        (generated.status === 201 &&
+          generated.json?.data?.source === "ai" &&
+          generated.json?.data?.status === "draft"),
+      generated.json,
+    );
+    if (generated.status === 201) {
+      await call(admin.jar, "DELETE", `/api/wazuh-rules/${generated.json.data.id}`);
+    }
+  }
+
   section("Profile");
   {
     const before = await call(viewer.jar, "GET", "/api/auth/me");

@@ -19,6 +19,10 @@ export const RATE_LIMITS = {
   alertWriteByUser: { limit: 60, windowSeconds: 60 } satisfies RateLimitRule,
   /** "Import now" for the public threat feeds: several downloads and a bulk write per call. */
   feedImportByUser: { limit: 6, windowSeconds: 600 } satisfies RateLimitRule,
+  /** Asking the AI to draft a Wazuh rule: metered cost per call, keyed by the caller. */
+  wazuhRuleGenerateByUser: { limit: 20, windowSeconds: 3600 } satisfies RateLimitRule,
+  /** Committing a rule file to GitHub: an outbound write per call. */
+  wazuhRulePushByUser: { limit: 30, windowSeconds: 600 } satisfies RateLimitRule,
   /** A Wazuh Manager's batches: generous (a real sensor delivers steadily, not in bursts), but a
    * cap protects the same trigger from a misbehaving or compromised key. */
   ingestByKey: { limit: 120, windowSeconds: 60 } satisfies RateLimitRule,
