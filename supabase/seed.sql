@@ -52,7 +52,7 @@ from auth.users u
 where u.email like '%@arcradar.test';
 
 update public.profiles set role_name = 'admin' where id = 'aaaaaaaa-0000-4000-8000-000000000001';
-update public.profiles set role_name = 'analyst' where id = 'aaaaaaaa-0000-4000-8000-000000000002';
+update public.profiles set role_name = 'soc_l2' where id = 'aaaaaaaa-0000-4000-8000-000000000002';
 
 -- ---------------------------------------------------------------------------
 -- Tags

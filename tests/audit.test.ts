@@ -141,7 +141,7 @@ describe("GET /api/audit-logs", () => {
   });
 
   it("is forbidden for analysts and viewers", async () => {
-    for (const role of ["analyst", "viewer"]) {
+    for (const role of ["soc_l2", "viewer"]) {
       mockUser(role);
       expect((await auditLogs(apiRequest("/api/audit-logs"))).status).toBe(403);
     }

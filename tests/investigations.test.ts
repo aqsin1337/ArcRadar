@@ -78,7 +78,7 @@ const OTHER = "7e2b1c90-4a6d-4f3e-b8a5-0c9d8e7f6a5b";
 const NOW = new Date("2026-09-27T10:00:00.000Z");
 const request = { headers: new Headers() };
 
-const auth = (role: "admin" | "analyst" = "analyst", supabase = {} as AuthClient): AuthContext => ({
+const auth = (role: "admin" | "soc_l2" = "soc_l2", supabase = {} as AuthClient): AuthContext => ({
   supabase,
   user: { id: ANALYST, email: "analyst@arcradar.test" },
   profile: { display_name: "Analyst", role },
@@ -327,7 +327,7 @@ describe("createInvestigation", () => {
     alerts.updateAlertRow.mockResolvedValue(alertRow({ status: "investigating" }));
 
     await createInvestigation(
-      auth("analyst", supabase),
+      auth("soc_l2", supabase),
       {
         title: "Harbor Lights",
         indicator_ids: [INDICATOR_ID],
@@ -364,7 +364,7 @@ describe("createInvestigation", () => {
 
     await createInvestigation(
       auth(
-        "analyst",
+        "soc_l2",
         supabaseWith((ids) => ids),
       ),
       { title: "Harbor Lights", alert_ids: [ALERT_ID] },
@@ -393,7 +393,7 @@ describe("createInvestigation", () => {
     alerts.findAlertRow.mockResolvedValueOnce(alertRow({ status: "resolved" }));
     await createInvestigation(
       auth(
-        "analyst",
+        "soc_l2",
         supabaseWith((ids) => ids),
       ),
       { title: "x", alert_ids: [ALERT_ID] },
@@ -405,7 +405,7 @@ describe("createInvestigation", () => {
     alerts.updateAlertRow.mockResolvedValueOnce(null); // somebody else got there first
     await createInvestigation(
       auth(
-        "analyst",
+        "soc_l2",
         supabaseWith((ids) => ids),
       ),
       { title: "x", alert_ids: [ALERT_ID] },
@@ -420,7 +420,7 @@ describe("createInvestigation", () => {
     const error = await failureOf(
       createInvestigation(
         auth(
-          "analyst",
+          "soc_l2",
           supabaseWith(() => []),
         ),
         { title: "x", indicator_ids: [INDICATOR_ID] },
@@ -598,7 +598,7 @@ describe("links, notes and evidence", () => {
     repo.findNote.mockResolvedValue({ id: "n", author_id: OTHER, kind: "note" });
     repo.deleteNoteRow.mockResolvedValue(true);
 
-    expect(await failureOf(removeNote(auth("analyst"), ID, ALERT_ID, request))).toMatchObject({
+    expect(await failureOf(removeNote(auth("soc_l2"), ID, ALERT_ID, request))).toMatchObject({
       status: 403,
     });
     await expect(removeNote(auth("admin"), ID, ALERT_ID, request)).resolves.toBeDefined();
@@ -632,7 +632,7 @@ describe("checklist", () => {
   });
 
   it("adds an item as the analyst and audits it", async () => {
-    const items = await addChecklistItem(auth("analyst"), ID, { text: item.text }, request);
+    const items = await addChecklistItem(auth("soc_l2"), ID, { text: item.text }, request);
     expect(items).toEqual([item]);
     expect(repo.insertChecklistItem).toHaveBeenCalledWith(
       expect.anything(),
@@ -647,14 +647,14 @@ describe("checklist", () => {
 
   it("toggling done records who and when; unchecking clears it", async () => {
     repo.updateChecklistItemRow.mockResolvedValue(true);
-    await toggleChecklistItem(auth("analyst"), ID, item.id, true, request, () => NOW);
+    await toggleChecklistItem(auth("soc_l2"), ID, item.id, true, request, () => NOW);
     expect(repo.updateChecklistItemRow).toHaveBeenCalledWith(expect.anything(), item.id, {
       done: true,
       done_by: ANALYST,
       done_at: NOW.toISOString(),
     });
 
-    await toggleChecklistItem(auth("analyst"), ID, item.id, false, request, () => NOW);
+    await toggleChecklistItem(auth("soc_l2"), ID, item.id, false, request, () => NOW);
     expect(repo.updateChecklistItemRow).toHaveBeenLastCalledWith(expect.anything(), item.id, {
       done: false,
       done_by: null,
@@ -665,18 +665,18 @@ describe("checklist", () => {
   it("404s toggling or removing an item that does not exist", async () => {
     repo.updateChecklistItemRow.mockResolvedValue(false);
     expect(
-      await failureOf(toggleChecklistItem(auth("analyst"), ID, item.id, true, request)),
+      await failureOf(toggleChecklistItem(auth("soc_l2"), ID, item.id, true, request)),
     ).toMatchObject({ status: 404 });
 
     repo.deleteChecklistItemRow.mockResolvedValue(false);
     expect(
-      await failureOf(removeChecklistItem(auth("analyst"), ID, item.id, request)),
+      await failureOf(removeChecklistItem(auth("soc_l2"), ID, item.id, request)),
     ).toMatchObject({ status: 404 });
   });
 
   it("removing an item audits it", async () => {
     repo.deleteChecklistItemRow.mockResolvedValue(true);
-    await removeChecklistItem(auth("analyst"), ID, item.id, request);
+    await removeChecklistItem(auth("soc_l2"), ID, item.id, request);
     expect(audit.mock.calls.at(-1)?.[0]).toMatchObject({
       action: "investigation.checklist_item_removed",
     });

@@ -12,6 +12,7 @@ export type PageAuth =
   | { status: "ok"; auth: AuthContext }
   | { status: "signed_out" }
   | { status: "disabled" }
+  | { status: "pending" }
   | { status: "unavailable" };
 
 /**
@@ -29,6 +30,7 @@ export const getPageAuth = cache(async (): Promise<PageAuth> => {
     unstable_rethrow(error);
     if (error instanceof ApiError) {
       if (error.code === "UNAUTHENTICATED") return { status: "signed_out" };
+      if (error.code === "ACCOUNT_PENDING") return { status: "pending" };
       if (error.code === "ACCOUNT_DISABLED" || error.code === "FORBIDDEN") {
         return { status: "disabled" };
       }

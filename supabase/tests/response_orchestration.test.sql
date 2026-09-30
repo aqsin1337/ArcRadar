@@ -13,7 +13,7 @@ insert into auth.users (id, email) values
   ('b2b2b2b2-0000-4000-8000-000000000003', 'fxro-viewer@arcradar.test');
 
 update public.profiles set role_name = 'admin' where id = 'b2b2b2b2-0000-4000-8000-000000000001';
-update public.profiles set role_name = 'analyst' where id = 'b2b2b2b2-0000-4000-8000-000000000002';
+update public.profiles set role_name = 'soc_l2' where id = 'b2b2b2b2-0000-4000-8000-000000000002';
 
 insert into public.alerts (id, title, severity, status, source, origin) values
   ('b2b2b2b2-0000-4000-8000-000000000010', 'fxro alert', 'high', 'new', 'manual', 'local');

@@ -180,7 +180,7 @@ describe("protectedRoute", () => {
   });
 
   it("returns 403 ACCOUNT_DISABLED when the profile is missing or inactive", async () => {
-    for (const profile of [null, { display_name: null, role_name: "analyst", is_active: false }]) {
+    for (const profile of [null, { display_name: null, role_name: "soc_l2", is_active: false }]) {
       mockSupabase({ profile });
       const response = await route(apiRequest("/api/x"));
       expect(response.status).toBe(403);
@@ -202,7 +202,7 @@ describe("protectedRoute", () => {
         action: "authz.denied",
         userId: USER_ID,
         entityId: "/api/x",
-        metadata: expect.objectContaining({ role: "analyst", method: "GET" }),
+        metadata: expect.objectContaining({ role: "soc_l2", method: "GET" }),
       }),
       expect.anything(),
     );

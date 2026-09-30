@@ -10,6 +10,8 @@ type FakeOptions = {
   userError?: AuthErrorLike | null;
   profile?: { display_name: string | null; role_name: string; is_active: boolean } | null;
   profileError?: { code?: string; message: string } | null;
+  /** What the account_state() function answers when the profile is hidden. Default: disabled. */
+  accountState?: "pending" | "disabled" | "none";
 };
 
 /**
@@ -21,7 +23,7 @@ export function fakeSupabase(options: FakeOptions = {}) {
     options.user === undefined ? { id: USER_ID, email: "analyst@arcradar.test" } : options.user;
   const profile =
     options.profile === undefined
-      ? { display_name: "Analyst", role_name: "analyst", is_active: true }
+      ? { display_name: "Analyst", role_name: "soc_l2", is_active: true }
       : options.profile;
 
   return {
@@ -43,6 +45,7 @@ export function fakeSupabase(options: FakeOptions = {}) {
       updateUser: vi.fn().mockResolvedValue({ data: { user }, error: null }),
       exchangeCodeForSession: vi.fn().mockResolvedValue({ data: { user }, error: null }),
     },
+    rpc: vi.fn().mockResolvedValue({ data: options.accountState ?? "disabled", error: null }),
     from: vi.fn(() => ({
       select: () => ({
         eq: () => ({

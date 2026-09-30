@@ -39,7 +39,7 @@ const { createReport, deleteReport, getReport, isReportId, listReports } =
 const { createReportSchema } = await import("@/lib/reports/schema");
 
 const request = { headers: new Headers() };
-const auth = (role: "admin" | "analyst" | "viewer" = "analyst"): AuthContext => ({
+const auth = (role: "admin" | "soc_l2" | "viewer" = "soc_l2"): AuthContext => ({
   supabase: {} as AuthClient,
   user: { id: "user-1", email: "analyst@arcradar.test" },
   profile: { display_name: "Fixture Analyst", role },

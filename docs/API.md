@@ -260,7 +260,7 @@ Rules that hold for every lookup:
   indicators) and a few harmless well-known subjects; for anything else it answers `not_found`.
 - **Live providers are optional.** VirusTotal (`VIRUSTOTAL_API_KEY`: IP, domain, URL, hash) and AbuseIPDB
   (`ABUSEIPDB_API_KEY`: IP) are asked only when their key is set on the server, **only for callers with
-  `indicators:write`** (analysts and administrators, so a self-registered viewer cannot spend the quota),
+  `indicators:write`** (SOC L2 analysts and administrators, so a self-registered viewer cannot spend the quota),
   all in parallel under one 8-second deadline. `live_providers` lists the ones that could answer this kind.
 - **Nothing private leaves the workspace.** Private, loopback, link-local, documentation and other reserved
   addresses, reserved names (`.example`, `.test`, `.local`, `example.com`, ...) and URLs that carry a user

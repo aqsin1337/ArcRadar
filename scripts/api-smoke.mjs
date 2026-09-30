@@ -104,6 +104,16 @@ async function adminRest(method, path, body) {
   return { status: response.status, text: await response.text() };
 }
 
+/** The id of an Auth account by email (service role): a waiting account cannot sign in to reveal it. */
+async function userIdByEmail(email) {
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=200`, {
+    headers: { apikey: SERVICE_KEY, authorization: `Bearer ${SERVICE_KEY}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const body = await response.json();
+  return (body.users ?? []).find((u) => u.email === email)?.id ?? null;
+}
+
 async function latestMailTo(address, notBeforeIds = new Set()) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const list = await (await fetch(`${MAILPIT}/api/v1/messages`)).json();
@@ -205,8 +215,8 @@ async function main() {
   const analyst = await loginAs("analyst@arcradar.test");
   const analystMe = await call(analyst.jar, "GET", "/api/auth/me");
   check(
-    "analyst /me shows role analyst with write permission",
-    analystMe.json?.data?.profile?.role === "analyst" &&
+    "analyst /me shows role soc_l2 with write permission",
+    analystMe.json?.data?.profile?.role === "soc_l2" &&
       analystMe.json.data.permissions.includes("indicators:write") &&
       !analystMe.json.data.permissions.includes("audit:read"),
     analystMe.json,
@@ -3323,8 +3333,12 @@ async function main() {
     const signup = await call(null, "POST", "/api/auth/signup", {
       body: { email, password: "Smoke-Users-Pass-1" },
     });
+    // A new account waits for approval; the setup approves it directly so this section can test the rest.
+    const targetId = await userIdByEmail(email);
+    if (targetId) {
+      await adminRest("PATCH", `/rest/v1/profiles?id=eq.${targetId}`, { is_active: true });
+    }
     const login = await loginAs(email, "Smoke-Users-Pass-1");
-    const targetId = login.response.json?.data?.user?.id;
     check("(setup) throwaway account created and signed in", signup.status === 201 && !!targetId);
 
     try {
@@ -3354,7 +3368,7 @@ async function main() {
       );
 
       const promote = await call(admin.jar, "PATCH", `/api/users/${targetId}`, {
-        body: { role_name: "analyst" },
+        body: { role_name: "soc_l2" },
       });
       check("an admin promotes the account (200)", promote.status === 200, promote.json);
       const deactivate = await call(admin.jar, "PATCH", `/api/users/${targetId}`, {
@@ -3427,11 +3441,51 @@ async function main() {
     });
     check("signup enforces the password policy (422)", weak.status === 422, weak.json);
 
-    const fresh = await loginAs(email, firstPassword);
-    check("new user can sign in", fresh.response.status === 200, fresh.response.json);
+    // A new account is locked until an administrator approves it and chooses the role.
+    const waiting = await loginAs(email, firstPassword);
     check(
-      "new users are always viewers",
-      fresh.response.json?.data?.profile?.role === "viewer" &&
+      "a new account cannot sign in until approved (403 ACCOUNT_PENDING)",
+      waiting.response.status === 403 && waiting.response.json?.error?.code === "ACCOUNT_PENDING",
+      waiting.response.json,
+    );
+    check(
+      "the refused sign-in leaves no session behind",
+      (await call(waiting.jar, "GET", "/api/auth/me")).status === 401,
+    );
+    const pendingId = await userIdByEmail(email);
+    const users = await call(admin.jar, "GET", "/api/users");
+    const pendingRow = (users.json?.data ?? []).find((u) => u.id === pendingId);
+    check(
+      "the admin sees it as pending, inactive and a viewer",
+      pendingRow?.pending === true &&
+        pendingRow.is_active === false &&
+        pendingRow.role === "viewer",
+      pendingRow,
+    );
+    const analystApprove = await call(analyst.jar, "PATCH", `/api/users/${pendingId}`, {
+      body: { role_name: "soc_l1", is_active: true },
+    });
+    check("an L2 analyst cannot approve an account (403)", analystApprove.status === 403);
+    const approve = await call(admin.jar, "PATCH", `/api/users/${pendingId}`, {
+      body: { role_name: "soc_l1", is_active: true },
+    });
+    check(
+      "an admin approves it and gives it the L1 role (200)",
+      approve.status === 200,
+      approve.json,
+    );
+
+    const fresh = await loginAs(email, firstPassword);
+    check("an approved user can sign in", fresh.response.status === 200, fresh.response.json);
+    const approvedLogs = await call(admin.jar, "GET", `/api/audit-logs?entity_id=${pendingId}`);
+    check(
+      "the approval is audited",
+      (approvedLogs.json?.data?.items ?? []).some((e) => e.action === "user.approved"),
+      approvedLogs.json?.data?.items?.map((e) => e.action),
+    );
+    check(
+      "the approved user has exactly the role the admin chose",
+      fresh.response.json?.data?.profile?.role === "soc_l1" &&
         fresh.response.json.data.profile.display_name === "Smoke Tester",
       fresh.response.json?.data?.profile,
     );

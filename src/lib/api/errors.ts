@@ -5,6 +5,7 @@ export type ApiErrorCode =
   | "EMAIL_NOT_CONFIRMED"
   | "FORBIDDEN"
   | "ACCOUNT_DISABLED"
+  | "ACCOUNT_PENDING"
   | "NOT_FOUND"
   | "METHOD_NOT_ALLOWED"
   | "CONFLICT"
@@ -43,6 +44,12 @@ export const apiErrors = {
     new ApiError(403, "EMAIL_NOT_CONFIRMED", "Confirm your email address before signing in."),
   forbidden: (message = "You do not have permission to perform this action.") =>
     new ApiError(403, "FORBIDDEN", message),
+  accountPending: () =>
+    new ApiError(
+      403,
+      "ACCOUNT_PENDING",
+      "Your account is waiting for an administrator to approve it.",
+    ),
   accountDisabled: () =>
     new ApiError(403, "ACCOUNT_DISABLED", "This account is disabled or has no access."),
   notFound: (message = "The requested resource was not found.") =>

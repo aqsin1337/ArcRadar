@@ -35,8 +35,20 @@ export type Report = Row<"reports">;
 export type Integration = Row<"integrations">;
 export type AuditLogEntry = Row<"audit_logs">;
 
-export const ROLE_NAMES = ["admin", "analyst", "viewer"] as const;
+export const ROLE_NAMES = ["admin", "soc_l2", "soc_l1", "viewer"] as const;
 export type RoleName = (typeof ROLE_NAMES)[number];
+
+/** What a person sees for a role. The stored name is a slug; the label is for screens and reports. */
+export const ROLE_LABELS: Record<RoleName, string> = {
+  admin: "Admin",
+  soc_l2: "SOC L2",
+  soc_l1: "SOC L1",
+  viewer: "Viewer",
+};
+
+export function roleLabel(role: string): string {
+  return (ROLE_LABELS as Record<string, string>)[role] ?? role;
+}
 
 /** UI labels for provenance. Demo and local data must never be presented as live intelligence. */
 export const DATA_ORIGIN_LABELS: Record<DataOrigin, string> = {
