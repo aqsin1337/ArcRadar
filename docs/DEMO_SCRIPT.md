@@ -24,11 +24,32 @@ MITRE ATT&CK-ə uyğunlaşdırır, analitikə AI köməyi ilə triage etdirir v�
 
 ## 2. Real hücum, real alert (2 dəqiqə): əsas an
 
-**Göstər:** Windows VM. CMD-də 6 uğursuz giriş cəhdi:
+**Göstər:** Windows VM. **Administrator** CMD-də bir "hücum zənciri" qur. Hər addım MITRE matrisində ayrı xananı
+rəngləyir. Bunları **yazıdan əvvəl** bir dəfə sına, yazıda isə hamısını ardıcıl işlət:
 
 ```
+:: 1. Brute force (T1110): kilid ekranında 5-6 səhv parol yazmaq ən etibarlısıdır
 for /L %i in (1,1,6) do net use \\127.0.0.1\IPC$ /user:administrator SehvParol%i
+
+:: 2. Gizli hesab yaratmaq (T1098, Persistence)
+net user demosvc P@ssw0rd-Demo1 /add
+
+:: 3. Hesabın parolunu dəyişmək (T1098)
+net user demosvc Yeni-P@ss-Demo2
+
+:: 4. Təhlükəsizlik qrupu yaratmaq (T1484.001)
+net localgroup demoteam /add
+
+:: 5. Audit jurnalını silmək (T1070.004, Defense Evasion): ən təsirli addım
+wevtutil cl Security
+
+:: 6. Hesabı və qrupu silmək (T1531, Impact)
+net user demosvc /delete
+net localgroup demoteam /delete
 ```
+
+Hekayə: "Hücumçu parol təxmin edir, arxa qapı hesabı açır, qrup yaradır, izləri silir və hesabı yox edir."
+Hər komanda bir Wazuh qaydasını (level 8-9) işə salır, ona görə 5 fərqli texnika rənglənir.
 
 Sonra ArcRadar-a keç: **Telemetry** (Wazuh mənbəyi "Receiving") və **Alerts**. Alert 1-2 dəqiqəyə görünəcək
 (Manager onu göndərir). Alert-i aç.
@@ -37,7 +58,7 @@ Sonra ArcRadar-a keç: **Telemetry** (Wazuh mənbəyi "Receiving") və **Alerts*
 ilə alert yaratdı və HTTPS ilə ArcRadar-a push etdi. Burada gördüyünüz real hadisədir, demo data deyil. Provenance etiketi
 **External** göstərir."
 
-Göstər: severity, asset `WIN10-LAB`, MITRE texnika (T1110), **Timeline**.
+Göstər: severity, asset `WIN10-LAB`, MITRE texnika, **Timeline**. Sonra **MITRE ATT&CK** səhifəsinə keç: T1110, T1098, T1484, T1070 (sub-techniques düyməsini bas) və T1531 rənglənib.
 
 > Əgər alert 2 dəqiqədə görünmürsə: Manager-də `tail -f /var/ossec/logs/integrations.log` ilə bax. Ehtiyat plan:
 > aşağıdakı 3-cü bölməyə keç və alert-i sonra göstər.
