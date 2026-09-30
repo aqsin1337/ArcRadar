@@ -24,6 +24,7 @@
     "apikey:create": "node scripts/create-api-key.mjs",
     "ingest:sample": "node scripts/send-sample-alerts.mjs",
     "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
+    "import:mitre": "node scripts/import-mitre.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
     "e2e": "playwright test --project=setup --project=desktop --project=mobile"
   },

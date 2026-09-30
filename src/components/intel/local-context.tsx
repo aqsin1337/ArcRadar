@@ -72,6 +72,13 @@ export function WorkspaceCard({ result, canAdd }: { result: LookupResult; canAdd
       <CardContent className="space-y-4">
         {indicator ? (
           <>
+            {(result.recorded === "created" || result.recorded === "updated") && (
+              <p className="text-sm text-muted">
+                {result.recorded === "created"
+                  ? "Added to your indicators automatically from this lookup."
+                  : "Refreshed from this lookup."}
+              </p>
+            )}
             <dl className="divide-y divide-border">
               <DetailRow label="Verdict">
                 <VerdictBadge verdict={indicator.verdict} />

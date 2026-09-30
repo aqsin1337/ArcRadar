@@ -217,6 +217,37 @@ Next.js 16.3.6 (App Router, `src/` layout; the file convention is `src/proxy.ts`
     (f) **Full final QA**: every check every earlier phase ran, rerun clean end to end (see below) as the
     project's closing checkpoint, not because anything was expected to have drifted.
 
+27. **Landing page (2026-09-28, plan only — nothing built).** The user asked for a plan for the public
+    landing page (the known limitation Phase 12 documented) but explicitly asked to wait before building
+    it. Wrote `docs/LANDING_PAGE_PLAN.md`: routing (`/` is already public, only `src/app/page.tsx` changes
+    — signed-in still redirects to `/dashboard`, signed-out renders the page instead of redirecting to
+    `/login`), content sections, what it must not do (no live data, no new dependency), and open questions
+    (a public demo account, exact hero wording, screenshots vs. mockups) for the user to answer before or
+    during the actual build. No code, schema or dependency change.
+28. **Automatic data (2026-09-30, a change request outside the numbered phases).** The user found the
+    Indicators, intelligence, vulnerability, threat actor, campaign, malware and MITRE pages empty on the
+    live site and asked that they fill themselves, with a person still free to add records by hand.
+    Decisions: (a) **a live lookup records itself** — when a live provider (not the demo one) answers an
+    analyst's IP / domain / URL / hash lookup, the subject is stored as an `external` indicator
+    (`record_external_indicators()`, service role; verdict = the worst any provider said, severity and
+    confidence derived from it) and the result page says so; a demo answer, a viewer's lookup and a value
+    that never left the workspace record nothing. (b) **One write path for machine-learned indicators**:
+    that function never touches a `local` or `demo` indicator, and a verdict only ever moves up
+    (unknown < benign < suspicious < malicious), so a later "nothing found" cannot erase a feed's verdict.
+    (c) **Free public feeds, imported on demand**: abuse.ch URLhaus / Feodo Tracker / ThreatFox (indicators,
+    newest 300 per feed) and CISA KEV (vulnerabilities, all of them, `exploited_in_wild`) — fixed HTTPS
+    addresses in `src/lib/feeds/import.ts`, a failing feed costs only itself, each group is an integration
+    row (`abusech`, `cisa_kev`) an administrator can pause; run only when an administrator presses "Import now" (`POST /api/feeds/import`, the Integrations page); the
+    user explicitly chose no schedule, so there is no cron and nothing runs on a timer (decision 1). (d) **Two more free lookup
+    providers**: AlienVault OTX (needs `OTX_API_KEY`; pulse count → verdict, conservatively) and Shodan
+    InternetDB (no key; switched on with `SHODAN_INTERNETDB=true`, exposure data only so never "malicious"
+    by itself). (e) **MITRE ATT&CK is a script, not an app feature**: `npm run import:mitre` downloads the
+    54 MB STIX bundle and fills techniques, threat actors, malware/tools and campaigns with their links
+    through `import_mitre_attack()`; too big for a serverless request and it changes a few times a year;
+    never overwrites `local`/`demo` names. MISP and OpenCTI stay catalog rows without an adapter: they are
+    servers a user runs themselves, so there is nothing free to call. ThreatFox's export answered 503 during
+    the build, so its parser follows the documented format and is **not** verified against live data.
+
 ## What exists after Phase 12
 
 ```
@@ -558,7 +589,7 @@ everything below was expected to pass and did.
 - **Live providers were never run with valid keys** (none exist on this machine): VirusTotal, AbuseIPDB and NVD parsing follows the documented response shapes and is tested against fixtures; the request path, error mapping and fallback were exercised against the real services with fake keys. Try a real key before relying on them, and expect to adjust field mappings.
 - **No caching and no application-level rate limit for live lookups** (`GET /api/intel/:kind`): Phase 11's rate limiting covers auth, AI calls, manual alert creation and ingestion, but deliberately not this endpoint (it was not named in the original scope and a live lookup already costs nothing to ArcRadar itself the way an AI call does) — every lookup by an analyst or administrator still makes provider calls (VirusTotal's free tier is 4 per minute). A provider's own limit shows as `failed (rate_limited)` and falls back to demo data. Caching in Supabase (with a "last updated" per record) and a rate limit here are still open.
 - Demo data has coverage for the fictional scenario only; anything else is "no record" (honest, but a portfolio visitor typing a random IP sees an empty result). The seeded CVEs are all high or critical, so the Medium, Low and Info statistic tiles show 0 until other records exist.
-- Only VirusTotal, AbuseIPDB (lookups) and NVD (CVE import) exist; OTX, Shodan, MISP, OpenCTI and MITRE adapters are not built. There is no "open ports" source besides the demo dataset, and VirusTotal profiles have no related domains for an IP (that needs a second request).
+- Lookup providers: VirusTotal, AbuseIPDB, AlienVault OTX and Shodan InternetDB (plus NVD for CVE import); MISP and OpenCTI have no adapter (they are self-hosted servers, see decision 28). OTX and the URL/domain/hash paths of the new providers were tested against fixtures only, never with a real key (a URL is sent to OTX as one percent-encoded path segment; confirm OTX accepts that with a real key). VirusTotal profiles have no related domains for an IP (that needs a second request).
 - Vulnerabilities cannot be created or edited by hand yet (list, detail, statistics and the NVD import exist); the admin write policy remains, restricted to `local` records.
 - Lookup timeline entries link to alerts and investigations; events have no page of their own yet (they are listed on the Telemetry page, and an alert shows its event's raw data). The Reports module (Phase 7) can now summarize an investigation, but lookup pages do not yet offer "generate a report" directly; the workspace context still shows alerts, events and investigations inline.
 - Demo indicators seeded in one statement share the same `last_seen` (the seed's `now()`), and list ties break on the random UUID, so the order of tied rows changes with every `db:reset`. Tests must not assert on tie order (the global-search E2E test used to and was fixed on 2026-09-26).
@@ -568,7 +599,7 @@ everything below was expected to pass and did.
 - **Alerts come from three places**: the demo seed, people (local), and sensors (ingestion, external). Only alert status is protected against concurrent edits (a `409` when somebody else moved it first); investigations, threat intelligence and indicators are last-write-wins.
 - An investigation's timeline is built from what is recorded (notes, the status / priority / analyst history, evidence, attachments and their timestamps). There is no change history for an alert beyond its own timestamps, and note text and evidence locations are deliberately not copied into the audit trail (only ids and evidence titles).
 - Evidence is a **reference** (a link, hash, ticket number or path); nothing is uploaded, fetched or scanned, and there are no file attachments.
-- Threat intelligence is entered by hand by administrators; there is no STIX / MISP / OpenCTI import and no MITRE ATT&CK sync (the seed holds 15 hand-picked techniques, and techniques cannot be edited through the app). Aliases, industries, countries and platforms are typed as comma-separated lists. Linked indicators on an actor, campaign or malware page show the first 25 alphabetically (with the total); the indicator list cannot be filtered by actor, campaign or family yet. Changing only the links of a record does not bump its `updated_at`.
+- Threat intelligence is entered by hand by administrators, or loaded from MITRE ATT&CK with `npm run import:mitre` (a script, not an app feature, decision 28); there is no STIX / MISP / OpenCTI import beyond that, and techniques cannot be edited through the app. Aliases, industries, countries and platforms are typed as comma-separated lists. Linked indicators on an actor, campaign or malware page show the first 25 alphabetically (with the total); the indicator list cannot be filtered by actor, campaign or family yet. Changing only the links of a record does not bump its `updated_at`.
 - Date fields in forms use the browser's local time while pages show UTC (see the handoff notes), so a form can show a different clock time than the detail page.
 - Deleting an actor, campaign or malware family removes only its links; there is no soft delete or undo, and only the confirmation dialog stands between a click and the deletion. Administrators can edit and delete demo records (they can never relabel them).
 - Only an ordinary note's author can edit it (an administrator can remove but not edit someone else's note). The "(edited)" mark on a note is derived from `updated_at` differing from `created_at`.

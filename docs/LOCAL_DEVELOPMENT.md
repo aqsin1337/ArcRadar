@@ -123,23 +123,24 @@ these credentials must never be used in production. All seeded records are marke
 
 ## Commands
 
-| Command                             | What it does                                                                                                                                                       |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `npm run dev` / `build` / `start`   | Next.js dev server / production build / production server                                                                                                          |
-| `npm run lint`, `typecheck`, `test` | ESLint, `next typegen` + `tsc`, Vitest                                                                                                                             |
-| `npm run format` / `format:check`   | Prettier                                                                                                                                                           |
-| `npm run db:start` / `db:stop`      | Start / stop the local Supabase containers (data is kept)                                                                                                          |
-| `npm run db:reset`                  | Rebuild the local database from migrations + seed                                                                                                                  |
-| `npm run db:test`                   | Database security and constraint tests (stack must be running)                                                                                                     |
-| `npm run db:types`                  | Regenerate `src/types/database.ts` from the local schema                                                                                                           |
-| `npm run db:env`                    | Refresh Supabase values in `.env.local`                                                                                                                            |
-| `npm run api:smoke`                 | End-to-end API checks (app + local stack must be running)                                                                                                          |
-| `npm run e2e`                       | Browser tests in Chrome (local stack up, `npm run build` first)                                                                                                    |
-| `npm run check:contrast`            | WCAG contrast check of the design tokens, both themes                                                                                                              |
-| `npm run apikey:create`             | Make an ingest API key as an administrator (`--url`, `--name`)                                                                                                     |
-| `npm run ingest:sample`             | Send fictional Wazuh alerts to a running app with a key                                                                                                            |
-| `npm run bootstrap:admin`           | Promote an existing account to admin directly (for a fresh hosted deployment with no admin yet — see `docs/DEPLOYMENT.md`; locally the seed already gives you one) |
-| `npx supabase migration new <name>` | Create a new empty migration file                                                                                                                                  |
+| Command                             | What it does                                                                                                                                                                                           |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run dev` / `build` / `start`   | Next.js dev server / production build / production server                                                                                                                                              |
+| `npm run lint`, `typecheck`, `test` | ESLint, `next typegen` + `tsc`, Vitest                                                                                                                                                                 |
+| `npm run format` / `format:check`   | Prettier                                                                                                                                                                                               |
+| `npm run db:start` / `db:stop`      | Start / stop the local Supabase containers (data is kept)                                                                                                                                              |
+| `npm run db:reset`                  | Rebuild the local database from migrations + seed                                                                                                                                                      |
+| `npm run db:test`                   | Database security and constraint tests (stack must be running)                                                                                                                                         |
+| `npm run db:types`                  | Regenerate `src/types/database.ts` from the local schema                                                                                                                                               |
+| `npm run db:env`                    | Refresh Supabase values in `.env.local`                                                                                                                                                                |
+| `npm run api:smoke`                 | End-to-end API checks (app + local stack must be running)                                                                                                                                              |
+| `npm run e2e`                       | Browser tests in Chrome (local stack up, `npm run build` first)                                                                                                                                        |
+| `npm run check:contrast`            | WCAG contrast check of the design tokens, both themes                                                                                                                                                  |
+| `npm run apikey:create`             | Make an ingest API key as an administrator (`--url`, `--name`)                                                                                                                                         |
+| `npm run ingest:sample`             | Send fictional Wazuh alerts to a running app with a key                                                                                                                                                |
+| `npm run import:mitre`              | Load the MITRE ATT&CK catalog (techniques, threat actors, malware, campaigns) from the official STIX file; safe to rerun. Local by default, `--url` + `SUPABASE_SERVICE_ROLE_KEY` for a hosted project |
+| `npm run bootstrap:admin`           | Promote an existing account to admin directly (for a fresh hosted deployment with no admin yet — see `docs/DEPLOYMENT.md`; locally the seed already gives you one)                                     |
+| `npx supabase migration new <name>` | Create a new empty migration file                                                                                                                                                                      |
 
 ## Changing the database
 

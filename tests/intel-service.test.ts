@@ -93,15 +93,17 @@ function deps(external: IntelProvider[], overrides: Partial<LookupDeps> = {}) {
   const demoLookup = vi.spyOn(demo, "lookupIp");
   const audit = vi.fn().mockResolvedValue(true);
   const loadLocal = vi.fn().mockResolvedValue(emptyLocal);
+  const record = vi.fn().mockResolvedValue({ created: 0, updated: 0, untouched: 0, skipped: 0 });
   const value: LookupDeps = {
     registry: { external, demo },
     now: () => NOW,
     timeoutMs: 200,
     loadLocal,
     audit,
+    record,
     ...overrides,
   };
-  return { deps: value, audit, demoLookup, loadLocal };
+  return { deps: value, audit, demoLookup, loadLocal, record };
 }
 
 const request = { headers: new Headers({ "x-forwarded-for": "198.51.100.5" }) };
@@ -517,5 +519,93 @@ describe("buildTimeline", () => {
     expect(buildTimeline({ indicator: null, alerts, events: [], investigations: [] })).toHaveLength(
       25,
     );
+  });
+});
+
+describe("lookupIntel recording what a live lookup learned", () => {
+  const summary = (over: Partial<Record<string, number>> = {}) => ({
+    created: 0,
+    updated: 0,
+    untouched: 0,
+    skipped: 0,
+    ...over,
+  });
+  const malicious = (ip: string): IpProfile => ({
+    ...liveProfile(ip),
+    reputation: { verdict: "malicious", confidence: 91, summary: "Abuse score 91." },
+  });
+
+  it("records the subject as an indicator and audits it, then reloads what the workspace knows", async () => {
+    const abuse = liveProvider("abuseipdb", async (ip) => malicious(ip));
+    const record = vi.fn().mockResolvedValue(summary({ created: 1 }));
+    const { deps: d, audit, loadLocal } = deps([abuse.provider], { record });
+    const result = await lookupIntel(auth("analyst"), target("ip", "8.8.8.8"), request, d);
+
+    expect(record).toHaveBeenCalledOnce();
+    expect(record.mock.calls[0][0]).toBe("lookup:abuseipdb");
+    expect(record.mock.calls[0][1]).toEqual([
+      expect.objectContaining({
+        type: "ipv4",
+        value: "8.8.8.8",
+        verdict: "malicious",
+        severity: "high",
+        confidence: 91,
+      }),
+    ]);
+    expect(result.recorded).toBe("created");
+    expect(loadLocal).toHaveBeenCalledTimes(2); // once early, once after the indicator existed
+    expect(audit.mock.calls.map(([entry]) => entry.action)).toEqual([
+      "intel.lookup",
+      "indicator.recorded_from_lookup",
+    ]);
+  });
+
+  it("does not reload or audit when the workspace already tracks the value as its own", async () => {
+    const abuse = liveProvider("abuseipdb", async (ip) => malicious(ip));
+    const record = vi.fn().mockResolvedValue(summary({ untouched: 1 }));
+    const { deps: d, audit, loadLocal } = deps([abuse.provider], { record });
+    const result = await lookupIntel(auth("analyst"), target("ip", "8.8.8.8"), request, d);
+    expect(result.recorded).toBe("untouched");
+    expect(loadLocal).toHaveBeenCalledOnce();
+    expect(audit).toHaveBeenCalledOnce();
+  });
+
+  it("never records a demo answer, a viewer's lookup or a value that never left the workspace", async () => {
+    const abuse = liveProvider("abuseipdb", async (ip) => malicious(ip));
+    const record = vi.fn().mockResolvedValue(summary({ created: 1 }));
+    const { deps: d } = deps([abuse.provider], { record });
+    expect((await lookupIntel(auth("viewer"), target("ip", "8.8.8.8"), request, d)).recorded).toBe(
+      null,
+    );
+    expect(
+      (await lookupIntel(auth("analyst"), target("ip", "192.168.1.5"), request, d)).recorded,
+    ).toBe(null);
+
+    const none = deps([], { record });
+    expect(
+      (await lookupIntel(auth("admin"), target("ip", "192.0.2.10"), request, none.deps)).recorded,
+    ).toBe(null);
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it("does not record when every live provider failed and the demo answered", async () => {
+    const down = liveProvider("virustotal", async () => {
+      throw new ProviderError("unavailable", "down");
+    });
+    const record = vi.fn().mockResolvedValue(summary({ created: 1 }));
+    const { deps: d } = deps([down.provider], { record });
+    const result = await lookupIntel(auth("analyst"), target("ip", "8.8.8.8"), request, d);
+    expect(result.fallback).toBe(true);
+    expect(result.recorded).toBe(null);
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it("still answers when recording fails", async () => {
+    const abuse = liveProvider("abuseipdb", async (ip) => malicious(ip));
+    const record = vi.fn().mockRejectedValue(new Error("database down"));
+    const { deps: d } = deps([abuse.provider], { record });
+    const result = await lookupIntel(auth("analyst"), target("ip", "8.8.8.8"), request, d);
+    expect(result.results).toHaveLength(1);
+    expect(result.recorded).toBe(null);
   });
 });

@@ -2905,6 +2905,78 @@ async function main() {
     );
   }
 
+  section("Automatic data: public feeds and lookups (no network needed)");
+  {
+    const catalog = await call(analyst.jar, "GET", "/api/integrations");
+    for (const provider of ["abusech", "cisa_kev"]) {
+      const row = catalog.json?.data?.find((r) => r.provider === provider);
+      check(
+        `the ${provider} feed is in the catalog, needs no key and is on by default`,
+        row?.configured === true && row?.enabled === true,
+        row,
+      );
+    }
+
+    const anonymous = await call(null, "POST", "/api/feeds/import", { body: {} });
+    check("importing feeds needs a session (401)", anonymous.status === 401, anonymous.status);
+    for (const [name, who] of [
+      ["a viewer", viewer],
+      ["an analyst", analyst],
+    ]) {
+      const denied = await call(who.jar, "POST", "/api/feeds/import", { body: {} });
+      check(`${name} cannot import feeds (403)`, denied.status === 403, denied.status);
+    }
+    const badGroup = await call(admin.jar, "POST", "/api/feeds/import", {
+      body: { groups: ["not-a-feed"] },
+    });
+    check("an unknown feed group is refused (422)", badGroup.status === 422, badGroup.json);
+    const extra = await call(admin.jar, "POST", "/api/feeds/import", {
+      body: { groups: ["abusech"], url: "http://169.254.169.254/" },
+    });
+    check("a body cannot smuggle in an address (422)", extra.status === 422, extra.json);
+
+    // Pause both groups, so "import now" does its bookkeeping without touching the network.
+    for (const provider of ["abusech", "cisa_kev"]) {
+      await call(admin.jar, "PATCH", `/api/integrations/${provider}`, { body: { enabled: false } });
+    }
+    const paused = await call(admin.jar, "POST", "/api/feeds/import", { body: {} });
+    check(
+      "a paused group is skipped by Import now (every feed reports disabled)",
+      paused.status === 200 &&
+        paused.json?.data?.length === 4 &&
+        paused.json.data.every((r) => r.status === "disabled" && r.fetched === 0),
+      paused.json,
+    );
+    for (const provider of ["abusech", "cisa_kev"]) {
+      const back = await call(admin.jar, "PATCH", `/api/integrations/${provider}`, {
+        body: { enabled: true },
+      });
+      check(`(cleanup) ${provider} turned back on`, back.json?.data?.enabled === true, back.json);
+    }
+
+    const audit = await call(admin.jar, "GET", "/api/audit-logs?action=feeds.imported&page_size=5");
+    check(
+      "an import is audited, saying who asked",
+      audit.json?.data?.items?.some(
+        (e) => e.action === "feeds.imported" && e.metadata?.trigger === "manual" && e.user_id,
+      ),
+      audit.json?.data?.items?.[0],
+    );
+
+    const lookup = await call(analyst.jar, "GET", "/api/intel/ip?value=8.8.4.4");
+    check(
+      "a demo answer is never recorded as an indicator",
+      lookup.status === 200 && lookup.json?.data?.recorded === null,
+      lookup.json?.data?.recorded,
+    );
+    const stored = await call(analyst.jar, "GET", "/api/indicators?q=8.8.4.4");
+    check(
+      "...and the value did not appear in the indicator list",
+      stored.status === 200 && stored.json?.data?.items?.length === 0,
+      stored.json?.data?.items?.length,
+    );
+  }
+
   section("AI: settings and per-alert analysis (no provider keys in this environment)");
   {
     // smokeAlert (and its `base`) was deleted at the end of the investigations section above; this

@@ -567,6 +567,24 @@ accidental self-lockout) and refuses to leave the workspace with no active admin
 separate "root" account to recover with). Audited as `user.role_changed` (`from`, `to`) and
 `user.activated`/`user.deactivated`, only when the value actually changed.
 
+## Automatic data: lookups that record themselves, public feeds
+
+**Lookups record themselves.** When `GET /api/intel/:kind` is answered by at least one _live_ provider (never
+the demo one) for a caller with `indicators:write`, the subject is stored as an `external` indicator and the
+response says `recorded: "created" | "updated" | "untouched" | null` (`untouched`: the workspace already
+tracks it as its own, `null`: nothing real to record). The verdict is the worst any provider reached; an
+existing `local`/`demo` indicator is never changed and a verdict only moves up. Audited as
+`indicator.recorded_from_lookup`. Providers today: VirusTotal, AbuseIPDB, AlienVault OTX (`OTX_API_KEY`) and
+Shodan InternetDB (`SHODAN_INTERNETDB=true`, no key, IPs only).
+
+**`POST /api/feeds/import { groups? }`** (`integrations:manage`; `groups`: `abusech` and/or `cisa_kev`, both by
+default; rate limited, `feedImportByUser`). Downloads the public feeds now and answers one entry per feed:
+`{ feed, group, status: ok | failed | disabled, fetched, created, updated, untouched, skipped, error? }`. A
+group an administrator paused on the Integrations page is `disabled`; one feed failing does not stop the
+others (`error` is a short, safe reason). Audited as `feeds.imported`. Nothing runs on a timer: feeds are imported only when an administrator presses Import now.
+
+MITRE ATT&CK is loaded with the `npm run import:mitre` script (see `docs/LOCAL_DEVELOPMENT.md`), not an endpoint.
+
 ## AI analysis
 
 AI is a third provider family next to intel lookups and integrations, added in Phase 8

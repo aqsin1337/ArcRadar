@@ -152,6 +152,22 @@ test.describe("Integrations", () => {
     await expect(picker.getByRole("combobox")).toHaveValue("");
   });
 
+  test("lists the free public feeds, which need no key, and offers Import now to an administrator", async ({
+    page,
+  }) => {
+    await page.goto("/integrations");
+    for (const name of ["abuse.ch threat feeds", "CISA Known Exploited Vulnerabilities"]) {
+      const card = page.locator("li", { hasText: name });
+      await expect(card.getByText("Configured")).toBeVisible();
+      await expect(card.getByText(/no key needed/)).toBeVisible();
+      await expect(card.getByRole("button", { name: "Import now" })).toBeEnabled();
+    }
+    // The catalog no longer lists an integration as if it worked when nothing can talk to it.
+    await expect(
+      page.locator("li", { hasText: "Shodan" }).getByText("Not configured"),
+    ).toBeVisible();
+  });
+
   test("an analyst can see the catalog but not the switch, and reads the AI provider read-only", async ({
     browser,
     baseURL,
@@ -161,6 +177,7 @@ test.describe("Integrations", () => {
     await page.goto("/integrations");
     await expect(page.getByText("Demo data provider")).toBeVisible();
     await expect(page.getByRole("checkbox")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Import now" })).toHaveCount(0);
     await expect(
       page.getByText("No AI provider is active. Ask an administrator to choose one."),
     ).toBeVisible();

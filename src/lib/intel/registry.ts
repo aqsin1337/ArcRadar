@@ -2,12 +2,15 @@ import "server-only";
 import type { ServerEnv } from "@/lib/env/server";
 import { AbuseIpdbProvider } from "./providers/abuseipdb";
 import { DemoProvider } from "./providers/demo";
+import { OtxProvider } from "./providers/otx";
+import { ShodanProvider } from "./providers/shodan";
 import { VirusTotalProvider } from "./providers/virustotal";
 import type { IntelKind, IntelProvider } from "./types";
 
 /**
  * Which providers exist for this deployment. A live provider is enabled only when its key is set in
- * the server environment; with no keys at all the app still works on the demo provider alone. Keys
+ * the server environment (Shodan InternetDB needs none and has a plain on/off switch instead); with
+ * nothing configured the app still works on the demo provider alone. Keys
  * are read here, on the server, and handed to the adapters: nothing else ever sees them.
  */
 export type IntelRegistry = {
@@ -17,7 +20,10 @@ export type IntelRegistry = {
 };
 
 export function buildRegistry(
-  env: Pick<ServerEnv, "VIRUSTOTAL_API_KEY" | "ABUSEIPDB_API_KEY">,
+  env: Pick<
+    ServerEnv,
+    "VIRUSTOTAL_API_KEY" | "ABUSEIPDB_API_KEY" | "OTX_API_KEY" | "SHODAN_INTERNETDB"
+  >,
   fetchImpl?: typeof fetch,
 ): IntelRegistry {
   const external: IntelProvider[] = [];
@@ -27,6 +33,12 @@ export function buildRegistry(
   if (env.ABUSEIPDB_API_KEY) {
     external.push(new AbuseIpdbProvider({ apiKey: env.ABUSEIPDB_API_KEY, fetchImpl }));
   }
+  if (env.OTX_API_KEY) {
+    external.push(new OtxProvider({ apiKey: env.OTX_API_KEY, fetchImpl }));
+  }
+  // Shodan InternetDB needs no key; it is switched on with SHODAN_INTERNETDB=true (so no deployment
+  // starts sending addresses to it by accident). It answers IP addresses only.
+  if (env.SHODAN_INTERNETDB) external.push(new ShodanProvider({ fetchImpl }));
   return { external, demo: new DemoProvider() };
 }
 

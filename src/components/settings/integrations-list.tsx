@@ -2,11 +2,41 @@
 
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { humanize } from "@/components/ui/domain-badges";
 import { apiFetch } from "@/lib/api/client";
+import { FEED_GROUPS, type FeedGroup } from "@/lib/feeds/groups";
 import { formatRelative } from "@/lib/format";
 import type { IntegrationRow } from "@/lib/integrations/types";
+
+type FeedResultRow = {
+  feed: string;
+  status: "ok" | "failed" | "disabled";
+  fetched: number;
+  created: number;
+  updated: number;
+  error?: string;
+};
+
+const FEED_LABELS: Record<string, string> = {
+  urlhaus: "URLhaus",
+  feodo: "Feodo Tracker",
+  threatfox: "ThreatFox",
+  cisa_kev: "CISA KEV",
+};
+
+/** One short line per feed: what arrived, or why it did not. */
+function summarise(results: FeedResultRow[]): string {
+  return results
+    .map((entry) => {
+      const name = FEED_LABELS[entry.feed] ?? entry.feed;
+      if (entry.status === "disabled") return `${name}: paused.`;
+      if (entry.status === "failed") return `${name}: failed (${entry.error ?? "unknown error"}).`;
+      return `${name}: ${entry.created} new, ${entry.updated} refreshed of ${entry.fetched}.`;
+    })
+    .join(" ");
+}
 
 /** Every provider ArcRadar knows, whether it is configured, and (for administrators) a switch. */
 export function IntegrationsList({
@@ -21,6 +51,29 @@ export function IntegrationsList({
   const [rows, setRows] = useState(integrations);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState<string | null>(null);
+  const [imported, setImported] = useState<Record<string, string>>({});
+
+  async function importNow(group: FeedGroup) {
+    setImporting(group);
+    setError(null);
+    const result = await apiFetch<FeedResultRow[]>("/api/feeds/import", {
+      method: "POST",
+      body: { groups: [group] },
+    });
+    setImporting(null);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    setImported((current) => ({ ...current, [group]: summarise(result.data) }));
+    if (result.data.some((entry) => entry.status === "ok")) {
+      const at = new Date().toISOString();
+      setRows((current) =>
+        current.map((row) => (row.provider === group ? { ...row, last_sync_at: at } : row)),
+      );
+    }
+  }
 
   async function toggle(provider: string, enabled: boolean) {
     setPending(provider);
@@ -71,6 +124,30 @@ export function IntegrationsList({
                   <p className="text-xs text-muted">
                     Last received {formatRelative(row.last_sync_at, now)}.
                   </p>
+                )}
+                {(FEED_GROUPS as readonly string[]).includes(row.provider) && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted">
+                      Free public feed, no key needed. Imported when an administrator presses Import
+                      now.
+                    </p>
+                    {canManage && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={importing !== null || !row.enabled}
+                        onClick={() => importNow(row.provider as FeedGroup)}
+                      >
+                        {importing === row.provider ? "Importing…" : "Import now"}
+                      </Button>
+                    )}
+                    {imported[row.provider] && (
+                      <p role="status" className="text-xs text-muted">
+                        {imported[row.provider]}
+                      </p>
+                    )}
+                  </div>
                 )}
                 {canManage ? (
                   <label className="flex items-center gap-2 text-sm">

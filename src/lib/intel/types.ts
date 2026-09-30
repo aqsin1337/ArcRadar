@@ -11,7 +11,7 @@ export type IntelKind = (typeof INTEL_KINDS)[number];
 export const HASH_TYPES = ["md5", "sha1", "sha256"] as const;
 export type HashType = (typeof HASH_TYPES)[number];
 
-export type ProviderId = "demo" | "virustotal" | "abuseipdb" | "nvd";
+export type ProviderId = "demo" | "virustotal" | "abuseipdb" | "otx" | "shodan" | "nvd";
 
 export type ProviderInfo = {
   id: ProviderId;

@@ -1814,7 +1814,9 @@ export type Database = {
       };
       escape_like: { Args: { p_text: string }; Returns: string };
       has_permission: { Args: { p_key: string }; Returns: boolean };
+      import_external_vulnerabilities: { Args: { p_records: Json }; Returns: Json };
       import_external_vulnerability: { Args: { p: Json }; Returns: string };
+      import_mitre_attack: { Args: { p: Json }; Returns: Json };
       indicator_type_counts: {
         Args: Record<PropertyKey, never>;
         Returns: {
@@ -1841,6 +1843,7 @@ export type Database = {
         Args: { p_type: Database["public"]["Enums"]["indicator_type"]; p_value: string };
         Returns: boolean;
       };
+      record_external_indicators: { Args: { p_records: Json; p_source: string }; Returns: Json };
       search_alerts: {
         Args: { p_query?: string };
         Returns: {
@@ -2112,6 +2115,10 @@ export type Database = {
           indicator_count: number;
           name: string;
         }[];
+      };
+      verdict_rank: {
+        Args: { p_verdict: Database["public"]["Enums"]["verdict"] };
+        Returns: number;
       };
       vulnerability_severity_counts: {
         Args: Record<PropertyKey, never>;

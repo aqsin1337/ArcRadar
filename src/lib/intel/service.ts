@@ -5,7 +5,9 @@ import { writeAuditLog } from "@/lib/audit/write";
 import type { AuthContext } from "@/lib/auth/context";
 import { getServerEnv } from "@/lib/env/server";
 import { logError, logWarn } from "@/lib/log";
+import { recordExternalIndicators, type RecordSummary } from "@/lib/indicators/external";
 import { loadLocalContext } from "./local";
+import { recordFromLookup } from "./record";
 import { buildRegistry, supportsKind, type IntelRegistry } from "./registry";
 import { externalSkipReason, parseTarget, MAX_TARGET_LENGTH, type IntelTarget } from "./target";
 import type { LocalContext } from "./timeline";
@@ -55,6 +57,12 @@ export type LookupResult = {
   /** True when demo data is shown although live providers are connected (they did not deliver). */
   fallback: boolean;
   local: LocalContext;
+  /**
+   * What became of the subject in the indicator list: recorded for the first time, refreshed, left
+   * alone because the workspace already tracks it as its own, or not recorded (`null`: no live
+   * provider answered, so there was nothing real to record).
+   */
+  recorded: "created" | "updated" | "untouched" | null;
 };
 
 export type LookupDeps = {
@@ -64,9 +72,13 @@ export type LookupDeps = {
   timeoutMs: number;
   loadLocal: (auth: AuthContext, target: IntelTarget) => Promise<LocalContext>;
   audit: typeof writeAuditLog;
+  /** Stores what a live lookup learned as an indicator (service role, after authorization). */
+  record: typeof recordExternalIndicators;
 };
 
-export const LIVE_TIMEOUT_MS = 8000;
+// AlienVault OTX answers a domain or URL lookup in anywhere from one to ten seconds; the providers all run in
+// parallel under this one deadline, so a slow one costs only itself (it shows as failed, timeout).
+export const LIVE_TIMEOUT_MS = 15000;
 
 export function defaultDeps(): LookupDeps {
   return {
@@ -75,7 +87,15 @@ export function defaultDeps(): LookupDeps {
     timeoutMs: LIVE_TIMEOUT_MS,
     loadLocal: (auth, target) => loadLocalContext(auth.supabase, target),
     audit: writeAuditLog,
+    record: recordExternalIndicators,
   };
+}
+
+function recordedOutcome(summary: RecordSummary): LookupResult["recorded"] {
+  if (summary.created > 0) return "created";
+  if (summary.updated > 0) return "updated";
+  if (summary.untouched > 0) return "untouched";
+  return null;
 }
 
 function ask(
@@ -152,7 +172,7 @@ export async function lookupIntel(
   const live = registry.external.filter((provider) => supportsKind(provider, target.kind));
   const liveAllowed = auth.permissions.has("indicators:write");
   const skipReason = externalSkipReason(target);
-  const local = deps.loadLocal(auth, target);
+  let local = deps.loadLocal(auth, target);
   // A rejection is awaited below; this keeps it from being reported as unhandled while providers run.
   local.catch(() => undefined);
 
@@ -209,6 +229,36 @@ export async function lookupIntel(
     );
   }
 
+  // A live answer is a real observation: put the subject in the indicator list, so nobody has to
+  // type it in. A failure here never fails the lookup that already succeeded.
+  let recorded: LookupResult["recorded"] = null;
+  const toRecord = contacted ? recordFromLookup(target, results) : null;
+  if (toRecord) {
+    try {
+      recorded = recordedOutcome(await deps.record(toRecord.source, [toRecord.record]));
+      if (recorded === "created" || recorded === "updated") {
+        local = deps.loadLocal(auth, target); // now it knows the indicator
+        local.catch(() => undefined);
+        await deps.audit(
+          {
+            action: "indicator.recorded_from_lookup",
+            userId: auth.user.id,
+            entityType: "indicator",
+            entityId: `${target.indicatorType}:${auditSubject(target)}`,
+            metadata: {
+              outcome: recorded,
+              source: toRecord.source,
+              verdict: toRecord.record.verdict,
+            },
+          },
+          request,
+        );
+      }
+    } catch (error) {
+      logError("intel.record_failed", error, { kind: target.kind });
+    }
+  }
+
   return {
     kind: target.kind,
     value: target.value,
@@ -219,5 +269,6 @@ export async function lookupIntel(
     live_allowed: liveAllowed,
     fallback,
     local: await local,
+    recorded,
   };
 }

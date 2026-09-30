@@ -19,6 +19,8 @@ export const AUDIT_ACTIONS = [
   "indicator.relationship_added",
   "indicator.relationship_removed",
   "intel.lookup",
+  "feeds.imported",
+  "indicator.recorded_from_lookup",
   "vulnerability.imported",
   "alert.created",
   "alert.status_changed",

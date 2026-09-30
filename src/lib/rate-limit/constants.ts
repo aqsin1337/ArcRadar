@@ -17,6 +17,8 @@ export const RATE_LIMITS = {
   aiByUser: { limit: 30, windowSeconds: 3600 } satisfies RateLimitRule,
   /** Creating an alert by hand: each insert also runs the dedup/detection-rule trigger. */
   alertWriteByUser: { limit: 60, windowSeconds: 60 } satisfies RateLimitRule,
+  /** "Import now" for the public threat feeds: several downloads and a bulk write per call. */
+  feedImportByUser: { limit: 6, windowSeconds: 600 } satisfies RateLimitRule,
   /** A Wazuh Manager's batches: generous (a real sensor delivers steadily, not in bursts), but a
    * cap protects the same trigger from a misbehaving or compromised key. */
   ingestByKey: { limit: 120, windowSeconds: 60 } satisfies RateLimitRule,

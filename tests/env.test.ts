@@ -44,7 +44,7 @@ describe("parseServerEnv", () => {
     expect(env.VIRUSTOTAL_API_KEY).toBeUndefined();
     expect(env.ABUSEIPDB_API_KEY).toBeUndefined();
     expect(env.OTX_API_KEY).toBe("otx-key");
-    expect(env.SHODAN_API_KEY).toBeUndefined();
+    expect(env.SHODAN_INTERNETDB).toBeUndefined();
   });
 
   it("works with no external provider keys at all (demo mode)", () => {

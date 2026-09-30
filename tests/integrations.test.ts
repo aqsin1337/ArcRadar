@@ -14,7 +14,7 @@ const ENV = vi.hoisted((): ServerEnv => ({
   VIRUSTOTAL_API_KEY: "vt-key",
   ABUSEIPDB_API_KEY: undefined,
   OTX_API_KEY: undefined,
-  SHODAN_API_KEY: undefined,
+  SHODAN_INTERNETDB: undefined,
   NVD_API_KEY: undefined,
   GROQ_API_KEY: "groq-key",
   OPENAI_API_KEY: undefined,

@@ -66,8 +66,11 @@ async function readCapped(response: Response, maxBytes: number): Promise<string>
   return text + decoder.decode();
 }
 
-/** GET a JSON document. Resolves `null` for 404 ("the provider has no record"), throws otherwise on any failure. */
-export async function getJson(request: ProviderRequest): Promise<unknown | null> {
+/**
+ * GET a document as text. Resolves `null` for 404 ("the provider has no record"), throws otherwise on
+ * any failure. Used directly for plain-text and other non-JSON downloads (threat feeds).
+ */
+export async function getText(request: ProviderRequest): Promise<string | null> {
   const base = new URL(request.baseUrl);
   const url = new URL(request.baseUrl + request.path);
   if (
@@ -129,6 +132,13 @@ export async function getJson(request: ProviderRequest): Promise<unknown | null>
     throw new ProviderError("unavailable", "The provider's answer could not be read.");
   }
 
+  return text;
+}
+
+/** GET a JSON document. Same rules as `getText`; a body that is not JSON is a `bad_response`. */
+export async function getJson(request: ProviderRequest): Promise<unknown | null> {
+  const text = await getText(request);
+  if (text === null) return null;
   try {
     return JSON.parse(text);
   } catch {
