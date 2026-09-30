@@ -3,6 +3,7 @@ import { apiErrors } from "@/lib/api/errors";
 import { toRange } from "@/lib/api/pagination";
 import { toApiError } from "@/lib/api/supabase-errors";
 import type { AuthClient } from "@/lib/auth/context";
+import { techniqueFilterIds } from "@/lib/mitre/service";
 import type { Alert, AlertStatus } from "@/types/domain";
 import { ASSIGNEE_ME, ASSIGNEE_NONE } from "./constants";
 import type { AlertListQuery, CreateAlertInput } from "./schema";
@@ -32,6 +33,7 @@ export async function findAlerts(
   actorId: string,
 ): Promise<{ rows: AlertListItem[]; total: number }> {
   const { from, to } = toRange(query);
+  const techniqueIds = query.technique ? await techniqueFilterIds(supabase, query.technique) : null;
 
   // search_alerts() answers the text question; everything else is ordinary PostgREST.
   const build = () => {
@@ -48,6 +50,7 @@ export async function findAlerts(
     // A duplicate is linked to its primary instead of sitting as a fresh row in the queue; showing it
     // is an explicit opt-in (query.duplicates === "show"), never the default view.
     if (query.duplicates !== "show") request = request.is("duplicate_of", null);
+    if (techniqueIds) request = request.overlaps("technique_ids", techniqueIds);
     return request;
   };
 

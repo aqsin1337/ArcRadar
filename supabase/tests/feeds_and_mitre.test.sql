@@ -1,5 +1,5 @@
--- import_external_vulnerabilities() and import_mitre_attack(): who may call them, provenance, what
--- they may never overwrite, atomic replacement of links, idempotency.
+-- import_external_vulnerabilities() and import_mitre_attack(): who may call them, what they may
+-- never overwrite, refresh instead of duplicating, bad values skipped.
 -- Run with `npm run db:test`. Everything happens in one transaction that is rolled back.
 
 begin;
@@ -103,13 +103,7 @@ begin
   end if;
 end $$;
 
--- 4. MITRE: first import -----------------------------------------------------------------------------
--- A local actor and a local malware entry that share a name with catalog entries.
-insert into public.threat_actors (name, description, origin, created_by) values
-  ('FXMitre Local Actor', 'entered by hand', 'local', 'ffffffff-0000-4000-8000-0000000000f1');
-insert into public.malware (name, description, origin, created_by) values
-  ('FXMitre LocalWare', 'entered by hand', 'local', 'ffffffff-0000-4000-8000-0000000000f1');
-
+-- 4. MITRE techniques: import, refresh, bad ids skipped ---------------------------------------------
 create temp table mres (r jsonb);
 grant all on mres to service_role;
 do $$
@@ -118,111 +112,51 @@ begin
   insert into mres select public.import_mitre_attack($json$
   {
     "techniques": [
-      {"id": "T9901", "name": "FXMitre Technique One", "tactics": ["execution"], "description": "d1", "url": "https://example.test/T9901"},
-      {"id": "T9901.001", "name": "FXMitre Sub", "tactics": ["execution", "persistence"]},
+      {"id": "T9901", "name": "FXMitre Technique One", "tactics": ["Execution"], "description": "d1", "url": "https://example.test/T9901"},
+      {"id": "T9901.001", "name": "FXMitre Sub", "tactics": ["Execution", "Persistence"]},
       {"id": "not-an-id", "name": "bad"}
     ],
-    "malware": [
-      {"name": "FXMitre Worm", "malware_type": "malware", "platforms": ["Windows"], "description": "w"},
-      {"name": "fxmitre localware", "description": "machine"}
-    ],
-    "campaigns": [
-      {"name": "FXMitre Recent Campaign", "description": "c", "first_seen": "2026-01-01T00:00:00Z", "last_seen": "2026-09-01T00:00:00Z"},
-      {"name": "FXMitre Old Campaign", "first_seen": "2015-01-01T00:00:00Z", "last_seen": "2016-01-01T00:00:00Z"}
-    ],
-    "actors": [
-      {"name": "FXMitre Group", "aliases": ["FX-Alias"], "description": "g",
-       "first_seen": "2020-01-01T00:00:00Z", "last_seen": "2026-01-01T00:00:00Z",
-       "technique_ids": ["T9901", "T9901.001", "T0000-unknown"], "malware_names": ["FXMitre Worm", "FXMitre LocalWare"],
-       "campaign_names": ["FXMitre Recent Campaign"]},
-      {"name": "fxmitre local actor", "description": "machine", "technique_ids": ["T9901"], "malware_names": ["FXMitre Worm"]}
-    ]
+    "actors": [{"name": "Ignored Actor"}],
+    "malware": [{"name": "Ignored Malware"}]
   }
   $json$::jsonb);
   reset role;
 end $$;
 
 do $$
-declare r jsonb; a public.threat_actors; c public.campaigns; local_actor uuid;
+declare r jsonb; t public.mitre_techniques;
 begin
   select mres.r into r from mres;
-  if r <> '{"actors": 1, "malware": 1, "skipped": 3, "campaigns": 2, "techniques": 2}'::jsonb then
+  if r <> '{"techniques": 2, "skipped": 1}'::jsonb then
     raise exception 'FAIL first MITRE summary is %', r;
   end if;
-
-  if (select count(*) from public.mitre_techniques where id like 'T9901%') <> 2 then
-    raise exception 'FAIL techniques were not stored';
+  select * into t from public.mitre_techniques where id = 'T9901';
+  if t.name <> 'FXMitre Technique One' or t.tactics <> array['Execution'] or t.url <> 'https://example.test/T9901' then
+    raise exception 'FAIL technique stored as %', to_jsonb(t);
   end if;
-
-  select * into a from public.threat_actors where name = 'FXMitre Group';
-  if a.origin <> 'external' or a.created_by is not null or a.aliases <> array['FX-Alias'] then
-    raise exception 'FAIL actor stored as %', to_jsonb(a);
-  end if;
-  if (select count(*) from public.threat_actor_techniques where threat_actor_id = a.id) <> 2 then
-    raise exception 'FAIL an unknown technique id was linked, or a known one was not';
-  end if;
-  -- only the external malware is linked, never the local one with a matching name
-  if (select array_agg(m.name) from public.threat_actor_malware l join public.malware m on m.id = l.malware_id
-        where l.threat_actor_id = a.id) is distinct from array['FXMitre Worm'] then
-    raise exception 'FAIL actor malware links are wrong';
-  end if;
-  if (select count(*) from public.threat_actor_campaigns where threat_actor_id = a.id) <> 1 then
-    raise exception 'FAIL campaign link missing';
-  end if;
-
-  select * into c from public.campaigns where name = 'FXMitre Recent Campaign';
-  if c.origin <> 'external' or c.status <> 'active' then raise exception 'FAIL recent campaign is %', to_jsonb(c); end if;
-  select * into c from public.campaigns where name = 'FXMitre Old Campaign';
-  if c.status <> 'concluded' then raise exception 'FAIL old campaign is %', to_jsonb(c); end if;
-
-  -- the local records and their links are untouched
-  select id into local_actor from public.threat_actors where name = 'FXMitre Local Actor';
-  select * into a from public.threat_actors where id = local_actor;
-  if a.origin <> 'local' or a.description <> 'entered by hand' then
-    raise exception 'FAIL a local actor was overwritten: %', to_jsonb(a);
-  end if;
-  if exists (select 1 from public.threat_actor_techniques where threat_actor_id = local_actor)
-     or exists (select 1 from public.threat_actor_malware where threat_actor_id = local_actor) then
-    raise exception 'FAIL a local actor received links';
-  end if;
-  if (select description from public.malware where name = 'FXMitre LocalWare') <> 'entered by hand'
-     or (select origin from public.malware where name = 'FXMitre LocalWare') <> 'local' then
-    raise exception 'FAIL a local malware entry was overwritten';
+  select * into t from public.mitre_techniques where id = 'T9901.001';
+  if t.tactics <> array['Execution', 'Persistence'] then raise exception 'FAIL sub-technique tactics %', t.tactics; end if;
+  if exists (select 1 from public.mitre_techniques where id = 'not-an-id') then
+    raise exception 'FAIL an invalid technique id was stored';
   end if;
 end $$;
 
--- 5. MITRE: a second import refreshes, replaces the links as a whole, and creates nothing twice ------
+-- 5. a second import refreshes and creates nothing twice --------------------------------------------
 do $$
-declare before_actors int; before_malware int; a public.threat_actors;
+declare before_n int;
 begin
-  select count(*) into before_actors from public.threat_actors;
-  select count(*) into before_malware from public.malware;
-
+  select count(*) into before_n from public.mitre_techniques;
   set local role service_role;
   perform public.import_mitre_attack($json$
-  {
-    "techniques": [{"id": "T9901", "name": "FXMitre Technique One Renamed", "tactics": ["impact"]}],
-    "actors": [
-      {"name": "FXMitre Group", "aliases": ["FX-Alias", "FX-Alias-2"], "description": "g2",
-       "technique_ids": ["T9901"], "malware_names": [], "campaign_names": []}
-    ]
-  }
+  {"techniques": [{"id": "T9901", "name": "FXMitre Technique One Renamed", "tactics": ["Impact"]}]}
   $json$::jsonb);
   reset role;
-
-  if (select count(*) from public.threat_actors) <> before_actors
-     or (select count(*) from public.malware) <> before_malware then
+  if (select count(*) from public.mitre_techniques) <> before_n then
     raise exception 'FAIL the second import created duplicates';
   end if;
-  if (select name from public.mitre_techniques where id = 'T9901') <> 'FXMitre Technique One Renamed' then
+  if (select name from public.mitre_techniques where id = 'T9901') <> 'FXMitre Technique One Renamed'
+     or (select tactics from public.mitre_techniques where id = 'T9901') <> array['Impact'] then
     raise exception 'FAIL a technique was not refreshed';
-  end if;
-  select * into a from public.threat_actors where name = 'FXMitre Group';
-  if a.description <> 'g2' or cardinality(a.aliases) <> 2 then raise exception 'FAIL actor not refreshed'; end if;
-  if (select count(*) from public.threat_actor_techniques where threat_actor_id = a.id) <> 1
-     or exists (select 1 from public.threat_actor_malware where threat_actor_id = a.id)
-     or exists (select 1 from public.threat_actor_campaigns where threat_actor_id = a.id) then
-    raise exception 'FAIL links were not replaced as a whole';
   end if;
 end $$;
 

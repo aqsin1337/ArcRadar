@@ -1,11 +1,9 @@
-import type { Indicator, IndicatorType, RelationshipType, DataOrigin, Row } from "@/types/domain";
+import type { Indicator, IndicatorType, RelationshipType, Row } from "@/types/domain";
 
 export type IndicatorTag = Pick<Row<"tags">, "id" | "name" | "color">;
 
 /** A row of the indicator list: the record plus its tags. */
 export type IndicatorListItem = Indicator & { tags: IndicatorTag[] };
-
-export type LinkedEntity = { id: string; name: string; origin: DataOrigin };
 
 export type IndicatorRelationship = {
   id: string;
@@ -19,8 +17,5 @@ export type IndicatorRelationship = {
 export type IndicatorDetail = IndicatorListItem & {
   /** Display name of the user who created it, when they still exist and are visible. */
   created_by_name: string | null;
-  threat_actors: LinkedEntity[];
-  campaigns: LinkedEntity[];
-  malware: LinkedEntity[];
   relationships: IndicatorRelationship[];
 };

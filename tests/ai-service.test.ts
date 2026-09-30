@@ -134,9 +134,6 @@ const INDICATOR = {
   source: "manual",
   description: null,
   tags: [{ id: "t1", name: "c2", color: null }],
-  threat_actors: [{ id: "a1", name: "Fxactor Alpha", origin: "local" }],
-  campaigns: [],
-  malware: [],
 } as unknown as IndicatorDetail;
 
 beforeEach(() => {
@@ -590,7 +587,6 @@ describe("generateIndicatorAnalysis", () => {
     expect(row.id).toBe("row-7");
     const callArg = complete.mock.calls[0][0] as AiCompleteRequest;
     expect(callArg.user).toContain("fx-c2.example");
-    expect(callArg.user).toContain("Fxactor Alpha");
     expect(investigationsRepo.insertChecklistItems).not.toHaveBeenCalled();
     expect(responseActionsRepo.seedResponseActionsForAlert).not.toHaveBeenCalled();
   });

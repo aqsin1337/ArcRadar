@@ -1,10 +1,10 @@
-// Imports the MITRE ATT&CK catalog (techniques, threat actors, malware, campaigns) into ArcRadar,
-// directly against the database with the service-role key, through import_mitre_attack().
+// Imports the MITRE ATT&CK technique catalog (names and tactics, for the ATT&CK matrix page) into
+// ArcRadar, directly against the database with the service-role key, through import_mitre_attack().
 //
 // This is a script and not an app feature on purpose: the catalog is a ~54 MB download, far too heavy
 // for a serverless request, and it changes a few times a year. Run it once after setting up a
-// database, and again when you want the newest release. It only ever adds or refreshes records
-// marked "external"; anything entered by hand (or the demo seed) is left alone.
+// database, and again when you want the newest release. Techniques are reference data: rerunning it
+// only refreshes their names, tactics and descriptions.
 //
 //   Local database (after `npm run db:env`; the key is read from .env.local for the local stack only):
 //     npm run import:mitre
@@ -13,8 +13,7 @@
 //   From a file you already downloaded:
 //     npm run import:mitre -- --file enterprise-attack.json
 //
-// Safe to run more than once: nothing is created twice, and an actor's links are replaced by the
-// release you import.
+// Safe to run more than once: nothing is created twice.
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { ATTACK_STIX_URL, chunk, transformStix } from "./lib/mitre-transform.mjs";
@@ -66,35 +65,24 @@ async function main() {
     bundle = await response.json();
   }
 
-  const { techniques, malware, campaigns, actors } = transformStix(bundle);
-  console.log(
-    `Found ${techniques.length} techniques, ${malware.length} malware and tools, ${campaigns.length} campaigns, ${actors.length} groups.`,
-  );
-  if (techniques.length === 0 || actors.length === 0) {
+  const { techniques } = transformStix(bundle);
+  console.log(`Found ${techniques.length} techniques.`);
+  if (techniques.length === 0)
     return fail("The catalog looks empty or malformed; nothing was imported.");
-  }
 
   const admin = createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const totals = { techniques: 0, malware: 0, campaigns: 0, actors: 0, skipped: 0 };
-  // Order matters: an actor's links are resolved by name, so what it links to must exist first.
-  const steps = [
-    ["techniques", techniques, 250],
-    ["malware", malware, 150],
-    ["campaigns", campaigns, 100],
-    ["actors", actors, 25],
-  ];
-  for (const [key, items, size] of steps) {
-    for (const part of chunk(items, size)) {
-      const { data, error } = await admin.rpc("import_mitre_attack", { p: { [key]: part } });
-      if (error) return fail(`Importing ${key} failed: ${error.message}`);
-      for (const name of Object.keys(totals)) totals[name] += data[name] ?? 0;
-    }
-    console.log(`  ${key}: done`);
+  let imported = 0;
+  let skipped = 0;
+  for (const part of chunk(techniques, 250)) {
+    const { data, error } = await admin.rpc("import_mitre_attack", { p: { techniques: part } });
+    if (error) return fail(`Importing techniques failed: ${error.message}`);
+    imported += data.techniques ?? 0;
+    skipped += data.skipped ?? 0;
   }
   console.log(
-    `Imported ${totals.techniques} techniques, ${totals.malware} malware and tools, ${totals.campaigns} campaigns and ${totals.actors} groups (${totals.skipped} skipped: names you already track yourself, or entries the database refused).`,
+    `Imported ${imported} techniques (${skipped} skipped: entries the database refused).`,
   );
 }
 

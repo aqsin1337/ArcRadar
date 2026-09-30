@@ -47,9 +47,6 @@ export type IndicatorPromptContext = {
   source: string;
   description: string | null;
   tags: string[];
-  threatActors: string[];
-  campaigns: string[];
-  malware: string[];
 };
 
 export const AI_MAX_OUTPUT_TOKENS: Record<AiAnalysisKind, number> = {
@@ -200,12 +197,6 @@ function renderIndicatorContext(indicator: IndicatorPromptContext): string {
     `Description: ${indicator.description ?? "(none)"}`,
   ];
   if (indicator.tags.length > 0) lines.push(`Tags: ${indicator.tags.join(", ")}`);
-  if (indicator.threatActors.length > 0) {
-    lines.push(`Linked threat actors: ${indicator.threatActors.join(", ")}`);
-  }
-  if (indicator.campaigns.length > 0)
-    lines.push(`Linked campaigns: ${indicator.campaigns.join(", ")}`);
-  if (indicator.malware.length > 0) lines.push(`Linked malware: ${indicator.malware.join(", ")}`);
   return lines.join("\n");
 }
 

@@ -75,19 +75,20 @@ a model name) as active. Without either step the card explains why it has nothin
 failing; nothing is ever called with no active, configured, enabled provider. Every analysis is rate
 limited to 30 per signed-in person per hour, regardless of provider.
 
-## Alerts, investigations and threat intelligence
+## Alerts, investigations and the ATT&CK matrix
 
-These pages work from the seed (15 alerts, 6 investigations, 5 actors, 4 campaigns, 6 malware families, 15
-ATT&CK techniques, all labelled demo data). What each demo user can do there:
+These pages work from the seed (15 alerts, 6 investigations, 15 ATT&CK techniques, all labelled demo data; the
+seeded alerts name no technique, so the matrix highlights nothing until an alert from a sensor does. Run
+`npm run import:mitre` for the full technique catalog). What each demo user can do there:
 
-| Role    | Alerts and investigations                                          | Threat actors, campaigns, malware, MITRE | Indicators                   |
-| ------- | ------------------------------------------------------------------ | ---------------------------------------- | ---------------------------- |
-| viewer  | read only                                                          | read only                                | read only                    |
-| analyst | create, acknowledge, resolve, assign, open and work investigations | read only                                | create, edit, link, relate   |
-| admin   | everything, including deleting alerts and investigations           | create, edit, delete                     | everything, including delete |
+| Role    | Alerts and investigations                                          | MITRE ATT&CK matrix | Indicators                   |
+| ------- | ------------------------------------------------------------------ | ------------------- | ---------------------------- |
+| viewer  | read only                                                          | read only           | read only                    |
+| analyst | create, acknowledge, resolve, assign, open and work investigations | read only           | create, edit, relate         |
+| admin   | everything, including deleting alerts and investigations           | read only           | everything, including delete |
 
 The end-to-end tests create their own records (titles start with `E2E`) and remove them afterwards with the
-service role. Threat intelligence you add by hand is saved as `local` data, never as demo or external.
+service role.
 
 ## Telemetry (sensor data)
 
@@ -123,24 +124,24 @@ these credentials must never be used in production. All seeded records are marke
 
 ## Commands
 
-| Command                             | What it does                                                                                                                                                                                           |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `npm run dev` / `build` / `start`   | Next.js dev server / production build / production server                                                                                                                                              |
-| `npm run lint`, `typecheck`, `test` | ESLint, `next typegen` + `tsc`, Vitest                                                                                                                                                                 |
-| `npm run format` / `format:check`   | Prettier                                                                                                                                                                                               |
-| `npm run db:start` / `db:stop`      | Start / stop the local Supabase containers (data is kept)                                                                                                                                              |
-| `npm run db:reset`                  | Rebuild the local database from migrations + seed                                                                                                                                                      |
-| `npm run db:test`                   | Database security and constraint tests (stack must be running)                                                                                                                                         |
-| `npm run db:types`                  | Regenerate `src/types/database.ts` from the local schema                                                                                                                                               |
-| `npm run db:env`                    | Refresh Supabase values in `.env.local`                                                                                                                                                                |
-| `npm run api:smoke`                 | End-to-end API checks (app + local stack must be running)                                                                                                                                              |
-| `npm run e2e`                       | Browser tests in Chrome (local stack up, `npm run build` first)                                                                                                                                        |
-| `npm run check:contrast`            | WCAG contrast check of the design tokens, both themes                                                                                                                                                  |
-| `npm run apikey:create`             | Make an ingest API key as an administrator (`--url`, `--name`)                                                                                                                                         |
-| `npm run ingest:sample`             | Send fictional Wazuh alerts to a running app with a key                                                                                                                                                |
-| `npm run import:mitre`              | Load the MITRE ATT&CK catalog (techniques, threat actors, malware, campaigns) from the official STIX file; safe to rerun. Local by default, `--url` + `SUPABASE_SERVICE_ROLE_KEY` for a hosted project |
-| `npm run bootstrap:admin`           | Promote an existing account to admin directly (for a fresh hosted deployment with no admin yet — see `docs/DEPLOYMENT.md`; locally the seed already gives you one)                                     |
-| `npx supabase migration new <name>` | Create a new empty migration file                                                                                                                                                                      |
+| Command                             | What it does                                                                                                                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run dev` / `build` / `start`   | Next.js dev server / production build / production server                                                                                                                            |
+| `npm run lint`, `typecheck`, `test` | ESLint, `next typegen` + `tsc`, Vitest                                                                                                                                               |
+| `npm run format` / `format:check`   | Prettier                                                                                                                                                                             |
+| `npm run db:start` / `db:stop`      | Start / stop the local Supabase containers (data is kept)                                                                                                                            |
+| `npm run db:reset`                  | Rebuild the local database from migrations + seed                                                                                                                                    |
+| `npm run db:test`                   | Database security and constraint tests (stack must be running)                                                                                                                       |
+| `npm run db:types`                  | Regenerate `src/types/database.ts` from the local schema                                                                                                                             |
+| `npm run db:env`                    | Refresh Supabase values in `.env.local`                                                                                                                                              |
+| `npm run api:smoke`                 | End-to-end API checks (app + local stack must be running)                                                                                                                            |
+| `npm run e2e`                       | Browser tests in Chrome (local stack up, `npm run build` first)                                                                                                                      |
+| `npm run check:contrast`            | WCAG contrast check of the design tokens, both themes                                                                                                                                |
+| `npm run apikey:create`             | Make an ingest API key as an administrator (`--url`, `--name`)                                                                                                                       |
+| `npm run ingest:sample`             | Send fictional Wazuh alerts to a running app with a key                                                                                                                              |
+| `npm run import:mitre`              | Load the MITRE ATT&CK technique catalog (names and tactics) from the official STIX file; safe to rerun. Local by default, `--url` + `SUPABASE_SERVICE_ROLE_KEY` for a hosted project |
+| `npm run bootstrap:admin`           | Promote an existing account to admin directly (for a fresh hosted deployment with no admin yet — see `docs/DEPLOYMENT.md`; locally the seed already gives you one)                   |
+| `npx supabase migration new <name>` | Create a new empty migration file                                                                                                                                                    |
 
 ## Changing the database
 

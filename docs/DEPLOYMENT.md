@@ -101,7 +101,7 @@ anyone through the app itself (`PATCH /api/users/:id` needs an admin session).
 A hosted project starts empty. Two things fill it without any typing:
 
 - **Threat feeds** are imported by an administrator pressing **Import now** on the Integrations page (abuse.ch indicators, CISA known-exploited vulnerabilities).
-- **MITRE ATT&CK** (techniques, threat actors, malware, campaigns) is loaded once from your machine:
+- **MITRE ATT&CK** (the technique catalog the matrix page lays out) is loaded once from your machine:
   ```bash
   SUPABASE_SERVICE_ROLE_KEY=<hosted service role key> \n    npm run import:mitre -- --url <hosted project URL>
   ```

@@ -1,7 +1,11 @@
+import { after } from "next/server";
 import { ingestRoute } from "@/lib/api/ingest-route";
 import { ok } from "@/lib/api/response";
 import { parseJsonBody } from "@/lib/api/validate";
 import { MAX_BODY_BYTES } from "@/lib/telemetry/constants";
+import { writeAuditLog } from "@/lib/audit/write";
+import { enrichIngestedIndicators } from "@/lib/telemetry/enrich";
+import { ingestRecords } from "@/lib/telemetry/repository";
 import { ingestBatch } from "@/lib/telemetry/service";
 import { wazuhBatchSchema, wazuhSource } from "@/lib/telemetry/wazuh";
 
@@ -17,11 +21,22 @@ export const dynamic = "force-dynamic";
  * reason; it never fails the request. Answers `{ received, events_created, alerts_created, duplicates,
  * assets_created, indicators_created, rejected }`. Rate-limited per key (`ingestByKey`): a real
  * sensor delivers steadily, so the cap only bites a misbehaving or compromised key.
+ *
+ * Once the answer is sent, the new indicators are researched at the live providers that are set up
+ * (VirusTotal, OTX, AbuseIPDB, Shodan), a few per delivery and each only once, and the verdicts are
+ * recorded on them (src/lib/telemetry/enrich.ts). Without a provider nothing happens.
  */
 export const POST = ingestRoute(
   { scope: "ingest:wazuh", rateLimit: "ingestByKey" },
   async ({ request, principal }) => {
     const body = await parseJsonBody(request, wazuhBatchSchema, MAX_BODY_BYTES);
-    return ok(await ingestBatch(principal, wazuhSource, body.alerts, request));
+    return ok(
+      await ingestBatch(principal, wazuhSource, body.alerts, request, {
+        store: ingestRecords,
+        audit: writeAuditLog,
+        // After the response: research the new indicators at the live providers (when any is set up).
+        enrich: (records) => after(() => enrichIngestedIndicators(records, request)),
+      }),
+    );
   },
 );

@@ -6,6 +6,7 @@ import { indicatorListQuerySchema } from "@/lib/indicators/schema";
 import { listIndicators } from "@/lib/indicators/service";
 import { investigationListQuerySchema } from "@/lib/investigations/schema";
 import { listInvestigations } from "@/lib/investigations/service";
+import { getTopTechniques } from "@/lib/mitre/service";
 import type { DashboardQuery } from "./schema";
 import {
   findActivity,
@@ -13,7 +14,6 @@ import {
   findCounts,
   findIndicatorTypeCounts,
   findIndicatorVerdictCounts,
-  findTopThreatActors,
 } from "./repository";
 import type { DashboardData } from "./types";
 
@@ -35,7 +35,7 @@ export async function getDashboardData(
     ioc_distribution,
     verdict_distribution,
     activity,
-    top_threat_actors,
+    top_techniques,
     topMalicious,
     recentIndicators,
     recentAlerts,
@@ -46,7 +46,7 @@ export async function getDashboardData(
     findIndicatorTypeCounts(auth.supabase),
     findIndicatorVerdictCounts(auth.supabase),
     findActivity(auth.supabase, days),
-    findTopThreatActors(auth.supabase, TOP_LIMIT),
+    getTopTechniques(auth.supabase, TOP_LIMIT),
     listIndicators(
       auth.supabase,
       indicatorListQuerySchema.parse({
@@ -91,7 +91,7 @@ export async function getDashboardData(
     ioc_distribution,
     verdict_distribution,
     activity,
-    top_threat_actors,
+    top_techniques,
     top_malicious_indicators: topMalicious.items,
     recent_indicators: recentIndicators.items,
     recent_alerts: recentAlerts.items,

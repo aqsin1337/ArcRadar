@@ -16,7 +16,7 @@ import { INDICATOR_TYPE_SHORT_LABELS, RELATIONSHIP_VERBS } from "@/lib/indicator
 import { INTEL_SUBJECT_LABELS } from "@/lib/intel/constants";
 import type { LookupResult } from "@/lib/intel/service";
 import type { TimelineEntry } from "@/lib/intel/timeline";
-import type { IndicatorRelationship, LinkedEntity } from "@/lib/indicators/types";
+import type { IndicatorRelationship } from "@/lib/indicators/types";
 
 function OtherIndicator({ link }: { link: IndicatorRelationship }) {
   return (
@@ -26,36 +26,6 @@ function OtherIndicator({ link }: { link: IndicatorRelationship }) {
     >
       {link.other.value}
     </Link>
-  );
-}
-
-function Linked({
-  title,
-  items,
-  basePath,
-}: {
-  title: string;
-  items: LinkedEntity[];
-  basePath: string;
-}) {
-  if (items.length === 0) return null;
-  return (
-    <div className="space-y-1.5">
-      <h3 className="text-xs font-semibold tracking-wide text-muted uppercase">{title}</h3>
-      <ul className="flex flex-wrap gap-x-3 gap-y-1">
-        {items.map((item) => (
-          <li key={item.id} className="inline-flex items-center gap-1.5 text-sm">
-            <Link
-              href={`${basePath}/${item.id}`}
-              className="font-medium text-primary hover:underline"
-            >
-              {item.name}
-            </Link>
-            <OriginBadge origin={item.origin} />
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 
@@ -97,13 +67,6 @@ export function WorkspaceCard({ result, canAdd }: { result: LookupResult; canAdd
               </DetailRow>
             </dl>
             {indicator.tags.length > 0 && <TagChips tags={indicator.tags} />}
-            <Linked
-              title="Threat actors"
-              items={indicator.threat_actors}
-              basePath="/threat-actors"
-            />
-            <Linked title="Campaigns" items={indicator.campaigns} basePath="/campaigns" />
-            <Linked title="Malware" items={indicator.malware} basePath="/malware" />
             <Link
               href={`/indicators/${indicator.id}`}
               className={buttonClasses({ variant: "secondary", className: "w-full" })}

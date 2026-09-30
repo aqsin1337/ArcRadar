@@ -14,7 +14,6 @@ import { indicatorListQuerySchema } from "@/lib/indicators/schema";
 import { listIndicators } from "@/lib/indicators/service";
 import { getInvestigation } from "@/lib/investigations/service";
 import { findDisplayNames } from "@/lib/team/repository";
-import { getActor } from "@/lib/threat-intel/service";
 import { vulnerabilityListQuerySchema } from "@/lib/vulnerabilities/schema";
 import { getVulnerabilityStats, listVulnerabilities } from "@/lib/vulnerabilities/service";
 import type { Json } from "@/types/database";
@@ -28,7 +27,6 @@ import type {
   ReportContent,
   ReportDetail,
   ReportListItem,
-  ThreatActorReportContent,
   VulnerabilitiesReportContent,
 } from "./types";
 
@@ -78,31 +76,6 @@ async function buildContent(
         content,
         title: input.title ?? `Investigation report: ${inv.title}`,
         investigation_id: inv.id,
-      };
-    }
-
-    case "threat_actor": {
-      const actor = await getActor(auth.supabase, input.threat_actor_id);
-      const content: ThreatActorReportContent = {
-        actor: {
-          id: actor.id,
-          name: actor.name,
-          description: actor.description,
-          motivation: actor.motivation,
-        },
-        campaigns: actor.campaigns.map((c) => ({ id: c.id, name: c.name, status: c.status })),
-        malware: actor.malware.map((m) => ({
-          id: m.id,
-          name: m.name,
-          malware_type: m.malware_type,
-        })),
-        techniques: actor.techniques.map((t) => ({ id: t.id, name: t.name })),
-        indicator_count: actor.indicators.total,
-      };
-      return {
-        content,
-        title: input.title ?? `Threat actor activity: ${actor.name}`,
-        investigation_id: null,
       };
     }
 

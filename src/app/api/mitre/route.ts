@@ -1,20 +1,24 @@
+import { z } from "zod";
 import { protectedRoute } from "@/lib/api/handler";
 import { ok } from "@/lib/api/response";
 import { parseQuery } from "@/lib/api/validate";
-import { techniqueListQuerySchema } from "@/lib/threat-intel/schema";
-import { listTechniques } from "@/lib/threat-intel/service";
+import { getMatrix } from "@/lib/mitre/service";
 
 export const dynamic = "force-dynamic";
 
+const querySchema = z.object({ observed: z.enum(["1"]).optional() });
+
 /**
- * GET /api/mitre?q&tactic&sort&order&page&page_size
- * The MITRE ATT&CK techniques the workspace knows (reference data, read-only here). Text search over
- * the id, name, description and tactics; `tactic` filters by an exact tactic name. Needs threat_intel:read.
+ * GET /api/mitre[?observed=1]
+ * The ATT&CK matrix: one entry per tactic (in attack order) with its techniques and their
+ * sub-techniques, and on each technique what this workspace's alerts say about it (`observed`: how
+ * many alerts, the worst severity, the latest one; null when no alert names it). `observed=1` keeps
+ * only what was observed. Needs threat_intel:read.
  */
 export const GET = protectedRoute(
   { permissions: ["threat_intel:read"] },
   async ({ request, auth }) => {
-    const query = parseQuery(request, techniqueListQuerySchema);
-    return ok(await listTechniques(auth.supabase, query));
+    const { observed } = parseQuery(request, querySchema);
+    return ok(await getMatrix(auth.supabase, { observedOnly: observed === "1" }));
   },
 );

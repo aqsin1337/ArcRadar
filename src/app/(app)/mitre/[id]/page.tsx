@@ -1,14 +1,17 @@
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { RecordChips, ValueChips } from "@/components/threat-intel/linked-records";
+import { Badge } from "@/components/ui/badge";
+import { buttonClasses } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DetailRow as Row } from "@/components/ui/detail-list";
+import { AlertStatusBadge, OriginBadge, SeverityBadge } from "@/components/ui/domain-badges";
 import { AccessDenied } from "@/components/ui/states";
 import { ApiError } from "@/lib/api/errors";
+import { alertListHref } from "@/lib/alerts/url";
 import { getPageAuthContext } from "@/lib/auth/session";
-import { getTechnique, parseTechniqueId } from "@/lib/threat-intel/service";
-import type { TechniqueDetail } from "@/lib/threat-intel/types";
+import { formatDateTime } from "@/lib/format";
+import { getTechniqueDetail, parseTechniqueId, type TechniqueDetail } from "@/lib/mitre/service";
 
 export default async function TechniquePage({ params }: PageProps<"/mitre/[id]">) {
   const auth = await getPageAuthContext();
@@ -20,11 +23,13 @@ export default async function TechniquePage({ params }: PageProps<"/mitre/[id]">
 
   let technique: TechniqueDetail | null = null;
   try {
-    technique = await getTechnique(auth.supabase, id);
+    technique = await getTechniqueDetail(auth.supabase, id);
   } catch (error) {
     if (!(error instanceof ApiError && error.status === 404)) throw error;
   }
   if (!technique) notFound();
+
+  const canReadAlerts = auth.permissions.has("alerts:read");
 
   return (
     <>
@@ -35,7 +40,7 @@ export default async function TechniquePage({ params }: PageProps<"/mitre/[id]">
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground"
       >
         <ArrowLeft aria-hidden className="size-4" />
-        All techniques
+        ATT&amp;CK matrix
       </Link>
 
       <div className="mb-6 min-w-0 space-y-2">
@@ -46,12 +51,57 @@ export default async function TechniquePage({ params }: PageProps<"/mitre/[id]">
           <span className="font-mono">{technique.id}</span> {technique.name}
         </h1>
         <p className="text-sm text-muted">
-          MITRE ATT&CK reference data, not intelligence about your environment.
+          {technique.observed
+            ? `Named by ${technique.observed.alert_count} ${technique.observed.alert_count === 1 ? "alert" : "alerts"} in this workspace.`
+            : "No alert in this workspace names this technique."}{" "}
+          The description below is MITRE reference text, not intelligence about your environment.
         </p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="min-w-0 space-y-4 lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Alerts that name it</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!canReadAlerts ? (
+                <p className="text-sm text-muted">You do not have access to alerts.</p>
+              ) : technique.alerts.length === 0 ? (
+                <p className="text-sm text-muted">
+                  Nothing yet. When a sensor alert maps to this technique, it is listed here.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  <ul className="divide-y divide-border">
+                    {technique.alerts.map((alert) => (
+                      <li key={alert.id} className="flex flex-wrap items-center gap-2 py-2.5">
+                        <Link
+                          href={`/alerts/${alert.id}`}
+                          className="min-w-0 flex-1 font-medium [overflow-wrap:anywhere] hover:underline"
+                        >
+                          {alert.title}
+                        </Link>
+                        <SeverityBadge severity={alert.severity} />
+                        <AlertStatusBadge status={alert.status} />
+                        <OriginBadge origin={alert.origin} />
+                        <span className="text-xs text-muted">
+                          {formatDateTime(alert.created_at)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Link
+                    href={alertListHref({}, { technique: technique.id })}
+                    className={buttonClasses({ variant: "secondary" })}
+                  >
+                    Open all {technique.alert_total} in the alert list
+                  </Link>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Description</CardTitle>
@@ -63,26 +113,9 @@ export default async function TechniquePage({ params }: PageProps<"/mitre/[id]">
                 </p>
               ) : (
                 <p className="text-sm text-muted">
-                  No description is stored here. The ATT&CK page has the full write-up.
+                  No description is stored here. The ATT&amp;CK page has the full write-up.
                 </p>
               )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Threat actors known to use it</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RecordChips
-                empty="No threat actor in this workspace is linked to this technique."
-                items={technique.actors.map((item) => ({
-                  id: item.id,
-                  label: item.name,
-                  href: `/threat-actors/${item.id}`,
-                  origin: item.origin,
-                }))}
-              />
             </CardContent>
           </Card>
         </div>
@@ -98,8 +131,31 @@ export default async function TechniquePage({ params }: PageProps<"/mitre/[id]">
                   <span className="font-mono">{technique.id}</span>
                 </Row>
                 <Row label="Tactics">
-                  <ValueChips values={technique.tactics} empty="Not recorded" />
+                  <span className="flex flex-wrap gap-1.5">
+                    {technique.tactics.length === 0 ? (
+                      <span className="text-muted">Not recorded</span>
+                    ) : (
+                      technique.tactics.map((tactic) => (
+                        <Badge key={tactic} tone="violet">
+                          {tactic}
+                        </Badge>
+                      ))
+                    )}
+                  </span>
                 </Row>
+                {technique.parent_id && (
+                  <Row label="Parent technique">
+                    <Link
+                      href={`/mitre/${technique.parent_id}`}
+                      className="font-mono text-primary hover:underline"
+                    >
+                      {technique.parent_id}
+                    </Link>
+                  </Row>
+                )}
+                {technique.observed && (
+                  <Row label="Last seen">{formatDateTime(technique.observed.last_seen)}</Row>
+                )}
                 {technique.url && (
                   <Row label="Reference">
                     <a
@@ -117,6 +173,25 @@ export default async function TechniquePage({ params }: PageProps<"/mitre/[id]">
               </dl>
             </CardContent>
           </Card>
+
+          {technique.subtechniques.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Sub-techniques</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-1.5 text-sm">
+                  {technique.subtechniques.map((sub) => (
+                    <li key={sub.id}>
+                      <Link href={`/mitre/${sub.id}`} className="hover:underline">
+                        <span className="font-mono">{sub.id}</span> {sub.name}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </>

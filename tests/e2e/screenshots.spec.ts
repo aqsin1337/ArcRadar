@@ -304,72 +304,22 @@ for (const theme of ["dark", "light"]) {
       }
     });
 
-    test(`threat intelligence pages, ${theme}, ${size}`, async ({ browser, baseURL }) => {
+    test(`ATT&CK matrix, ${theme}, ${size}`, async ({ browser, baseURL }) => {
       const { context, page } = await open(browser, baseURL!, size, theme, STORAGE.admin);
-      const shot = async (name: string, fullPage = true) => {
+      const shot = async (name: string, fullPage = false) => {
         await page.waitForLoadState("networkidle");
         await page.waitForTimeout(500);
         await page.screenshot({ path: `${DIR}/${name}-${theme}-${size}.png`, fullPage });
       };
-      const open1 = async (list: string, name: string) => {
-        await page.goto(list);
-        await page.getByRole("table").waitFor();
-        await page.getByRole("link", { name, exact: true }).first().click();
-        await page.getByTestId("record-title").waitFor();
-      };
-
-      await page.goto("/threat-actors");
-      await page.getByRole("table", { name: "Threat actors" }).waitFor();
-      await shot("threat-actors");
-      await page.goto("/threat-actors?q=zzz-nothing-matches");
-      await page.getByText("No threat actors match").waitFor();
-      await shot("threat-actors-empty");
-      await open1("/threat-actors", "Crimson Harbor");
-      await shot("threat-actor-detail");
-      await page.getByRole("button", { name: "Delete" }).click();
-      await page.getByRole("dialog").waitFor();
-      await shot("threat-actor-delete-dialog", false);
-      await page.keyboard.press("Escape");
-      await page.getByRole("link", { name: "Edit" }).click();
-      await page.getByRole("form", { name: "Edit threat actor" }).waitFor();
-      await shot("threat-actor-edit");
-
-      await page.goto("/threat-actors/new");
-      await page.getByRole("form", { name: "New threat actor" }).waitFor();
-      await page.getByRole("button", { name: "Create threat actor" }).click();
-      await shot("threat-actor-new-errors");
-
-      await page.goto("/campaigns");
-      await page.getByRole("table", { name: "Campaigns" }).waitFor();
-      await shot("campaigns");
-      await open1("/campaigns", "Harbor Lights");
-      await shot("campaign-detail");
-
-      await page.goto("/malware");
-      await page.getByRole("table", { name: "Malware families" }).waitFor();
-      await shot("malware");
-      await open1("/malware", "NightLoader");
-      await shot("malware-detail");
-
       await page.goto("/mitre");
-      await page.getByRole("table", { name: "MITRE ATT&CK techniques" }).waitFor();
+      await page.getByRole("region", { name: /ATT&CK matrix/ }).waitFor();
       await shot("mitre");
+      await page.goto("/mitre?sub=1&observed=1");
+      await page.waitForLoadState("networkidle");
+      await shot("mitre-seen-only");
       await page.goto("/mitre/T1566");
       await page.getByTestId("record-title").waitFor();
-      await shot("mitre-technique");
-
-      await page.goto("/indicators?q=198.51.100.23");
-      await page.getByRole("link", { name: "198.51.100.23", exact: true }).first().click();
-      await page.getByTestId("indicator-value").waitFor();
-      await page.getByRole("button", { name: "Edit links" }).click();
-      await page.getByRole("form", { name: "Edit linked intelligence" }).waitFor();
-      await shot("indicator-links-editor");
-
-      await page.goto("/dashboard");
-      await page.getByRole("combobox", { name: "Search ArcRadar" }).fill("harbor");
-      await page.getByRole("listbox").waitFor();
-      await page.getByRole("group", { name: "Threat actors" }).waitFor();
-      await shot("global-search-threat-intel", false);
+      await shot("mitre-technique", true);
       await context.close();
     });
 

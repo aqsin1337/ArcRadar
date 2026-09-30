@@ -165,9 +165,7 @@ test.describe("browsing indicators (viewer)", () => {
     await expect(rows(page).first()).toBeVisible();
   });
 
-  test("the detail page shows the assessment, provenance, links and relationships", async ({
-    page,
-  }) => {
+  test("the detail page shows the assessment, provenance and relationships", async ({ page }) => {
     await page.goto("/indicators?q=198.51.100.23");
     await page.getByRole("cell").getByRole("link", { name: "198.51.100.23", exact: true }).click();
     await expect(page.getByTestId("indicator-value")).toHaveText("198.51.100.23");
@@ -179,7 +177,6 @@ test.describe("browsing indicators (viewer)", () => {
     const main = page.getByRole("main");
     await expect(main.getByRole("heading", { name: "Relationships" })).toBeVisible();
     await expect(main.getByRole("link", { name: /harbor-lights-c2\.example/ })).toBeVisible();
-    await expect(main.getByText("Crimson Harbor")).toBeVisible();
     await expect(main.getByText("Confidence")).toBeVisible();
 
     // A related indicator is a link to its own page.

@@ -144,6 +144,29 @@ async function tryProvider(
   }
 }
 
+/**
+ * Asks every live provider about a subject with nobody signed in: the research ArcRadar starts by
+ * itself when a sensor alert brings a new indicator in. The same rules as a person's lookup apply to
+ * what may leave the workspace (never a private or reserved address, never a URL with credentials),
+ * and the demo provider is never used: an answer is either real or there is none. Nothing throws; a
+ * provider that could not answer is simply missing from `results`.
+ */
+export async function researchLive(
+  target: IntelTarget,
+  deps: Pick<LookupDeps, "registry" | "now" | "timeoutMs">,
+): Promise<{ results: ProviderResult[]; attempts: ProviderAttempt[] }> {
+  const live = deps.registry.external.filter((provider) => supportsKind(provider, target.kind));
+  if (live.length === 0 || externalSkipReason(target)) return { results: [], attempts: [] };
+  const context = { signal: AbortSignal.timeout(deps.timeoutMs), now: deps.now() };
+  const answers = await Promise.all(live.map((provider) => tryProvider(provider, target, context)));
+  return {
+    results: answers.flatMap(({ attempt, profile }) =>
+      profile ? [{ provider: attempt.provider, profile }] : [],
+    ),
+    attempts: answers.map(({ attempt }) => attempt),
+  };
+}
+
 /** The value as it goes into the audit trail: a URL loses its query string and fragment (they may hold tokens). */
 function auditSubject(target: IntelTarget): string {
   if (target.kind !== "url") return target.value;

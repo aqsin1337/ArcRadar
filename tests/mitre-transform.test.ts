@@ -27,6 +27,13 @@ const bundle = {
     },
     {
       type: "attack-pattern",
+      id: "attack-pattern--c2",
+      name: "Web Service",
+      external_references: ref("T1102"),
+      kill_chain_phases: [{ kill_chain_name: "mitre-attack", phase_name: "command-and-control" }],
+    },
+    {
+      type: "attack-pattern",
       id: "attack-pattern--revoked",
       name: "Revoked",
       revoked: true,
@@ -45,67 +52,10 @@ const bundle = {
       name: "No ATT&CK id",
       external_references: [{ source_name: "capec", external_id: "CAPEC-1" }],
     },
-    {
-      type: "malware",
-      id: "malware--1",
-      name: "Emotet",
-      x_mitre_platforms: ["Windows"],
-      description: "d",
-    },
-    { type: "tool", id: "tool--1", name: "Mimikatz", x_mitre_platforms: ["Windows"] },
-    { type: "malware", id: "malware--dup", name: "EMOTET" },
-    {
-      type: "campaign",
-      id: "campaign--1",
-      name: "Operation Example",
-      first_seen: "2020-01-01T00:00:00.000Z",
-      last_seen: "not a date",
-    },
-    {
-      type: "intrusion-set",
-      id: "intrusion-set--1",
-      name: "APT99",
-      aliases: ["APT99", "Blue Fox"],
-      description: "A group.",
-    },
-    { type: "intrusion-set", id: "intrusion-set--revoked", name: "Old Group", revoked: true },
-    {
-      type: "relationship",
-      relationship_type: "uses",
-      source_ref: "intrusion-set--1",
-      target_ref: "attack-pattern--1",
-    },
-    {
-      type: "relationship",
-      relationship_type: "uses",
-      source_ref: "intrusion-set--1",
-      target_ref: "attack-pattern--revoked",
-    },
-    {
-      type: "relationship",
-      relationship_type: "uses",
-      source_ref: "intrusion-set--1",
-      target_ref: "malware--1",
-    },
-    {
-      type: "relationship",
-      relationship_type: "uses",
-      source_ref: "intrusion-set--1",
-      target_ref: "tool--1",
-    },
-    {
-      type: "relationship",
-      relationship_type: "attributed-to",
-      source_ref: "campaign--1",
-      target_ref: "intrusion-set--1",
-    },
-    {
-      type: "relationship",
-      relationship_type: "uses",
-      source_ref: "intrusion-set--1",
-      target_ref: "malware--1",
-      revoked: true,
-    },
+    // Not techniques: nothing of these is imported (ArcRadar has no actors, malware or campaigns).
+    { type: "malware", id: "malware--1", name: "Emotet" },
+    { type: "intrusion-set", id: "intrusion-set--1", name: "APT99" },
+    { type: "campaign", id: "campaign--1", name: "Operation Example" },
   ],
 };
 
@@ -113,57 +63,30 @@ describe("transformStix", () => {
   const out = transformStix(bundle);
 
   it("keeps techniques with an ATT&CK id, drops revoked, deprecated and foreign ones", () => {
-    expect(out.techniques.map((t) => t.id)).toEqual(["T1566", "T1566.001"]);
-    expect(out.techniques[0]).toMatchObject({
+    expect(out.techniques.map((t) => t.id)).toEqual(["T1102", "T1566", "T1566.001"]);
+    expect(out.techniques[1]).toMatchObject({
       name: "Phishing",
       tactics: ["Initial Access"],
       url: "https://attack.mitre.org/T1566",
     });
   });
 
+  it("imports nothing but techniques", () => {
+    expect(Object.keys(out)).toEqual(["techniques"]);
+  });
+
+  it("writes tactic names the way the matrix does, with a small 'and'", () => {
+    expect(out.techniques[0].tactics).toEqual(["Command and Control"]);
+  });
+
   it("cleans citations and markdown links out of descriptions", () => {
-    expect(out.techniques[0].description).toBe("Sends mail. See the docs.");
-    expect(out.techniques[1].description).toBeNull();
-  });
-
-  it("lists malware and tools once per name, whatever the case", () => {
-    expect(out.malware.map((m) => [m.name, m.malware_type])).toEqual([
-      ["Emotet", "malware"],
-      ["Mimikatz", "tool"],
-    ]);
-    expect(out.malware[0].platforms).toEqual(["Windows"]);
-  });
-
-  it("reads campaigns, turning an unreadable date into null", () => {
-    expect(out.campaigns).toEqual([
-      {
-        name: "Operation Example",
-        description: null,
-        first_seen: "2020-01-01T00:00:00.000Z",
-        last_seen: null,
-      },
-    ]);
-  });
-
-  it("builds actors with their techniques, malware and campaigns, and never links what was dropped", () => {
-    expect(out.actors).toHaveLength(1);
-    expect(out.actors[0]).toMatchObject({
-      name: "APT99",
-      aliases: ["Blue Fox"],
-      technique_ids: ["T1566"],
-      malware_names: ["Emotet", "Mimikatz"],
-      campaign_names: ["Operation Example"],
-    });
+    expect(out.techniques[1].description).toBe("Sends mail. See the docs.");
+    expect(out.techniques[2].description).toBeNull();
   });
 
   it("copes with an empty or malformed bundle", () => {
     for (const input of [null, {}, { objects: "no" }, { objects: [] }]) {
-      expect(transformStix(input)).toEqual({
-        techniques: [],
-        malware: [],
-        campaigns: [],
-        actors: [],
-      });
+      expect(transformStix(input)).toEqual({ techniques: [] });
     }
   });
 });
@@ -178,6 +101,7 @@ describe("small helpers", () => {
   it("tacticName", () => {
     expect(tacticName("defense-evasion")).toBe("Defense Evasion");
     expect(tacticName("execution")).toBe("Execution");
+    expect(tacticName("command-and-control")).toBe("Command and Control");
   });
 
   it("chunk", () => {

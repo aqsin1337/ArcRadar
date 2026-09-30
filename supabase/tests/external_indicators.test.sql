@@ -102,6 +102,8 @@ begin
      or ind.first_seen <> '2026-09-01T00:00:00Z' then
     raise exception 'FAIL new record was stored as %', to_jsonb(ind);
   end if;
+  -- a feed entry has not been researched by a lookup
+  if ind.researched_at is not null then raise exception 'FAIL a feed entry counts as researched'; end if;
   if exists (select 1 from public.indicators where value in ('999.1.1.1', '203.0.113.151', 'abc')) then
     raise exception 'FAIL a value the database refuses was stored';
   end if;
@@ -132,7 +134,8 @@ begin
   end if;
   select * into ind from public.indicators where value = 'fxext-local.example';
   if ind.origin <> 'local' or ind.verdict <> 'benign' or ind.severity <> 'low' or ind.confidence <> 90
-     or ind.description <> 'checked by hand' or ind.last_seen <> '2020-01-02T00:00:00Z' or ind.source <> 'manual' then
+     or ind.description <> 'checked by hand' or ind.last_seen <> '2020-01-02T00:00:00Z' or ind.source <> 'manual'
+     or ind.researched_at is not null then
     raise exception 'FAIL a local indicator was changed: %', to_jsonb(ind);
   end if;
   select * into ind from public.indicators where value = '203.0.113.150';
@@ -170,6 +173,8 @@ begin
   if ind.last_seen <> '2026-09-25T00:00:00Z' or ind.first_seen <> '2026-09-01T00:00:00Z' then
     raise exception 'FAIL last_seen did not move forward, or first_seen moved (% / %)', ind.last_seen, ind.first_seen;
   end if;
+  -- "nothing found" is still an answer: the lookup counts as research although the verdict stayed
+  if ind.researched_at is null then raise exception 'FAIL a lookup that changed nothing was not recorded as research'; end if;
 
   -- ...but a worse one replaces a weaker one, with its severity, confidence and source.
   set local role service_role;
@@ -183,6 +188,7 @@ begin
      or ind.source <> 'lookup:virustotal' or ind.description <> 'now malicious' then
     raise exception 'FAIL a worse verdict did not replace a weaker one: %', to_jsonb(ind);
   end if;
+  if ind.researched_at is null then raise exception 'FAIL an upgrading lookup was not recorded as research'; end if;
 
   -- A date in the future is clamped to now.
   set local role service_role;
@@ -193,6 +199,30 @@ begin
   reset role;
   if (select last_seen from public.indicators where value = 'fxext-future.example') > now() then
     raise exception 'FAIL a future date was stored';
+  end if;
+end $$;
+
+-- 5b. researched_at follows the lookups, never the feeds
+do $$
+declare before_at timestamptz;
+begin
+  set local role service_role;
+  perform public.record_external_indicators('lookup:virustotal', $json$[
+    {"type": "ipv4", "value": "203.0.113.155", "verdict": "unknown", "severity": "low", "confidence": 30}
+  ]$json$::jsonb);
+  reset role;
+  if (select researched_at from public.indicators where value = '203.0.113.155') is null then
+    raise exception 'FAIL a new indicator from a lookup was not marked researched';
+  end if;
+
+  select researched_at into before_at from public.indicators where value = 'fxext-new.example';
+  set local role service_role;
+  perform public.record_external_indicators('urlhaus', $json$[
+    {"type": "domain", "value": "fxext-new.example", "verdict": "malicious", "severity": "high", "confidence": 85}
+  ]$json$::jsonb);
+  reset role;
+  if (select researched_at from public.indicators where value = 'fxext-new.example') is distinct from before_at then
+    raise exception 'FAIL a feed refresh moved researched_at';
   end if;
 end $$;
 

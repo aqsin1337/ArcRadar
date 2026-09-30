@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthClient, AuthContext } from "@/lib/auth/context";
 import { permissionsForRole } from "@/lib/rbac/permissions";
-import type { ActorDetail } from "@/lib/threat-intel/types";
 import type { InvestigationDetail } from "@/lib/investigations/types";
 import type { VulnerabilityStats } from "@/lib/vulnerabilities/types";
 
@@ -12,7 +11,6 @@ const repo = vi.hoisted(() => ({
   deleteReportRow: vi.fn(),
 }));
 const investigations = vi.hoisted(() => ({ getInvestigation: vi.fn() }));
-const threatIntel = vi.hoisted(() => ({ getActor: vi.fn() }));
 const indicators = vi.hoisted(() => ({ listIndicators: vi.fn() }));
 const alerts = vi.hoisted(() => ({ listAlerts: vi.fn(), getAlertStats: vi.fn() }));
 const vulnerabilities = vi.hoisted(() => ({
@@ -29,7 +27,6 @@ const team = vi.hoisted(() => ({ findDisplayNames: vi.fn().mockResolvedValue(new
 
 vi.mock("@/lib/reports/repository", () => repo);
 vi.mock("@/lib/investigations/service", () => investigations);
-vi.mock("@/lib/threat-intel/service", () => threatIntel);
 vi.mock("@/lib/indicators/service", () => indicators);
 vi.mock("@/lib/alerts/service", () => alerts);
 vi.mock("@/lib/vulnerabilities/service", () => vulnerabilities);
@@ -73,6 +70,7 @@ describe("createReportSchema", () => {
         investigation_id: "11111111-1111-4111-8111-111111111111",
       }).success,
     ).toBe(true);
+    // Threat actors no longer exist in ArcRadar: that report type is refused.
     expect(createReportSchema.safeParse({ type: "threat_actor" }).success).toBe(false);
     expect(createReportSchema.safeParse({ type: "vulnerabilities" }).success).toBe(true);
     // A field belonging to a different type is rejected (strict per-branch objects).
@@ -150,33 +148,6 @@ describe("createReport", () => {
       expect.objectContaining({ action: "report.created", entityId: "report-1" }),
       request,
     );
-  });
-
-  it("builds a threat actor report from the actor's linked records", async () => {
-    const actor: ActorDetail = {
-      id: "actor-1",
-      name: "Fxreport Actor",
-      description: "desc",
-      motivation: "financial",
-      campaigns: [{ id: "c1", name: "Camp", status: "active", origin: "local", last_seen: null }],
-      malware: [{ id: "m1", name: "Mal", malware_type: null, origin: "local" }],
-      techniques: [{ id: "T1110", name: "Brute Force", tactics: [] }],
-      indicators: { items: [], total: 7 },
-    } as unknown as ActorDetail;
-    threatIntel.getActor.mockResolvedValue(actor);
-
-    const report = await createReport(
-      auth("admin"),
-      { type: "threat_actor", threat_actor_id: "22222222-2222-4222-8222-222222222222" },
-      request,
-    );
-
-    expect(report.title).toBe("Threat actor activity: Fxreport Actor");
-    expect(report.content).toMatchObject({
-      actor: { id: "actor-1", name: "Fxreport Actor" },
-      indicator_count: 7,
-      campaigns: [{ id: "c1", name: "Camp", status: "active" }],
-    });
   });
 
   it("builds a vulnerability summary from severity stats and the exploited list", async () => {

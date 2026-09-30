@@ -17,7 +17,7 @@ import {
   AlertPanel,
   IndicatorPanel,
   InvestigationPanel,
-  TopThreatActorsPanel,
+  TopTechniquesPanel,
 } from "@/components/dashboard/panels";
 import { StatTiles } from "@/components/dashboard/stat-tiles";
 import { RefreshButton } from "@/components/refresh-button";
@@ -139,7 +139,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AlertPanel items={data.recent_alerts} />
           <InvestigationPanel items={data.recent_investigations} />
-          <TopThreatActorsPanel items={data.top_threat_actors} />
+          <TopTechniquesPanel items={data.top_techniques} />
           <IndicatorPanel
             title="Recently seen indicators"
             viewAllHref="/indicators"

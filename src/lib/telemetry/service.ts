@@ -1,6 +1,7 @@
 import "server-only";
 import { buildPage, type Page } from "@/lib/api/pagination";
 import { writeAuditLog } from "@/lib/audit/write";
+import { logError } from "@/lib/log";
 import type { AuthClient } from "@/lib/auth/context";
 import type { ApiKeyPrincipal } from "@/lib/api-keys/types";
 import { buildSourceCards, type SourceCard } from "./health";
@@ -11,6 +12,7 @@ import type {
   EventListItem,
   IngestResult,
   IngestSummary,
+  NormalizedRecord,
   TelemetrySource,
 } from "./types";
 
@@ -27,6 +29,12 @@ const NOTHING: IngestSummary = {
 export type IngestDeps = {
   store: typeof ingestRecords;
   audit: typeof writeAuditLog;
+  /**
+   * Called with the records of a stored batch, after they are stored. The route uses it to start the
+   * research of the new indicators once the response is on its way (see ./enrich.ts); it must never
+   * throw into, or delay, the delivery it follows.
+   */
+  enrich?: (records: readonly NormalizedRecord[]) => void;
 };
 
 const defaultDeps = (): IngestDeps => ({ store: ingestRecords, audit: writeAuditLog });
@@ -45,6 +53,14 @@ export async function ingestBatch(
 ): Promise<IngestResult> {
   const { records, rejected } = source.parse(items);
   const summary = records.length > 0 ? await deps.store(source.id, records) : NOTHING;
+  if (records.length > 0) {
+    try {
+      deps.enrich?.(records);
+    } catch (error) {
+      // Research is a bonus on top of storing; a failure to schedule it is not the sender's problem.
+      logError("telemetry.research_not_scheduled", error, {});
+    }
+  }
 
   await deps.audit(
     {

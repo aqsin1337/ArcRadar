@@ -219,9 +219,6 @@ function indicatorPromptContextFrom(indicator: IndicatorDetail) {
     source: indicator.source,
     description: indicator.description,
     tags: indicator.tags.map((tag) => tag.name),
-    threatActors: indicator.threat_actors.map((item) => item.name),
-    campaigns: indicator.campaigns.map((item) => item.name),
-    malware: indicator.malware.map((item) => item.name),
   };
 }
 

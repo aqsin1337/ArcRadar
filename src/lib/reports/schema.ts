@@ -24,7 +24,6 @@ export const createReportSchema = z.discriminatedUnion("type", [
     title,
     investigation_id: uuid("investigation"),
   }),
-  z.strictObject({ type: z.literal("threat_actor"), title, threat_actor_id: uuid("threat actor") }),
   z.strictObject({ type: z.literal("indicators"), title }),
   z.strictObject({ type: z.literal("alerts"), title }),
   z.strictObject({ type: z.literal("vulnerabilities"), title }),

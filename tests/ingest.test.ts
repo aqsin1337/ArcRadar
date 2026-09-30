@@ -362,6 +362,43 @@ describe("ingestBatch", () => {
     ]);
   });
 
+  it("hands the stored records to the research hook, only once they are stored", async () => {
+    const order: string[] = [];
+    const deps = {
+      store: vi.fn(async () => {
+        order.push("store");
+        return SUMMARY;
+      }),
+      audit: vi.fn().mockResolvedValue(true),
+      enrich: vi.fn(() => {
+        order.push("enrich");
+      }),
+    };
+    await ingestBatch(PRINCIPAL, wazuhSource, [bruteForce], request, deps);
+    expect(order).toEqual(["store", "enrich"]);
+    expect(deps.enrich).toHaveBeenCalledWith([
+      expect.objectContaining({ alert: expect.anything() }),
+    ]);
+
+    // Nothing usable in the request: nothing stored, nothing to research.
+    const idle = { ...deps, enrich: vi.fn() };
+    await ingestBatch(PRINCIPAL, wazuhSource, [42], request, idle);
+    expect(idle.enrich).not.toHaveBeenCalled();
+  });
+
+  it("is not failed by the research hook", async () => {
+    const deps = {
+      store: vi.fn().mockResolvedValue(SUMMARY),
+      audit: vi.fn().mockResolvedValue(true),
+      enrich: vi.fn(() => {
+        throw new Error("no request scope");
+      }),
+    };
+    await expect(
+      ingestBatch(PRINCIPAL, wazuhSource, [bruteForce], request, deps),
+    ).resolves.toMatchObject({ received: 1, ...SUMMARY });
+  });
+
   it("does not report a batch as handled when storing it failed", async () => {
     const deps = { store: vi.fn().mockRejectedValue(new Error("down")), audit: vi.fn() };
     await expect(ingestBatch(PRINCIPAL, wazuhSource, [bruteForce], request, deps)).rejects.toThrow(

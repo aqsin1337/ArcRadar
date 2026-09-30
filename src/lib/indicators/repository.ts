@@ -6,7 +6,7 @@ import { toApiError } from "@/lib/api/supabase-errors";
 import type { AuthClient } from "@/lib/auth/context";
 import type { Indicator, IndicatorType, RelationshipType } from "@/types/domain";
 import type { CreateIndicatorInput, IndicatorListQuery, UpdateIndicatorInput } from "./schema";
-import type { IndicatorDetail, IndicatorRelationship, IndicatorTag, LinkedEntity } from "./types";
+import type { IndicatorDetail, IndicatorRelationship, IndicatorTag } from "./types";
 import { VALUE_HINTS, normalizeIndicatorValue } from "./value";
 
 /*
@@ -106,11 +106,7 @@ export async function findAllTags(supabase: AuthClient): Promise<IndicatorTag[]>
   return data;
 }
 
-type LinkRow<K extends string> = { [P in K]: LinkedEntity | null };
-const linked = <K extends string>(rows: LinkRow<K>[], key: K): LinkedEntity[] =>
-  rows.flatMap((row) => (row[key] ? [row[key]] : [])).sort((a, b) => a.name.localeCompare(b.name));
-
-/** One indicator with its tags, linked actors / campaigns / malware and relationships. */
+/** One indicator with its tags and relationships. */
 export async function findIndicatorDetail(
   supabase: AuthClient,
   id: string,
@@ -118,9 +114,7 @@ export async function findIndicatorDetail(
   const [indicator, relationships] = await Promise.all([
     supabase
       .from("indicators")
-      .select(
-        "*, indicator_tags(tags(id, name, color)), indicator_threat_actors(threat_actors(id, name, origin)), indicator_campaigns(campaigns(id, name, origin)), indicator_malware(malware(id, name, origin))",
-      )
+      .select("*, indicator_tags(tags(id, name, color))")
       .eq("id", id)
       .maybeSingle(),
     supabase
@@ -145,13 +139,7 @@ export async function findIndicatorDetail(
     createdByName = author.data?.display_name ?? null;
   }
 
-  const {
-    indicator_tags,
-    indicator_threat_actors,
-    indicator_campaigns,
-    indicator_malware,
-    ...row
-  } = indicator.data;
+  const { indicator_tags, ...row } = indicator.data;
 
   const related: IndicatorRelationship[] = relationships.data.flatMap((link) => {
     const outgoing = link.source_indicator_id === id;
@@ -174,9 +162,6 @@ export async function findIndicatorDetail(
     tags: indicator_tags
       .flatMap((link) => (link.tags ? [link.tags] : []))
       .sort((a, b) => a.name.localeCompare(b.name)),
-    threat_actors: linked(indicator_threat_actors, "threat_actors"),
-    campaigns: linked(indicator_campaigns, "campaigns"),
-    malware: linked(indicator_malware, "malware"),
     relationships: related,
   };
 }
@@ -270,29 +255,6 @@ export async function findIndicatorIdentity(
     .maybeSingle();
   if (error) throw toApiError(error);
   return data;
-}
-
-/**
- * Sets which threat actors, campaigns and malware families an indicator is linked to, atomically,
- * through set_indicator_links(). A list left out is kept as it is; an empty one clears that kind.
- */
-export async function replaceIndicatorLinks(
-  supabase: AuthClient,
-  id: string,
-  links: { actors?: string[]; campaigns?: string[]; malware?: string[] },
-): Promise<void> {
-  const { error } = await supabase.rpc("set_indicator_links", {
-    p_indicator_id: id,
-    p_actors: links.actors,
-    p_campaigns: links.campaigns,
-    p_malware: links.malware,
-  });
-  if (error) {
-    if (error.code === "23503") {
-      throw validationIssue("links", "One of the linked records does not exist.");
-    }
-    throw toApiError(error);
-  }
 }
 
 /** Relates two indicators: `sourceId` <relationship> `targetId`. */

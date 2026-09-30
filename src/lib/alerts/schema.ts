@@ -16,6 +16,16 @@ export const alertListQuerySchema = paginationQuerySchema.extend({
   assignee: blankToUndefined(assigneeFilter),
   // Unset (the default) hides a duplicate alert from the queue; "show" reveals it alongside its primary.
   duplicates: blankToUndefined(z.literal("show")),
+  // Alerts that name this ATT&CK technique (a parent technique also matches its sub-techniques).
+  technique: blankToUndefined(
+    z
+      .string()
+      .trim()
+      .transform((id) => id.toUpperCase())
+      .pipe(
+        z.string().regex(/^T\d{4}(\.\d{3})?$/, "A technique id looks like T1566 or T1078.001."),
+      ),
+  ),
   sort: z.enum(ALERT_SORT_FIELDS).default("created_at"),
   order: z.enum(["asc", "desc"]).default("desc"),
 });

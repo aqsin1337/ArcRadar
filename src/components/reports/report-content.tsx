@@ -7,7 +7,6 @@ import type {
   AlertsReportContent,
   IndicatorsReportContent,
   InvestigationReportContent,
-  ThreatActorReportContent,
   VulnerabilitiesReportContent,
 } from "@/lib/reports/types";
 import type { ReportType } from "@/types/domain";
@@ -233,61 +232,6 @@ function InvestigationView({ content }: { content: InvestigationReportContent })
   );
 }
 
-function ThreatActorView({ content }: { content: ThreatActorReportContent }) {
-  return (
-    <div className="space-y-6">
-      {content.actor.description && <p className="text-sm">{content.actor.description}</p>}
-      <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-        <div>
-          <dt className="text-muted">Motivation</dt>
-          <dd>{content.actor.motivation ? humanize(content.actor.motivation) : "Unknown"}</dd>
-        </div>
-        <div>
-          <dt className="text-muted">Tracked indicators</dt>
-          <dd>{content.indicator_count}</dd>
-        </div>
-      </dl>
-      <Section title={`Campaigns (${content.campaigns.length})`}>
-        {content.campaigns.length === 0 ? (
-          <p className="text-sm text-muted">None linked.</p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {content.campaigns.map((c) => (
-              <li key={c.id}>
-                {c.name} <span className="text-muted">({humanize(c.status)})</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-      <Section title={`Malware (${content.malware.length})`}>
-        {content.malware.length === 0 ? (
-          <p className="text-sm text-muted">None linked.</p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {content.malware.map((m) => (
-              <li key={m.id}>{m.name}</li>
-            ))}
-          </ul>
-        )}
-      </Section>
-      <Section title={`ATT&CK techniques (${content.techniques.length})`}>
-        {content.techniques.length === 0 ? (
-          <p className="text-sm text-muted">None linked.</p>
-        ) : (
-          <ul className="flex flex-wrap gap-1.5">
-            {content.techniques.map((t) => (
-              <li key={t.id}>
-                <Badge tone="slate">{t.id}</Badge>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-    </div>
-  );
-}
-
 /** Renders whichever shape `content` has, keyed by the report's own type. */
 export function ReportContent({ type, content }: { type: ReportType; content: object }) {
   switch (type) {
@@ -300,6 +244,8 @@ export function ReportContent({ type, content }: { type: ReportType; content: ob
     case "investigation":
       return <InvestigationView content={content as InvestigationReportContent} />;
     case "threat_actor":
-      return <ThreatActorView content={content as ThreatActorReportContent} />;
+      return (
+        <p className="text-sm text-muted">This report type was retired and cannot be shown.</p>
+      );
   }
 }

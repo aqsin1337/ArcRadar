@@ -58,6 +58,19 @@ export default async function AlertsPage({ searchParams }: PageProps<"/alerts">)
           </Alert>
         )}
 
+        {query.technique && (
+          <Alert tone="info">
+            Showing the alerts that name ATT&amp;CK technique{" "}
+            <Link href={`/mitre/${query.technique}`} className="font-mono underline">
+              {query.technique}
+            </Link>
+            .{" "}
+            <Link href={alertListHref(query, { technique: undefined })} className="underline">
+              Clear this filter
+            </Link>
+          </Alert>
+        )}
+
         <AlertStatsTiles stats={stats} state={query} />
         <AlertFilters state={query} sources={sources} people={people} />
 

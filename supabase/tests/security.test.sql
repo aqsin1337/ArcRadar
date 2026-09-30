@@ -153,13 +153,6 @@ begin
   get diagnostics n = row_count;
   if n <> 0 then raise exception 'FAIL analyst deleted an alert'; end if;
 
-  blocked := false;
-  begin
-    insert into public.threat_actors (name) values ('Analyst Created Actor');
-  exception when insufficient_privilege then blocked := true;
-  end;
-  if not blocked then raise exception 'FAIL analyst created a threat actor'; end if;
-
   insert into public.investigation_notes (investigation_id, body) values ('cccccccc-0000-4000-8000-000000000003', 'Analyst note');
   update public.investigation_notes set body = 'tampered' where id = 'cccccccc-0000-4000-8000-000000000004';
   get diagnostics n = row_count;

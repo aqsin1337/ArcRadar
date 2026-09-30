@@ -8,13 +8,14 @@ const repo = vi.hoisted(() => ({
   findIndicatorTypeCounts: vi.fn(),
   findIndicatorVerdictCounts: vi.fn(),
   findActivity: vi.fn(),
-  findTopThreatActors: vi.fn(),
 }));
+const mitre = vi.hoisted(() => ({ getTopTechniques: vi.fn() }));
 const indicators = vi.hoisted(() => ({ listIndicators: vi.fn() }));
 const alerts = vi.hoisted(() => ({ listAlerts: vi.fn() }));
 const investigations = vi.hoisted(() => ({ listInvestigations: vi.fn() }));
 
 vi.mock("@/lib/dashboard/repository", () => repo);
+vi.mock("@/lib/mitre/service", () => mitre);
 vi.mock("@/lib/indicators/service", () => indicators);
 vi.mock("@/lib/alerts/service", () => alerts);
 vi.mock("@/lib/investigations/service", () => investigations);
@@ -50,7 +51,9 @@ beforeEach(() => {
   repo.findIndicatorTypeCounts.mockResolvedValue([{ type: "ipv4", total: 1 }]);
   repo.findIndicatorVerdictCounts.mockResolvedValue([{ verdict: "malicious", total: 1 }]);
   repo.findActivity.mockResolvedValue([{ day: "2026-09-27", alerts: 1, events: 1 }]);
-  repo.findTopThreatActors.mockResolvedValue([{ id: "a1", name: "Actor", indicator_count: 2 }]);
+  mitre.getTopTechniques.mockResolvedValue([
+    { id: "T1110", name: "Brute Force", alert_count: 2, max_severity: "high" },
+  ]);
   indicators.listIndicators
     .mockResolvedValueOnce(page([{ id: "malicious-1" }])) // top malicious
     .mockResolvedValueOnce(page([{ id: "recent-1" }])); // recent indicators
@@ -76,7 +79,9 @@ describe("getDashboardData", () => {
     expect(data.ioc_distribution).toEqual([{ type: "ipv4", total: 1 }]);
     expect(data.verdict_distribution).toEqual([{ verdict: "malicious", total: 1 }]);
     expect(data.activity).toEqual([{ day: "2026-09-27", alerts: 1, events: 1 }]);
-    expect(data.top_threat_actors).toEqual([{ id: "a1", name: "Actor", indicator_count: 2 }]);
+    expect(data.top_techniques).toEqual([
+      { id: "T1110", name: "Brute Force", alert_count: 2, max_severity: "high" },
+    ]);
     expect(data.top_malicious_indicators).toEqual([{ id: "malicious-1" }]);
     expect(data.recent_indicators).toEqual([{ id: "recent-1" }]);
     expect(data.recent_alerts).toEqual([{ id: "alert-1" }]);

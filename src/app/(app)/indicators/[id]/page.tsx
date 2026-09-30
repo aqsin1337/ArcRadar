@@ -2,14 +2,12 @@ import { ArrowLeft, ArrowRight, Pencil } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DeleteIndicatorButton } from "@/components/indicators/delete-indicator-button";
-import { IndicatorLinksEditor } from "@/components/indicators/indicator-links-editor";
 import {
   AddRelationshipForm,
   RemoveRelationshipButton,
 } from "@/components/indicators/relationship-controls";
 import { TagChips } from "@/components/indicators/tag-chips";
 import { VerdictRecommendationPanel } from "@/components/indicators/verdict-recommendation-panel";
-import { RecordChips } from "@/components/threat-intel/linked-records";
 import { Badge } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,34 +30,7 @@ import {
   RELATIONSHIP_VERBS,
 } from "@/lib/indicators/constants";
 import { getIndicator, isIndicatorId } from "@/lib/indicators/service";
-import type { IndicatorDetail, LinkedEntity } from "@/lib/indicators/types";
-import { getLinkOptions } from "@/lib/threat-intel/service";
-
-/** Threat actors, campaigns or malware linked to the indicator, each a link to its page with its provenance. */
-function EntityList({
-  title,
-  items,
-  basePath,
-}: {
-  title: string;
-  items: LinkedEntity[];
-  basePath: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <h3 className="text-xs font-semibold tracking-wide text-muted uppercase">{title}</h3>
-      <RecordChips
-        empty="None linked."
-        items={items.map((item) => ({
-          id: item.id,
-          label: item.name,
-          href: `${basePath}/${item.id}`,
-          origin: item.origin,
-        }))}
-      />
-    </div>
-  );
-}
+import type { IndicatorDetail } from "@/lib/indicators/types";
 
 export default async function IndicatorPage({ params }: PageProps<"/indicators/[id]">) {
   const auth = await getPageAuthContext();
@@ -80,11 +51,6 @@ export default async function IndicatorPage({ params }: PageProps<"/indicators/[
   const canWrite = auth.permissions.has("indicators:write");
   const canDelete = auth.permissions.has("indicators:delete");
   const canUseAi = auth.permissions.has("ai:use");
-  // Editors need the choices to link to; readers of intelligence records only need the names above.
-  const linkOptions =
-    canWrite && auth.permissions.has("threat_intel:read")
-      ? await getLinkOptions(auth.supabase)
-      : null;
   const [verdictAnalyses, aiReady] = await Promise.all([
     listSubjectAnalyses(auth.supabase, "indicator", indicator.id),
     canUseAi ? getAiAvailability(auth.supabase).then((a) => a.ready) : Promise.resolve(false),
@@ -225,32 +191,6 @@ export default async function IndicatorPage({ params }: PageProps<"/indicators/[
               )}
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Linked intelligence</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <EntityList
-                title="Threat actors"
-                items={indicator.threat_actors}
-                basePath="/threat-actors"
-              />
-              <EntityList title="Campaigns" items={indicator.campaigns} basePath="/campaigns" />
-              <EntityList title="Malware" items={indicator.malware} basePath="/malware" />
-              {linkOptions && (
-                <IndicatorLinksEditor
-                  indicatorId={indicator.id}
-                  options={linkOptions}
-                  initial={{
-                    actor_ids: indicator.threat_actors.map((item) => item.id),
-                    campaign_ids: indicator.campaigns.map((item) => item.id),
-                    malware_ids: indicator.malware.map((item) => item.id),
-                  }}
-                />
-              )}
-            </CardContent>
-          </Card>
         </div>
 
         <div className="space-y-4">
@@ -316,6 +256,13 @@ export default async function IndicatorPage({ params }: PageProps<"/indicators/[
                   <Time iso={indicator.last_seen} />
                 </Row>
                 <Row label="Source">{indicator.source}</Row>
+                <Row label="Researched">
+                  {indicator.researched_at ? (
+                    <Time iso={indicator.researched_at} />
+                  ) : (
+                    <span className="text-muted">Not yet</span>
+                  )}
+                </Row>
                 <Row label="Added">
                   <Time iso={indicator.created_at} />
                 </Row>

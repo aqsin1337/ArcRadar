@@ -10,11 +10,11 @@ import { EntityPicker } from "@/components/ui/entity-picker";
 import { apiFetch } from "@/lib/api/client";
 import {
   REPORT_TYPES,
+  type OfferedReportType,
   REPORT_TYPE_DESCRIPTIONS,
   REPORT_TYPE_LABELS,
 } from "@/lib/reports/constants";
 import type { CreateReportInput } from "@/lib/reports/schema";
-import type { ReportType } from "@/types/domain";
 
 type Hit = { id: string; name?: string; title?: string };
 
@@ -26,28 +26,26 @@ async function searchList(path: string, signal: AbortSignal): Promise<Hit[] | nu
 /** Generates a report: pick a type, name a target when the type needs one, an optional title. */
 export function NewReportForm() {
   const router = useRouter();
-  const [type, setType] = useState<ReportType>("alerts");
+  const [type, setType] = useState<OfferedReportType>("alerts");
   const [target, setTarget] = useState<Hit | null>(null);
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const needsTarget = type === "investigation" || type === "threat_actor";
+  const needsTarget = type === "investigation";
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
     if (needsTarget && !target) {
-      setError(`Choose ${type === "investigation" ? "an investigation" : "a threat actor"}.`);
+      setError("Choose an investigation.");
       return;
     }
 
     const body: CreateReportInput =
       type === "investigation"
         ? { type, title: title || undefined, investigation_id: target!.id }
-        : type === "threat_actor"
-          ? { type, title: title || undefined, threat_actor_id: target!.id }
-          : { type, title: title || undefined };
+        : { type, title: title || undefined };
 
     setPending(true);
     setError(null);
@@ -70,7 +68,7 @@ export function NewReportForm() {
         hint={REPORT_TYPE_DESCRIPTIONS[type]}
         value={type}
         onChange={(event) => {
-          setType(event.target.value as ReportType);
+          setType(event.target.value as OfferedReportType);
           setTarget(null);
           setError(null);
         }}
@@ -86,18 +84,6 @@ export function NewReportForm() {
             searchList(`/api/investigations?q=${encodeURIComponent(text)}&page_size=8`, signal)
           }
           renderItem={(item) => item.title}
-          onPick={setTarget}
-        />
-      )}
-      {type === "threat_actor" && (
-        <EntityPicker<Hit>
-          id="report-actor"
-          label="Threat actor"
-          placeholder="Search threat actors by name"
-          search={(text, signal) =>
-            searchList(`/api/threat-actors?q=${encodeURIComponent(text)}&page_size=8`, signal)
-          }
-          renderItem={(item) => item.name}
           onPick={setTarget}
         />
       )}

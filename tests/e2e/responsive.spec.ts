@@ -301,65 +301,27 @@ test.describe("signed in", () => {
     }
   });
 
-  test("threat intelligence lists and pages fit a phone, provenance included", async ({ page }) => {
-    await expectListFitsPhone(page, "/threat-actors", "Threat actors");
-    await page.locator("tbody tr").first().getByRole("link").first().click();
-    await expect(page.getByTestId("record-title")).toBeVisible();
-    expect(await hasHorizontalScroll(page)).toBe(false);
-    await expect(page.getByText("This is demo data")).toBeInViewport();
-
-    await expectListFitsPhone(page, "/campaigns", "Campaigns");
-    await page.locator("tbody tr").first().getByRole("link").first().click();
-    await expect(page.getByTestId("record-title")).toBeVisible();
-    expect(await hasHorizontalScroll(page)).toBe(false);
-
-    await expectListFitsPhone(page, "/malware", "Malware families");
-    await page.locator("tbody tr").first().getByRole("link").first().click();
-    await expect(page.getByTestId("record-title")).toBeVisible();
-    expect(await hasHorizontalScroll(page)).toBe(false);
-
-    // ATT&CK techniques are reference data: no provenance label, but the same fit.
+  test("the ATT&CK matrix scrolls inside itself and its pages fit a phone", async ({ page }) => {
     await page.goto("/mitre");
-    await expect(page.locator("tbody tr").first()).toBeVisible();
+    await expect(page.getByRole("region", { name: /ATT&CK matrix/ })).toBeVisible();
+    // 14 columns do not fit a phone: the matrix scrolls sideways inside its own box, the page does not.
     expect(await hasHorizontalScroll(page)).toBe(false);
-    await page
-      .getByRole("combobox", { name: "Tactic", exact: true })
-      .selectOption("Initial Access");
-    await expect(page).toHaveURL(/tactic=Initial\+Access/);
+    await page.goto("/mitre?sub=1");
+    expect(await hasHorizontalScroll(page)).toBe(false);
     await page.goto("/mitre/T1566");
     await expect(page.getByTestId("record-title")).toBeVisible();
     expect(await hasHorizontalScroll(page)).toBe(false);
   });
 
-  test("the create forms for alerts, investigations and threat intelligence fit a phone", async ({
-    page,
-  }) => {
+  test("the create forms for alerts and investigations fit a phone", async ({ page }) => {
     for (const [path, name] of [
       ["/alerts/new", "New alert"],
       ["/investigations/new", "New investigation"],
-      ["/threat-actors/new", "New threat actor"],
-      ["/campaigns/new", "New campaign"],
-      ["/malware/new", "New malware family"],
     ] as const) {
       await page.goto(path);
       await expect(page.getByRole("form", { name })).toBeVisible();
       expect(await hasHorizontalScroll(page), path).toBe(false);
     }
-    // The pickers of a long form scroll inside themselves instead of stretching the page.
-    await page.goto("/threat-actors/new");
-    await page.getByRole("checkbox", { name: /^NightLoader/ }).check();
-    await expect(page.getByRole("group", { name: "Malware (1 selected)" })).toBeVisible();
-    expect(await hasHorizontalScroll(page)).toBe(false);
-  });
-
-  test("the indicator's link editor fits a phone", async ({ page }) => {
-    await page.goto("/indicators?q=198.51.100.23");
-    await page.locator("tbody tr").first().getByRole("link").first().click();
-    await expect(page.getByTestId("indicator-value")).toBeVisible();
-    await page.getByRole("button", { name: "Edit links" }).click();
-    await expect(page.getByRole("form", { name: "Edit linked intelligence" })).toBeVisible();
-    expect(await hasHorizontalScroll(page)).toBe(false);
-    await expect(page.getByLabel(/this other indicator/i)).toBeVisible();
   });
 
   test("the dashboard, reports and admin pages fit a phone", async ({ page }) => {

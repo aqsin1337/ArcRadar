@@ -1,6 +1,5 @@
 import type {
   AlertStatus,
-  CampaignStatus,
   DataOrigin,
   ExploitStatus,
   IndicatorStatus,
@@ -10,7 +9,6 @@ import type {
   Verdict,
 } from "@/types/domain";
 import { INDICATOR_STATUS_LABELS } from "@/lib/indicators/constants";
-import { CAMPAIGN_STATUS_LABELS } from "@/lib/threat-intel/constants";
 import { EXPLOIT_STATUS_LABELS } from "@/lib/vulnerabilities/constants";
 import { DATA_ORIGIN_LABELS } from "@/types/domain";
 import { Badge, type Tone } from "./badge";
@@ -66,16 +64,6 @@ const EXPLOIT_STATUS_TONES: Record<ExploitStatus, Tone> = {
   poc_available: "amber",
   exploited_in_wild: "red",
 };
-
-const CAMPAIGN_STATUS_TONES: Record<CampaignStatus, Tone> = {
-  active: "orange",
-  dormant: "slate",
-  concluded: "green",
-};
-
-export function CampaignStatusBadge({ status }: { status: CampaignStatus }) {
-  return <Badge tone={CAMPAIGN_STATUS_TONES[status]}>{CAMPAIGN_STATUS_LABELS[status]}</Badge>;
-}
 
 export function ExploitStatusBadge({ status }: { status: ExploitStatus }) {
   return <Badge tone={EXPLOIT_STATUS_TONES[status]}>{EXPLOIT_STATUS_LABELS[status]}</Badge>;

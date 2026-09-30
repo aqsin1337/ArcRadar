@@ -9,7 +9,8 @@ import { INDICATOR_TYPE_SHORT_LABELS } from "@/lib/indicators/constants";
 import type { AlertListItem } from "@/lib/alerts/types";
 import type { IndicatorListItem } from "@/lib/indicators/types";
 import type { InvestigationListItem } from "@/lib/investigations/types";
-import type { TopThreatActor } from "@/lib/dashboard/types";
+import { alertListHref } from "@/lib/alerts/url";
+import type { TopTechnique } from "@/lib/mitre/service";
 
 function Panel({
   title,
@@ -122,28 +123,26 @@ export function InvestigationPanel({ items }: { items: InvestigationListItem[] }
   );
 }
 
-export function TopThreatActorsPanel({ items }: { items: TopThreatActor[] }) {
+export function TopTechniquesPanel({ items }: { items: TopTechnique[] }) {
   return (
-    <Panel title="Top threat actors" viewAllHref="/threat-actors">
-      {items.length === 0 || items.every((item) => item.indicator_count === 0) ? (
-        <Empty text="No linked indicators yet." />
+    <Panel title="Most seen ATT&CK techniques" viewAllHref="/mitre">
+      {items.length === 0 ? (
+        <Empty text="No alert has named a technique yet." />
       ) : (
         <ul className="divide-y divide-border">
-          {items
-            .filter((item) => item.indicator_count > 0)
-            .map((item) => (
-              <li key={item.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
-                <Link
-                  href={`/threat-actors/${item.id}`}
-                  className="min-w-0 truncate text-primary hover:underline"
-                >
-                  {item.name}
-                </Link>
-                <span className="shrink-0 text-xs tabular-nums text-muted">
-                  {item.indicator_count} indicator{item.indicator_count === 1 ? "" : "s"}
-                </span>
-              </li>
-            ))}
+          {items.map((item) => (
+            <li key={item.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
+              <Link
+                href={alertListHref({}, { technique: item.id })}
+                className="min-w-0 truncate text-primary hover:underline"
+              >
+                <span className="font-mono">{item.id}</span> {item.name}
+              </Link>
+              <span className="shrink-0 text-xs tabular-nums text-muted">
+                {item.alert_count} alert{item.alert_count === 1 ? "" : "s"}
+              </span>
+            </li>
+          ))}
         </ul>
       )}
     </Panel>

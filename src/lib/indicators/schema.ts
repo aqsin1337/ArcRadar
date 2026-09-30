@@ -127,27 +127,6 @@ export const updateIndicatorSchema = z
 
 export const indicatorIdSchema = z.uuid({ error: "The indicator id is not valid." });
 
-const linkIds = (noun: string) =>
-  z
-    .array(z.uuid({ error: `A ${noun} id is not valid.` }))
-    .max(200, `At most 200 ${noun}s can be linked.`)
-    .transform((ids) => [...new Set(ids)]);
-
-/**
- * Body of PUT /api/indicators/:id/links: the threat actors, campaigns and malware families the
- * indicator is linked to. A list replaces that whole set (an empty list clears it); a list left out is
- * kept as it is.
- */
-export const setIndicatorLinksSchema = z
-  .strictObject({
-    actor_ids: linkIds("threat actor").optional(),
-    campaign_ids: linkIds("campaign").optional(),
-    malware_ids: linkIds("malware family").optional(),
-  })
-  .refine((input) => Object.keys(input).length > 0, {
-    message: "Provide at least one list of links to set.",
-  });
-
 /** Body of POST /api/indicators/:id/relationships: this indicator (the source) relates to `target_id`. */
 export const addRelationshipSchema = z.strictObject({
   target_id: z.uuid({ error: "The target indicator id is not valid." }),
@@ -156,7 +135,6 @@ export const addRelationshipSchema = z.strictObject({
 
 export const relationshipIdSchema = z.uuid({ error: "The relationship id is not valid." });
 
-export type SetIndicatorLinksInput = z.output<typeof setIndicatorLinksSchema>;
 export type AddRelationshipInput = z.output<typeof addRelationshipSchema>;
 
 /** Query string of GET /api/indicators and of the /indicators page. */

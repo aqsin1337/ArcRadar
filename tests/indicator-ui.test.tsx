@@ -15,20 +15,12 @@ const findIndicators = vi.hoisted(() => vi.fn());
 const findVulnerabilities = vi.hoisted(() => vi.fn());
 const findAlerts = vi.hoisted(() => vi.fn());
 const findInvestigations = vi.hoisted(() => vi.fn());
-const findActors = vi.hoisted(() => vi.fn());
-const findCampaigns = vi.hoisted(() => vi.fn());
-const findMalwareFamilies = vi.hoisted(() => vi.fn());
-const findTechniques = vi.hoisted(() => vi.fn());
+const searchTechniques = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/indicators/repository", () => ({ findIndicators }));
 vi.mock("@/lib/vulnerabilities/repository", () => ({ findVulnerabilities }));
 vi.mock("@/lib/alerts/repository", () => ({ findAlerts }));
 vi.mock("@/lib/investigations/repository", () => ({ findInvestigations }));
-vi.mock("@/lib/threat-intel/repository", () => ({
-  findActors,
-  findCampaigns,
-  findMalwareFamilies,
-  findTechniques,
-}));
+vi.mock("@/lib/mitre/repository", () => ({ searchTechniques }));
 
 const html = (node: React.ReactElement) => renderToStaticMarkup(node);
 
@@ -241,10 +233,7 @@ describe("globalSearch", () => {
     findVulnerabilities,
     findAlerts,
     findInvestigations,
-    findActors,
-    findCampaigns,
-    findMalwareFamilies,
-    findTechniques,
+    searchTechniques,
   ];
 
   beforeEach(() => {
@@ -264,19 +253,17 @@ describe("globalSearch", () => {
     expect(findAlerts.mock.calls[0][1]).toMatchObject({ q: "beacon", page: 1, page_size: 4 });
     expect(findAlerts.mock.calls[0][2]).toBe("user-1");
     expect(findInvestigations).not.toHaveBeenCalled();
-    expect(findActors).not.toHaveBeenCalled();
+    expect(searchTechniques).not.toHaveBeenCalled();
   });
 
-  it("one threat_intel:read permission opens actors, campaigns, malware and techniques", async () => {
+  it("threat_intel:read opens the ATT&CK technique search", async () => {
     await globalSearch(authFor("viewer", new Set(["threat_intel:read"])), "harbor", 5);
-    for (const source of [findActors, findCampaigns, findMalwareFamilies, findTechniques]) {
-      expect(source).toHaveBeenCalledOnce();
-      expect(source.mock.calls[0][1]).toMatchObject({ q: "harbor", page: 1, page_size: 5 });
-    }
+    expect(searchTechniques).toHaveBeenCalledOnce();
+    expect(searchTechniques.mock.calls[0].slice(1)).toEqual(["harbor", 5]);
     expect(findAlerts).not.toHaveBeenCalled();
   });
 
-  it("links alerts, investigations and threat intelligence to their pages with provenance", async () => {
+  it("links alerts, investigations and techniques to their pages with provenance", async () => {
     findAlerts.mockResolvedValue({
       total: 1,
       rows: [
@@ -296,35 +283,7 @@ describe("globalSearch", () => {
         { id: "i-1", title: "Harbor Lights", status: "open", priority: "high", origin: "local" },
       ],
     });
-    findActors.mockResolvedValue({
-      total: 1,
-      rows: [
-        {
-          id: "t-1",
-          name: "Crimson Harbor",
-          motivation: "Financial gain",
-          aliases: ["DEMO-FIN-01"],
-          origin: "demo",
-        },
-      ],
-    });
-    findCampaigns.mockResolvedValue({
-      total: 1,
-      rows: [{ id: "c-1", name: "Harbor Lights", status: "active", origin: "demo" }],
-    });
-    findMalwareFamilies.mockResolvedValue({
-      total: 1,
-      rows: [
-        {
-          id: "m-1",
-          name: "NightLoader",
-          malware_type: "Loader",
-          platforms: ["Windows"],
-          origin: "demo",
-        },
-      ],
-    });
-    findTechniques.mockResolvedValue({
+    searchTechniques.mockResolvedValue({
       total: 1,
       rows: [{ id: "T1566", name: "Phishing", tactics: ["Initial Access"] }],
     });
@@ -345,27 +304,6 @@ describe("globalSearch", () => {
       subtitle: "Open · High",
       href: "/investigations/i-1",
       origin: "local",
-    });
-    expect(hits.threat_actor).toEqual({
-      id: "t-1",
-      title: "Crimson Harbor",
-      subtitle: "Financial gain · aka DEMO-FIN-01",
-      href: "/threat-actors/t-1",
-      origin: "demo",
-    });
-    expect(hits.campaign).toEqual({
-      id: "c-1",
-      title: "Harbor Lights",
-      subtitle: "Campaign · Active",
-      href: "/campaigns/c-1",
-      origin: "demo",
-    });
-    expect(hits.malware).toEqual({
-      id: "m-1",
-      title: "NightLoader",
-      subtitle: "Loader · Windows",
-      href: "/malware/m-1",
-      origin: "demo",
     });
     // ATT&CK techniques are reference data with no origin of their own.
     expect(hits.technique).toEqual({

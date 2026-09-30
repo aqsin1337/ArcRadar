@@ -17,15 +17,8 @@ test.describe("viewer", () => {
       "page",
     );
 
-    // Viewers may read alerts, investigations, reports and threat intelligence: live links.
-    for (const live of [
-      "Alerts",
-      "Investigations",
-      "Reports",
-      "Threat actors",
-      "Campaigns",
-      "Malware",
-    ]) {
+    // Viewers may read alerts, investigations, reports and the ATT&CK matrix: live links.
+    for (const live of ["Alerts", "Investigations", "Reports", "MITRE ATT&CK"]) {
       await expect(nav.getByRole("link", { name: live }), live).toBeVisible();
     }
     // Admin-only entries are not even shown.

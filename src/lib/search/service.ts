@@ -17,19 +17,7 @@ import { INVESTIGATION_STATUS_LABELS, PRIORITY_LABELS } from "@/lib/investigatio
 import { findInvestigations } from "@/lib/investigations/repository";
 import { investigationListQuerySchema } from "@/lib/investigations/schema";
 import type { Permission } from "@/lib/rbac/permissions";
-import { CAMPAIGN_STATUS_LABELS } from "@/lib/threat-intel/constants";
-import {
-  findActors,
-  findCampaigns,
-  findMalwareFamilies,
-  findTechniques,
-} from "@/lib/threat-intel/repository";
-import {
-  actorListQuerySchema,
-  campaignListQuerySchema,
-  malwareListQuerySchema,
-  techniqueListQuerySchema,
-} from "@/lib/threat-intel/schema";
+import { searchTechniques } from "@/lib/mitre/repository";
 import { findVulnerabilities } from "@/lib/vulnerabilities/repository";
 import { vulnerabilityListQuerySchema } from "@/lib/vulnerabilities/schema";
 import type { DataOrigin } from "@/types/domain";
@@ -172,82 +160,11 @@ const SOURCES: SearchSource[] = [
     },
   },
   {
-    kind: "threat_actor",
-    label: "Threat actors",
-    permission: "threat_intel:read",
-    async search(auth, query, limit) {
-      const { rows, total } = await findActors(
-        auth.supabase,
-        actorListQuerySchema.parse({ q: query, page: 1, page_size: limit }),
-      );
-      return {
-        total,
-        hits: rows.map((row) => ({
-          id: row.id,
-          title: row.name,
-          subtitle:
-            [row.motivation, row.aliases.length > 0 ? `aka ${row.aliases.join(", ")}` : null]
-              .filter(Boolean)
-              .join(" · ") || "Threat actor",
-          href: `/threat-actors/${row.id}`,
-          origin: row.origin,
-        })),
-      };
-    },
-  },
-  {
-    kind: "campaign",
-    label: "Campaigns",
-    permission: "threat_intel:read",
-    async search(auth, query, limit) {
-      const { rows, total } = await findCampaigns(
-        auth.supabase,
-        campaignListQuerySchema.parse({ q: query, page: 1, page_size: limit }),
-      );
-      return {
-        total,
-        hits: rows.map((row) => ({
-          id: row.id,
-          title: row.name,
-          subtitle: `Campaign · ${CAMPAIGN_STATUS_LABELS[row.status]}`,
-          href: `/campaigns/${row.id}`,
-          origin: row.origin,
-        })),
-      };
-    },
-  },
-  {
-    kind: "malware",
-    label: "Malware",
-    permission: "threat_intel:read",
-    async search(auth, query, limit) {
-      const { rows, total } = await findMalwareFamilies(
-        auth.supabase,
-        malwareListQuerySchema.parse({ q: query, page: 1, page_size: limit }),
-      );
-      return {
-        total,
-        hits: rows.map((row) => ({
-          id: row.id,
-          title: row.name,
-          subtitle: [row.malware_type ?? "Malware", row.platforms.join(", ") || null]
-            .filter(Boolean)
-            .join(" · "),
-          href: `/malware/${row.id}`,
-          origin: row.origin,
-        })),
-      };
-    },
-  },
-  {
     kind: "technique",
     label: "MITRE ATT&CK",
     permission: "threat_intel:read",
     async search(auth, query, limit) {
-      const { rows, total } = await findTechniques(
-        auth.supabase,
-        techniqueListQuerySchema.parse({ q: query, page: 1, page_size: limit }),
-      );
+      const { rows, total } = await searchTechniques(auth.supabase, query, limit);
       return {
         total,
         hits: rows.map((row) => ({

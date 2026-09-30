@@ -57,7 +57,6 @@ test.describe("lookup pages (viewer)", () => {
     // What the workspace knows.
     await expect(page.getByText("Tracked in your workspace")).toBeVisible();
     await expect(page.getByRole("heading", { name: "In your workspace" })).toBeVisible();
-    await expect(page.getByText("Crimson Harbor").first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Related indicators" })).toBeVisible();
     await expect(page.getByText("resolves to this")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Timeline" })).toBeVisible();
