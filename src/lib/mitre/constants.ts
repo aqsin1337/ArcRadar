@@ -1,7 +1,9 @@
 /**
  * The ATT&CK Enterprise tactics in the order the matrix shows them (the attack's own order, left to
  * right). A technique's `tactics` are stored as text, so a tactic the catalog names that is not listed
- * here is shown after these rather than dropped.
+ * here is shown after these rather than dropped. The newest ATT&CK release split "Defense Evasion"
+ * into "Stealth" and "Defense Impairment"; the old name stays listed for a database loaded from an
+ * older release (a column with nothing in it is left out).
  */
 export const TACTIC_ORDER = [
   "Reconnaissance",
@@ -10,6 +12,8 @@ export const TACTIC_ORDER = [
   "Execution",
   "Persistence",
   "Privilege Escalation",
+  "Stealth",
+  "Defense Impairment",
   "Defense Evasion",
   "Credential Access",
   "Discovery",
