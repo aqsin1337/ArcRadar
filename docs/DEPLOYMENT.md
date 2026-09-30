@@ -68,6 +68,9 @@ The full list, and why each one matters, is at the bottom of `docs/API.md`.
      exist on a hosted project anyway.
    - `OTX_API_KEY` (free, otx.alienvault.com) and `SHODAN_INTERNETDB=true` (free, no key) switch on two
      more lookup providers; `VIRUSTOTAL_API_KEY` and `ABUSEIPDB_API_KEY` two others.
+   - `GITHUB_TOKEN`, `GITHUB_RULES_REPO`, `GITHUB_RULES_BRANCH` — only for the Detection rules page's
+     "Send to GitHub" (a fine-grained token limited to the rules repository with Contents: Read and write;
+     `docs/WAZUH_RULES.md`). Without them the page still drafts and reviews rules.
    - Any intel or AI provider keys you want live from day one (`VIRUSTOTAL_API_KEY`,
      `GROQ_API_KEY`, ...) — all optional; the app works with none of them set. `OLLAMA_BASE_URL`
      needs a server your Vercel deployment can actually reach over the network, which a laptop's
