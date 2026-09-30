@@ -212,3 +212,70 @@
     transform: rotate(360deg);
   }
 }
+
+/* Landing page only: decorative backdrops and motion. All colors come from the tokens above. */
+@keyframes arcradar-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes arcradar-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(1.5);
+  }
+}
+
+@keyframes arcradar-flow {
+  to {
+    background-position: 24px 0;
+  }
+}
+
+@layer components {
+  .landing-grid {
+    background-image:
+      linear-gradient(
+        to right,
+        color-mix(in srgb, var(--border) 55%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        color-mix(in srgb, var(--border) 55%, transparent) 1px,
+        transparent 1px
+      );
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 75%);
+  }
+  .landing-glow {
+    background: radial-gradient(
+      ellipse 60% 55% at 50% 0%,
+      color-mix(in srgb, var(--primary) 22%, transparent),
+      transparent 70%
+    );
+  }
+  .landing-rise {
+    animation: arcradar-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  .landing-pulse-dot {
+    animation: arcradar-pulse 2s ease-in-out infinite;
+  }
+  .landing-flow {
+    background-image: linear-gradient(to right, var(--primary) 0 12px, transparent 12px 24px);
+    background-size: 24px 2px;
+    background-repeat: repeat-x;
+    animation: arcradar-flow 1.2s linear infinite;
+  }
+}

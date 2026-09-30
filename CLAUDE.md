@@ -292,3 +292,15 @@ Keep entries short. Newest entries go at the bottom.
 - Repeating rules added (frequency/timeframe/same_fields; AI prompt teaches "5 failures in 5 minutes"); verified on the real Manager (3rd event from one address fires, another address does not). The first AI rule `100235` is still a single-event rule (fires on every failed logon); it is in the repository and installed.
 - Shuffle question discussed, NOT built: it would need a typed `action_type` catalog instead of free-text response actions, a human-approved webhook to Shuffle and a callback; the network path (Vercel cannot reach the lab VM) is the blocker. User said to drop it for now.
 - Not done: a real Windows-triggered alert through the new rules (Windows VM was off). The GitHub and Supabase tokens were pasted in chat: rotate them (new GitHub token goes into Vercel `GITHUB_TOKEN`).
+
+### 2026-09-30 (session 10 — landing page built)
+
+- User asked for a full landing page as step 1 of a 3-step plan (2: polish the GitHub repo and push, 3: exercise the app heavily and run one demo scenario). Built step 1 only.
+- `/` now renders a static landing page for signed-out visitors (signed-in still redirects to `/dashboard`): `src/components/marketing/{hero,sections,links}.tsx`, landing-only keyframes/utilities appended to `globals.css`. Sections: sticky header, hero with a hand-built illustrative alert preview, stats band, platform bento (with a mini ATT&CK matrix), pipeline, detection-as-code (sample rule XML), security list, provenance labels, CTA, footer. Tokens only, no new dependency, no live data.
+- E2E: the old "root redirects to sign-in" test now checks the landing page and the Sign in link; `/` added to the axe pass. Lint, typecheck, contrast, build clean; auth/accessibility/app/responsive specs pass except the known tied-`last_seen` indicator-list mobile test and one transient dashboard error that passed on rerun.
+- Next: step 2 (GitHub polish: README with screenshots, badges, repo description/topics) and step 3 (demo scenario), each on the user's go-ahead. Rotate the pasted GitHub/Supabase tokens still pending. Not committed or pushed yet.
+
+### 2026-09-30 (session 10, continued — step 2, GitHub polish)
+
+- Rewrote `README.md` (badges, mermaid data-flow diagram, screenshots from the local demo dataset, feature list incl. Wazuh rules as code, engineering highlights), added `SECURITY.md`, `.github/workflows/ci.yml` (lint, typecheck, format check, unit tests on Node 24) and `docs/images/` (landing, dashboard, alerts, indicators). MITRE / alert-detail / telemetry / detection-rules shots were dropped on purpose: the local demo data leaves them empty. Retake them from real data after step 3.
+- Committed and pushed to `main`. No `gh` CLI on this machine, so the repo description/topics/social preview must be set by hand in the GitHub UI. No LICENSE added (the user's choice).

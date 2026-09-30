@@ -22,7 +22,7 @@ async function expectClean(page: Page) {
 }
 
 test.describe("signed out", () => {
-  for (const path of ["/login", "/signup", "/forgot-password"]) {
+  for (const path of ["/", "/login", "/signup", "/forgot-password"]) {
     test(`${path} has no axe violations`, async ({ page }) => {
       await page.goto(path);
       await page.waitForLoadState("networkidle");

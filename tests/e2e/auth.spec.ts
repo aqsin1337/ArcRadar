@@ -2,11 +2,14 @@ import { expect, test } from "@playwright/test";
 import { DEMO_PASSWORD } from "./support";
 
 test.describe("signed-out visitor", () => {
-  test("the root sends visitors to the sign-in page", async ({ page }) => {
+  test("the root shows the landing page, with a way to sign in", async ({ page }) => {
     await page.goto("/");
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("resolved incidents");
+    await expect(page).toHaveTitle(/ArcRadar/);
+    await page.getByRole("main").getByRole("link", { name: "Sign in to the console" }).click();
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
-    await expect(page).toHaveTitle("Sign in · ArcRadar");
   });
 
   test("a protected page redirects to sign-in and remembers where the visitor was going", async ({

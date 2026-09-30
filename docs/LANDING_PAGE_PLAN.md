@@ -1,6 +1,6 @@
 # Landing Page — Plan (not built yet)
 
-Status: **plan only, approved for planning on 2026-09-28, not started.** This document exists so a
+Status: **built 2026-09-30** (`src/app/page.tsx`, `src/components/marketing/`). Kept as the record of the decisions below.
 future session can build the page without re-deriving the decisions below. See decision 27 in
 `docs/ARCRADAR_PROGRESS.md` and the "No public landing page" line in that file's Known limitations.
 
