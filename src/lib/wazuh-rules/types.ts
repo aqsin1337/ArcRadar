@@ -20,6 +20,11 @@ export type WazuhRuleDefinition = {
   parent_value: string;
   conditions: WazuhRuleCondition[];
   mitre_ids: string[];
+  /** Set together: alert when the parent rule matched `frequency` times within `timeframe` seconds. */
+  frequency: number | null;
+  timeframe: number | null;
+  /** Fields that must hold the same value in every counted event. Only with `frequency`. */
+  same_fields: string[];
 };
 
 export type WazuhRule = WazuhRuleDefinition & {

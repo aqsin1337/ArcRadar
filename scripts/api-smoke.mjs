@@ -3230,6 +3230,39 @@ async function main() {
       check("a deleted rule is gone (404)", gone.status === 404);
     }
 
+    const repeatBody = {
+      name: `Smoke repeating wazuh rule ${stamp}`,
+      level: 9,
+      parent_kind: "group",
+      parent_value: "authentication_failed",
+      conditions: [],
+      frequency: 5,
+      timeframe: 300,
+      same_fields: ["win.eventdata.ipAddress"],
+    };
+    const repeating = await call(admin.jar, "POST", "/api/wazuh-rules", { body: repeatBody });
+    check(
+      "a repeating rule needs no condition and renders frequency, timeframe, if_matched_group and same_field",
+      repeating.status === 201 &&
+        repeating.json?.data?.xml?.includes('frequency="5" timeframe="300"') &&
+        repeating.json?.data?.xml?.includes(
+          "<if_matched_group>authentication_failed</if_matched_group>",
+        ) &&
+        repeating.json?.data?.xml?.includes("<same_field>win.eventdata.ipAddress</same_field>"),
+      repeating.json,
+    );
+    if (repeating.json?.data?.id) {
+      await call(admin.jar, "DELETE", `/api/wazuh-rules/${repeating.json.data.id}`);
+    }
+    const plainNoCondition = await call(admin.jar, "POST", "/api/wazuh-rules", {
+      body: { ...repeatBody, frequency: null, timeframe: null, same_fields: [] },
+    });
+    check("an ordinary rule with no condition is refused (422)", plainNoCondition.status === 422);
+    const countOnly = await call(admin.jar, "POST", "/api/wazuh-rules", {
+      body: { ...repeatBody, timeframe: null },
+    });
+    check("a count without a window is refused (422)", countOnly.status === 422);
+
     const shortPrompt = await call(admin.jar, "POST", "/api/wazuh-rules/generate", {
       body: { prompt: "x" },
     });

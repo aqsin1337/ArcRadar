@@ -97,6 +97,9 @@ async function createRule(
     parent_value: input.parent_value,
     conditions: input.conditions,
     mitre_ids: input.mitre_ids,
+    frequency: input.frequency,
+    timeframe: input.timeframe,
+    same_fields: input.same_fields,
     ...provenance,
   });
 }

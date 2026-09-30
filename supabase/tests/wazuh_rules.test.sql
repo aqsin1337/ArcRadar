@@ -196,6 +196,42 @@ begin
   raise notice 'ok - wazuh_rule_trigger_stats: counts by rule id, Wazuh alerts only, not open to anon';
 end $$;
 
+-- 5. Repeating rules: count and window come together, same_fields need repetition, and only a
+--    repeating rule may have no conditions.
+-- ---------------------------------------------------------------------------------------------
+do $$
+declare blocked boolean; t text;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', 'e4e4e4e4-0000-4000-8000-000000000001', 'role', 'authenticated')::text, true);
+  set local role authenticated;
+
+  foreach t in array array[
+    $q$select 100230, 'fxwr count only', '[{"a":1}]'::jsonb, 5, null::int, '{}'::text[]$q$,
+    $q$select 100231, 'fxwr window only', '[{"a":1}]'::jsonb, null::int, 300, '{}'::text[]$q$,
+    $q$select 100232, 'fxwr count of 1', '[{"a":1}]'::jsonb, 1, 300, '{}'::text[]$q$,
+    $q$select 100233, 'fxwr zero window', '[{"a":1}]'::jsonb, 5, 0, '{}'::text[]$q$,
+    $q$select 100236, 'fxwr window over a day', '[{"a":1}]'::jsonb, 5, 86401, '{}'::text[]$q$,
+    $q$select 100237, 'fxwr same field without repetition', '[{"a":1}]'::jsonb, null::int, null::int, '{win.a}'::text[]$q$,
+    $q$select 100238, 'fxwr injected same field', '[{"a":1}]'::jsonb, 5, 300, array['x</same_field><command>']$q$,
+    $q$select 100239, 'fxwr four same fields', '[{"a":1}]'::jsonb, 5, 300, '{a,b,c,d}'::text[]$q$,
+    $q$select 100240, 'fxwr plain rule without conditions', '[]'::jsonb, null::int, null::int, '{}'::text[]$q$
+  ] loop
+    blocked := false;
+    begin
+      execute 'insert into public.wazuh_rules (id, name, conditions, frequency, timeframe, same_fields, level, source) select v.*, 5, ''manual'' from (' || t || ') as v(id, name, conditions, frequency, timeframe, same_fields)';
+    exception when check_violation then blocked := true;
+    end;
+    if not blocked then raise exception 'FAIL a bad repeating rule was accepted: %', t; end if;
+  end loop;
+
+  -- a repeating rule with no conditions of its own, and with same_fields, is valid
+  insert into public.wazuh_rules (id, name, level, parent_value, conditions, frequency, timeframe, same_fields, source)
+    values (100241, 'fxwr five failures in five minutes', 10, 'authentication_failed', '[]', 5, 300, '{win.eventdata.ipAddress}', 'manual');
+
+  reset role;
+  raise notice 'ok - wazuh_rules: count and window together, same_fields only with repetition, conditions optional only when repeating';
+end $$;
+
 rollback;
 
 do $$ begin raise notice 'WAZUH RULES DATABASE TESTS PASSED'; end $$;

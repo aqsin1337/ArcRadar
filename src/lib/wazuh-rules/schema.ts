@@ -1,5 +1,10 @@
 import { z } from "zod";
 import {
+  FREQUENCY_MAX,
+  FREQUENCY_MIN,
+  MAX_SAME_FIELDS,
+  TIMEFRAME_MAX,
+  TIMEFRAME_MIN,
   MAX_CONDITION_VALUE,
   MAX_CONDITIONS,
   MITRE_ID_PATTERN,
@@ -76,7 +81,6 @@ const condition = z
 
 const conditions = z
   .array(condition)
-  .min(1, "Add at least one condition.")
   .max(MAX_CONDITIONS, `A rule can have at most ${MAX_CONDITIONS} conditions.`);
 
 const mitreIds = z
@@ -128,6 +132,63 @@ function checkParent(input: { parent_kind?: string; parent_value?: string }, ctx
   }
 }
 
+const frequency = z
+  .number()
+  .int({ error: "Enter a whole number of times." })
+  .min(FREQUENCY_MIN, `The count is ${FREQUENCY_MIN} to ${FREQUENCY_MAX}.`)
+  .max(FREQUENCY_MAX, `The count is ${FREQUENCY_MIN} to ${FREQUENCY_MAX}.`);
+
+const timeframe = z
+  .number()
+  .int({ error: "Enter a whole number of seconds." })
+  .min(TIMEFRAME_MIN, `The window is ${TIMEFRAME_MIN} to ${TIMEFRAME_MAX} seconds.`)
+  .max(TIMEFRAME_MAX, `The window is ${TIMEFRAME_MIN} to ${TIMEFRAME_MAX} seconds.`);
+
+const sameFields = z
+  .array(
+    z
+      .string()
+      .trim()
+      .regex(WAZUH_FIELD_PATTERN, "Use a Wazuh field such as win.eventdata.ipAddress."),
+  )
+  .max(MAX_SAME_FIELDS, `At most ${MAX_SAME_FIELDS} fields.`)
+  .transform((fields) => [...new Set(fields)]);
+
+/** Repetition is all-or-nothing, and an ordinary rule still needs a condition of its own. */
+function checkRepetition(
+  input: {
+    frequency?: number | null;
+    timeframe?: number | null;
+    same_fields?: string[];
+    conditions?: unknown[];
+  },
+  ctx: z.RefinementCtx,
+  { creating }: { creating: boolean },
+) {
+  const repeats = input.frequency !== undefined && input.frequency !== null;
+  if (repeats !== (input.timeframe !== undefined && input.timeframe !== null)) {
+    ctx.addIssue({
+      code: "custom",
+      path: [repeats ? "timeframe" : "frequency"],
+      message: "Set both the count and the time window, or neither.",
+    });
+  }
+  if (!repeats && (input.same_fields?.length ?? 0) > 0) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["same_fields"],
+      message: '"Same value in" only applies to a rule that counts repeats.',
+    });
+  }
+  if (creating && !repeats && (input.conditions?.length ?? 0) === 0) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["conditions"],
+      message: "Add at least one condition, or make this a repeating rule.",
+    });
+  }
+}
+
 /** The part of a rule an AI answer or a person supplies. No id, status, source or origin here. */
 const definitionShape = {
   name,
@@ -136,15 +197,22 @@ const definitionShape = {
   ...parentFields,
   conditions,
   mitre_ids: mitreIds.default([]),
+  frequency: frequency.nullable().default(null),
+  timeframe: timeframe.nullable().default(null),
+  same_fields: sameFields.default([]),
 };
 
 /** Body of POST /api/wazuh-rules. `id` is optional: the server picks the next free one. */
 export const createWazuhRuleSchema = z
   .strictObject({ id: ruleId.optional(), ...definitionShape })
-  .superRefine(checkParent);
+  .superRefine(checkParent)
+  .superRefine((input, ctx) => checkRepetition(input, ctx, { creating: true }));
 
 /** What the AI must return (same rules, so an answer that breaks one is refused, never stored). */
-export const aiWazuhRuleSchema = z.object(definitionShape).superRefine(checkParent);
+export const aiWazuhRuleSchema = z
+  .object(definitionShape)
+  .superRefine(checkParent)
+  .superRefine((input, ctx) => checkRepetition(input, ctx, { creating: true }));
 
 /** Body of PATCH /api/wazuh-rules/:id. */
 export const updateWazuhRuleSchema = z
@@ -156,8 +224,12 @@ export const updateWazuhRuleSchema = z
     parent_value: parentFields.parent_value.optional(),
     conditions: conditions.optional(),
     mitre_ids: mitreIds.optional(),
+    frequency: frequency.nullable().optional(),
+    timeframe: timeframe.nullable().optional(),
+    same_fields: sameFields.optional(),
   })
   .superRefine(checkParent)
+  .superRefine((input, ctx) => checkRepetition(input, ctx, { creating: false }))
   .refine((input) => Object.keys(input).length > 0, {
     message: "Provide at least one field to update.",
   });

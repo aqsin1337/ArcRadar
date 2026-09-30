@@ -71,6 +71,22 @@ export const WAZUH_SID_PATTERN = /^[0-9]{1,7}$/;
 export const MITRE_ID_PATTERN = /^T[0-9]{4}(\.[0-9]{3})?$/;
 
 export const MAX_CONDITIONS = 10;
+
+/** "Alert when the parent rule matched N times within T seconds" (Wazuh's frequency/timeframe). */
+export const FREQUENCY_MIN = 2;
+export const FREQUENCY_MAX = 100;
+export const TIMEFRAME_MIN = 1;
+export const TIMEFRAME_MAX = 86400;
+export const MAX_SAME_FIELDS = 3;
+
+/** Fields whose value can be required to be the same across the repeated events (same source, same user). */
+export const WAZUH_SAME_FIELD_SUGGESTIONS = [
+  "win.eventdata.ipAddress",
+  "win.eventdata.targetUserName",
+  "win.eventdata.workstationName",
+  "win.system.computer",
+  "win.eventdata.image",
+] as const;
 export const MAX_CONDITION_VALUE = 200;
 
 /** The repository layout the Manager-side script relies on: one file per rule, under `rules/`. */

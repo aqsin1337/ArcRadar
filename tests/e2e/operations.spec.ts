@@ -674,6 +674,30 @@ test.describe("Detection rules and alert deduplication (Phase 10)", () => {
       await expect(edited).toHaveCount(0);
     });
 
+    test("a repeating rule (5 in 5 minutes, same address) is saved without any condition", async ({
+      page,
+    }) => {
+      const name = `E2E repeating rule ${stamp}`;
+      await page.goto("/detection-rules");
+      await page.getByRole("button", { name: "Manual rule" }).click();
+      await page.getByLabel("Name", { exact: true }).fill(name);
+      await page.getByLabel("Group", { exact: true }).fill("authentication_failed");
+      await page.getByLabel("Only when it repeats").check();
+      await page.getByLabel("Remove condition 1").click();
+      await page.getByLabel("Same value in (optional)").fill("win.eventdata.ipAddress");
+      await page.getByRole("button", { name: "Save as draft" }).click();
+
+      const card = page.locator("li", { hasText: name });
+      await expect(card).toBeVisible();
+      await expect(card.getByText("5× in 5 min")).toBeVisible();
+      await expect(card.locator("pre")).toContainText('frequency="5" timeframe="300"');
+      await expect(card.locator("pre")).toContainText(
+        "<if_matched_group>authentication_failed</if_matched_group>",
+      );
+      await card.getByRole("button", { name: `Delete ${name}` }).click();
+      await expect(card).toHaveCount(0);
+    });
+
     test("an unsafe pattern is refused on the form", async ({ page }) => {
       await page.goto("/detection-rules");
       await page.getByRole("button", { name: "Manual rule" }).click();

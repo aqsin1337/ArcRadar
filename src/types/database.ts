@@ -1454,6 +1454,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           description: string | null;
+          frequency: number | null;
           github_commit: string | null;
           github_path: string | null;
           id: number;
@@ -1467,8 +1468,10 @@ export type Database = {
           pushed_by: string | null;
           reject_reason: string | null;
           rejected_at: string | null;
+          same_fields: string[];
           source: string;
           status: string;
+          timeframe: number | null;
           updated_at: string;
         };
         Insert: {
@@ -1480,6 +1483,7 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           description?: string | null;
+          frequency?: number | null;
           github_commit?: string | null;
           github_path?: string | null;
           id: number;
@@ -1493,8 +1497,10 @@ export type Database = {
           pushed_by?: string | null;
           reject_reason?: string | null;
           rejected_at?: string | null;
+          same_fields?: string[];
           source: string;
           status?: string;
+          timeframe?: number | null;
           updated_at?: string;
         };
         Update: {
@@ -1506,6 +1512,7 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           description?: string | null;
+          frequency?: number | null;
           github_commit?: string | null;
           github_path?: string | null;
           id?: number;
@@ -1519,8 +1526,10 @@ export type Database = {
           pushed_by?: string | null;
           reject_reason?: string | null;
           rejected_at?: string | null;
+          same_fields?: string[];
           source?: string;
           status?: string;
+          timeframe?: number | null;
           updated_at?: string;
         };
         Relationships: [

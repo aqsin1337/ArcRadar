@@ -14,7 +14,16 @@ Rules:
   7-9 suspicious, 10-12 likely malicious, 13-15 critical), "parent_kind": "group" or "sid",
   "parent_value": string, "conditions": [{ "field": string, "op": "contains"|"equals"|"regex",
   "value": string }] (1-4 conditions, all must match), "mitre_ids": string[] (0-3 ATT&CK technique ids
-  such as "T1562.001") }.
+  such as "T1562.001"), "frequency": integer 2-100 or null, "timeframe": integer seconds 1-86400 or null,
+  "same_fields": string[] (0-2 fields) }.
+- REPEATING rules: when the request is about something happening several times in a period ("5 failed
+  logons in 5 minutes"), set "frequency" to the count and "timeframe" to the window in SECONDS (5 minutes =
+  300), and attach to the group or rule of the SINGLE event being counted (for failed Windows logons:
+  "parent_kind":"group","parent_value":"authentication_failed"). Put in "same_fields" the field that must
+  be the same each time, for example "win.eventdata.ipAddress" (same source address) or
+  "win.eventdata.targetUserName" (same account); use [] when it should not matter. A repeating rule needs no
+  conditions of its own: use [] unless the request also names specific text. For an ordinary rule that
+  fires on one event, set "frequency" and "timeframe" to null and "same_fields" to [].
 - "parent_kind":"group" with a rule group as "parent_value" is the normal choice. Known groups: ${WAZUH_GROUP_SUGGESTIONS.join(", ")}.
   Use "windows" for Windows event-channel events and "sysmon_event1" for process creation events.
 - A condition's "field" must start with "win.", "data.", "syscheck." or "agent.". Common fields:

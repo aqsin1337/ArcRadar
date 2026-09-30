@@ -639,6 +639,8 @@ tests on a Wazuh field (`win.`, `data.`, `syscheck.` or `agent.` prefix), all wr
 a regex with lookarounds, back-references or nested repetition is `422`. Ids are 100100-999999 (Wazuh ships
 examples at 100001-100002); the server picks the next free one when `id` is omitted.
 
+Optional repetition: `frequency` (2-100) and `timeframe` (seconds, 1-86400) are set together or not at all, `same_fields` (up to 3 Wazuh fields) needs them, and a repeating rule may have `conditions: []` (an ordinary one needs 1-10); the file then uses `if_matched_group`/`if_matched_sid`, `frequency`/`timeframe` attributes and `<same_field>`.
+
 Status: `draft` → `pushed` (committed) or `rejected`. Editing a pushed rule sets `changed_since_push`;
 editing a rejected rule restores it to a draft. `push` reads the file's current sha, commits (or updates)
 `rules/arcradar_<id>.xml` on the configured branch through the GitHub contents API (`src/lib/github/

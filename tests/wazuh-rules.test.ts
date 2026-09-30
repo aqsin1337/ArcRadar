@@ -29,7 +29,13 @@ const valid = {
   mitre_ids: ["T1562.001"],
 };
 
-const definition: WazuhRuleDefinition = { id: 100120, ...valid };
+const definition: WazuhRuleDefinition = {
+  id: 100120,
+  ...valid,
+  frequency: null,
+  timeframe: null,
+  same_fields: [],
+};
 
 describe("renderWazuhRuleXml", () => {
   it("renders the rule with the fixed element set", () => {
@@ -80,6 +86,96 @@ describe("renderWazuhRuleXml", () => {
     expect(conditionPattern("regex", "Set-Mp.*Disable")).toBe("(?i)Set-Mp.*Disable");
     expect(escapeRegex("(x)")).toBe("\\(x\\)");
     expect(escapeXml('<&>"')).toBe("&lt;&amp;&gt;&quot;");
+  });
+});
+
+describe("repeating rules", () => {
+  const repeating: WazuhRuleDefinition = {
+    id: 100130,
+    name: "Multiple failed logons",
+    level: 10,
+    parent_kind: "group",
+    parent_value: "authentication_failed",
+    conditions: [],
+    mitre_ids: ["T1110"],
+    frequency: 5,
+    timeframe: 300,
+    same_fields: ["win.eventdata.ipAddress"],
+  };
+
+  it("counts the parent with if_matched_group, frequency, timeframe and same_field", () => {
+    const xml = renderWazuhRuleXml(repeating);
+    expect(xml).toContain('<rule id="100130" level="10" frequency="5" timeframe="300">');
+    expect(xml).toContain("<if_matched_group>authentication_failed</if_matched_group>");
+    expect(xml).toContain("<same_field>win.eventdata.ipAddress</same_field>");
+    expect(xml).not.toContain("<if_group>");
+    expect(xml).not.toContain("<field ");
+  });
+
+  it("uses if_matched_sid for a parent rule id", () => {
+    const xml = renderWazuhRuleXml({ ...repeating, parent_kind: "sid", parent_value: "60122" });
+    expect(xml).toContain("<if_matched_sid>60122</if_matched_sid>");
+  });
+
+  it("an ordinary rule has none of it", () => {
+    const xml = renderWazuhRuleXml(definition);
+    expect(xml).not.toContain("frequency");
+    expect(xml).not.toContain("same_field");
+  });
+
+  const base = {
+    name: "Multiple failed logons",
+    level: 10,
+    parent_kind: "group" as const,
+    parent_value: "authentication_failed",
+    conditions: [],
+  };
+
+  it("a repeating rule needs no condition; an ordinary one still does", () => {
+    expect(createWazuhRuleSchema.safeParse({ ...base, frequency: 5, timeframe: 300 }).success).toBe(
+      true,
+    );
+    expect(createWazuhRuleSchema.safeParse(base).success).toBe(false);
+  });
+
+  it.each([
+    ["a count without a window", { frequency: 5 }],
+    ["a window without a count", { timeframe: 300 }],
+    ["a count of 1", { frequency: 1, timeframe: 300 }],
+    ["a count of 101", { frequency: 101, timeframe: 300 }],
+    ["a window of 0", { frequency: 5, timeframe: 0 }],
+    ["a window over a day", { frequency: 5, timeframe: 86401 }],
+    ["same_fields without repetition", { same_fields: ["win.eventdata.ipAddress"] }],
+    [
+      "a same_field outside the known prefixes",
+      { frequency: 5, timeframe: 300, same_fields: ["x"] },
+    ],
+    [
+      "four same_fields",
+      { frequency: 5, timeframe: 300, same_fields: ["win.a", "win.b", "win.c", "win.d"] },
+    ],
+  ])("rejects %s", (_label, patch) => {
+    expect(
+      createWazuhRuleSchema.safeParse({
+        ...base,
+        conditions: [{ field: "win.a", op: "contains", value: "x" }],
+        ...patch,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("the AI schema accepts a repeating draft and defaults an ordinary one to no repetition", () => {
+    const repeated = aiWazuhRuleSchema.parse({ ...base, frequency: 5, timeframe: 300 });
+    expect(repeated).toMatchObject({ frequency: 5, timeframe: 300, same_fields: [] });
+    const plain = aiWazuhRuleSchema.parse(valid);
+    expect(plain).toMatchObject({ frequency: null, timeframe: null, same_fields: [] });
+  });
+
+  it("an update can switch repetition off but not leave half of it", () => {
+    expect(updateWazuhRuleSchema.safeParse({ frequency: null, timeframe: null }).success).toBe(
+      true,
+    );
+    expect(updateWazuhRuleSchema.safeParse({ frequency: 5 }).success).toBe(false);
   });
 });
 

@@ -18,6 +18,7 @@ import {
   WAZUH_GROUP_SUGGESTIONS,
   WAZUH_RULE_SOURCE_LABELS,
   WAZUH_RULE_STATUS_LABELS,
+  WAZUH_SAME_FIELD_SUGGESTIONS,
   type WazuhRuleStatus,
 } from "@/lib/wazuh-rules/constants";
 import { createWazuhRuleSchema, updateWazuhRuleSchema } from "@/lib/wazuh-rules/schema";
@@ -43,6 +44,11 @@ type FormState = {
   parent_value: string;
   conditions: WazuhRuleCondition[];
   mitre: string;
+  repeat: boolean;
+  frequency: string;
+  /** Minutes in the form; the rule stores seconds. */
+  minutes: string;
+  sameFields: string;
 };
 
 const emptyCondition = (): WazuhRuleCondition => ({
@@ -60,6 +66,10 @@ const emptyForm = (): FormState => ({
   parent_value: "windows",
   conditions: [emptyCondition()],
   mitre: "",
+  repeat: false,
+  frequency: "5",
+  minutes: "5",
+  sameFields: "",
 });
 
 const formFromRule = (rule: WazuhRule): FormState => ({
@@ -71,6 +81,10 @@ const formFromRule = (rule: WazuhRule): FormState => ({
   parent_value: rule.parent_value,
   conditions: rule.conditions.map((condition) => ({ ...condition })),
   mitre: rule.mitre_ids.join(", "),
+  repeat: rule.frequency !== null,
+  frequency: String(rule.frequency ?? 5),
+  minutes: rule.timeframe === null ? "5" : String(rule.timeframe / 60),
+  sameFields: rule.same_fields.join(", "),
 });
 
 const mitreList = (text: string) =>
@@ -125,6 +139,9 @@ function RuleForm({
       parent_value: form.parent_value,
       conditions: form.conditions,
       mitre_ids: mitreList(form.mitre),
+      frequency: form.repeat ? Number(form.frequency) : null,
+      timeframe: form.repeat ? Math.round(Number(form.minutes) * 60) : null,
+      same_fields: form.repeat ? mitreList(form.sameFields) : [],
     };
     const payload = editing
       ? base
@@ -247,7 +264,7 @@ function RuleForm({
               maxLength={200}
               className="min-w-40 flex-[2]"
             />
-            {form.conditions.length > 1 && (
+            {(form.conditions.length > 1 || form.repeat) && (
               <button
                 type="button"
                 aria-label={`Remove condition ${index + 1}`}
@@ -273,6 +290,59 @@ function RuleForm({
           <Plus aria-hidden className="size-4" />
           Add condition
         </Button>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-border p-3">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            checked={form.repeat}
+            onChange={(event) => set({ repeat: event.target.checked })}
+            className="size-4 rounded border-input-border"
+          />
+          Only when it repeats
+        </label>
+        {form.repeat && (
+          <>
+            <p className="text-xs text-muted">
+              The group or rule above is the single event that is counted (for failed Windows
+              logons: group authentication_failed). The rule fires when it happened this many times
+              inside the window. Conditions are then optional.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-[140px_180px_1fr]">
+              <TextField
+                id={`${idPrefix}-frequency`}
+                label="Times"
+                inputMode="numeric"
+                value={form.frequency}
+                onChange={(event) => set({ frequency: event.target.value })}
+                error={shown.frequency}
+              />
+              <TextField
+                id={`${idPrefix}-minutes`}
+                label="Within (minutes)"
+                inputMode="decimal"
+                value={form.minutes}
+                onChange={(event) => set({ minutes: event.target.value })}
+                error={shown.timeframe}
+              />
+              <TextField
+                id={`${idPrefix}-same`}
+                label="Same value in (optional)"
+                hint="For example win.eventdata.ipAddress: counts per source"
+                list={`${idPrefix}-same-fields`}
+                value={form.sameFields}
+                onChange={(event) => set({ sameFields: event.target.value })}
+                error={shown.same_fields}
+              />
+              <datalist id={`${idPrefix}-same-fields`}>
+                {WAZUH_SAME_FIELD_SUGGESTIONS.map((field) => (
+                  <option key={field} value={field} />
+                ))}
+              </datalist>
+            </div>
+          </>
+        )}
       </div>
 
       <TextField
@@ -543,6 +613,17 @@ export function WazuhRulesManager({
                       {WAZUH_RULE_SOURCE_LABELS[rule.source]}
                     </Badge>
                     <Badge tone="slate">Level {rule.level}</Badge>
+                    {rule.frequency !== null && rule.timeframe !== null && (
+                      <Badge tone="orange">
+                        {rule.frequency}× in{" "}
+                        {rule.timeframe % 60 === 0
+                          ? `${rule.timeframe / 60} min`
+                          : `${rule.timeframe} s`}
+                        {rule.same_fields.length > 0
+                          ? " · same " + rule.same_fields.join(", ")
+                          : ""}
+                      </Badge>
+                    )}
                     {rule.mitre_ids.map((id) => (
                       <Badge key={id} tone="blue">
                         {id}

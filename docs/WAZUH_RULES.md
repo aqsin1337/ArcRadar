@@ -41,6 +41,24 @@ from the AI.
 
 Every step is audited (`wazuh_rule.created|generated|updated|rejected|pushed|deleted`).
 
+## Rules that fire on repetition ("5 failed logons in 5 minutes")
+
+Tick **Only when it repeats** on the form (or just say it to the AI: "alert when there are 5 failed logons
+in 5 minutes from the same address"). The rule then has:
+
+- **Times** (2-100) and **Within** (minutes; stored as seconds, 1 to 86400) — Wazuh's `frequency` and `timeframe`;
+- **Attach to** the group or rule of the _single_ event being counted (failed Windows logons:
+  group `authentication_failed`); the file uses `if_matched_group` / `if_matched_sid` instead of
+  `if_group` / `if_sid`;
+- **Same value in** (optional, up to 3 fields): the counted events must share it, for example
+  `win.eventdata.ipAddress` counts per source address (`<same_field>`);
+- conditions become optional (the count is the condition). An ordinary rule still needs at least one.
+
+Wazuh counts only events matched by a parent rule with a level above 0, and a parent must load before the
+rule (rules from the standard ruleset always do). Verified on the real Manager: with a count of 3 in 60
+seconds and `same_field`, the 3rd event from one address fired the rule and two events from another
+address did not.
+
 ## What a condition becomes
 
 Every condition is a Wazuh `<field name="…" type="pcre2">` test (all conditions must match):
@@ -121,7 +139,8 @@ Run it by hand when you want, or on a schedule (a cron line such as
 
 - No response action is attached to a rule and nothing is executed. Response stays the human-tracked
   flow of Phase 9.
-- One rule per file, a fixed set of elements, no frequency/timeframe correlation yet.
+- One rule per file and a fixed set of elements; repetition is one count, one window and up to three
+  same-value fields (no multi-rule correlation, no `different_field`).
 - A `Deployed` status (the Manager reporting back that it applied a rule) does not exist: ArcRadar only
   knows a rule was committed. "Triggered N times" is the practical proof that it is live.
 - ArcRadar commits to the configured branch directly; there is no pull-request step.

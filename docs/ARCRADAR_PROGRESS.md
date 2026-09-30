@@ -271,7 +271,7 @@ Next.js 16.3.6 (App Router, `src/` layout; the file convention is `src/proxy.ts`
     runs `wazuh-analysisd -t`, rolls back if Wazuh refuses, restarts only on change; run by hand for now
     (a cron line is documented). (f) Response actions are not attached to rules and nothing executes: the
     ChatGPT-suggested "Approve response → Active Response" idea was deliberately left out (the AI
-    recommends and tracks, never executes). Setup and workflow: `docs/WAZUH_RULES.md`.
+    recommends and tracks, never executes). Setup and workflow: `docs/WAZUH_RULES.md`. (g) **Repeating rules** (migration `20260930160000`): optional `frequency` + `timeframe` (seconds) + up to three `same_fields`, rendered as `if_matched_group`/`if_matched_sid` + `<same_field>`; a repeating rule may have no conditions of its own; the AI prompt teaches the model to use them ("5 failures in 5 minutes" = 5 / 300). Verified against the real Manager (see the doc). (h) The Manager applies rules from a cron entry (`/etc/cron.d/arcradar-rules`, every 10 minutes, `flock`, log in `/var/log/arcradar-rules.log`).
 
 ## What exists after Phase 12
 
