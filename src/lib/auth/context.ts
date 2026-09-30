@@ -34,6 +34,21 @@ export function isAuthServiceDown(error: { status?: number }) {
 }
 
 /**
+ * Why a signed-in person has no usable profile: still waiting for approval, or disabled. RLS hides an
+ * inactive profile from its owner, so this asks a security-definer function that answers for the
+ * caller only. Any failure to ask means "disabled" (fail closed).
+ */
+async function inactiveAccountError(supabase: AuthClient) {
+  try {
+    const { data } = await supabase.rpc("account_state");
+    if (data === "pending") return apiErrors.accountPending();
+  } catch {
+    // fall through: treat as disabled
+  }
+  return apiErrors.accountDisabled();
+}
+
+/**
  * Loads the caller's profile and resolves their permissions for an already validated auth user.
  * RLS on `profiles` only shows the row of an active user, so a missing row means the account is
  * disabled (or has no profile) and gets no access.
@@ -45,7 +60,7 @@ export async function buildAuthContext(supabase: AuthClient, user: User): Promis
     .eq("id", user.id)
     .maybeSingle();
   if (error) throw toApiError(error);
-  if (!data || !data.is_active) throw apiErrors.accountDisabled();
+  if (!data || !data.is_active) throw await inactiveAccountError(supabase);
 
   if (!isRoleName(data.role_name)) {
     // A role exists in the database that this build does not know: fail closed.

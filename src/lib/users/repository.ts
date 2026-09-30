@@ -38,7 +38,7 @@ export async function findUsers(): Promise<AdminUser[]> {
 
   const { data: profiles, error } = await admin
     .from("profiles")
-    .select("id, display_name, role_name, is_active");
+    .select("id, display_name, role_name, is_active, approved_at");
   if (error) throw toApiError(error);
   const byId = new Map(profiles.map((row) => [row.id, row]));
 
@@ -50,6 +50,7 @@ export async function findUsers(): Promise<AdminUser[]> {
       display_name: profile?.display_name ?? null,
       role: profile && isRoleName(profile.role_name) ? profile.role_name : "viewer",
       is_active: profile?.is_active ?? false,
+      pending: profile ? !profile.is_active && profile.approved_at === null : false,
       created_at: identity.created_at,
       last_sign_in_at: identity.last_sign_in_at,
     };
@@ -58,11 +59,11 @@ export async function findUsers(): Promise<AdminUser[]> {
 
 export async function findProfileForAdmin(
   id: string,
-): Promise<{ role_name: string; is_active: boolean } | null> {
+): Promise<{ role_name: string; is_active: boolean; approved_at: string | null } | null> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("profiles")
-    .select("role_name, is_active")
+    .select("role_name, is_active, approved_at")
     .eq("id", id)
     .maybeSingle();
   if (error) throw toApiError(error);

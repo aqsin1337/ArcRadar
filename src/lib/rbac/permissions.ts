@@ -48,7 +48,8 @@ const VIEWER_PERMISSIONS = [
   "reports:read",
 ] as const satisfies readonly Permission[];
 
-const ANALYST_PERMISSIONS = [
+/** Tier 2: investigates, opens cases, writes indicators and reports. */
+const SOC_L2_PERMISSIONS = [
   "indicators:read",
   "indicators:write",
   "threat_intel:read",
@@ -65,9 +66,17 @@ const ANALYST_PERMISSIONS = [
   "ai:use",
 ] as const satisfies readonly Permission[];
 
+/** Tier 1: triages alerts (acknowledge, false positive, assign) and uses AI; cannot open cases. */
+const SOC_L1_PERMISSIONS = [
+  ...VIEWER_PERMISSIONS,
+  "alerts:write",
+  "ai:use",
+] as const satisfies readonly Permission[];
+
 export const ROLE_PERMISSIONS: Readonly<Record<RoleName, readonly Permission[]>> = {
   admin: PERMISSIONS,
-  analyst: ANALYST_PERMISSIONS,
+  soc_l2: SOC_L2_PERMISSIONS,
+  soc_l1: SOC_L1_PERMISSIONS,
   viewer: VIEWER_PERMISSIONS,
 };
 

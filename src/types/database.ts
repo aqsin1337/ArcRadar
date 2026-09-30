@@ -1048,6 +1048,7 @@ export type Database = {
       };
       profiles: {
         Row: {
+          approved_at: string | null;
           avatar_url: string | null;
           created_at: string;
           display_name: string | null;
@@ -1057,6 +1058,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          approved_at?: string | null;
           avatar_url?: string | null;
           created_at?: string;
           display_name?: string | null;
@@ -1066,6 +1068,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          approved_at?: string | null;
           avatar_url?: string | null;
           created_at?: string;
           display_name?: string | null;
@@ -1554,6 +1557,7 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      account_state: { Args: Record<PropertyKey, never>; Returns: string };
       activity_series: {
         Args: { p_days?: number };
         Returns: {

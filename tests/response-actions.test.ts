@@ -40,7 +40,7 @@ const LOG_ID = "9a3c2e10-1b7d-4e6f-a0c4-5d8e7f6a4b3c";
 const ACTION_ID = "3f0d3a86-5a53-4c8e-8f7e-1f2d3c4b5a69";
 const NOW = new Date("2026-09-28T10:00:00.000Z");
 
-const auth = (role: "admin" | "analyst" | "viewer" = "analyst"): AuthContext => ({
+const auth = (role: "admin" | "soc_l2" | "viewer" = "soc_l2"): AuthContext => ({
   supabase: {} as AuthClient,
   user: { id: "user-1", email: `${role}@arcradar.test` },
   profile: { display_name: role, role },

@@ -12,7 +12,7 @@ insert into auth.users (id, email) values
   ('e4e4e4e4-0000-4000-8000-000000000003', 'fxwr-viewer@arcradar.test');
 
 update public.profiles set role_name = 'admin' where id = 'e4e4e4e4-0000-4000-8000-000000000001';
-update public.profiles set role_name = 'analyst' where id = 'e4e4e4e4-0000-4000-8000-000000000002';
+update public.profiles set role_name = 'soc_l2' where id = 'e4e4e4e4-0000-4000-8000-000000000002';
 
 -- 1. Only rules:manage (admin) reads or writes; always local, always a draft on insert.
 -- ---------------------------------------------------------------------------------------------

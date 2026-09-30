@@ -11,7 +11,7 @@ insert into auth.users (id, email) values
   ('d3d3d3d3-0000-4000-8000-000000000003', 'fxdr-viewer@arcradar.test');
 
 update public.profiles set role_name = 'admin' where id = 'd3d3d3d3-0000-4000-8000-000000000001';
-update public.profiles set role_name = 'analyst' where id = 'd3d3d3d3-0000-4000-8000-000000000002';
+update public.profiles set role_name = 'soc_l2' where id = 'd3d3d3d3-0000-4000-8000-000000000002';
 
 -- 1. detection_rules: permissions, provenance, id range and conditions shape.
 -- ---------------------------------------------------------------------------------------------

@@ -40,8 +40,8 @@ const request = { headers: new Headers() };
 const auth = (): AuthContext => ({
   supabase: {} as AuthClient,
   user: { id: ANALYST, email: "analyst@arcradar.test" },
-  profile: { display_name: "Analyst", role: "analyst" },
-  permissions: permissionsForRole("analyst"),
+  profile: { display_name: "Analyst", role: "soc_l2" },
+  permissions: permissionsForRole("soc_l2"),
 });
 
 const alert = (overrides: Partial<Alert> = {}): Alert =>
@@ -282,7 +282,7 @@ describe("updateAlert", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     audit.mockResolvedValue(true);
-    team.findMember.mockResolvedValue({ id: ANALYST, display_name: "Analyst", role: "analyst" });
+    team.findMember.mockResolvedValue({ id: ANALYST, display_name: "Analyst", role: "soc_l2" });
     repo.findAlertRow.mockResolvedValue(alert());
     repo.findAlertDetail.mockResolvedValue({ ...alert(), investigations: [] });
   });

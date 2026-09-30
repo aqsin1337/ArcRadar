@@ -57,9 +57,9 @@ export function SignupForm() {
     return (
       <div className="space-y-4">
         <Alert tone="success" title="Request received">
-          If this email can be registered, the account has been created. Depending on the
-          project&apos;s settings you may need to confirm your email address first. New accounts
-          start with read-only access; an administrator can grant more.
+          If this email can be registered, the account has been created. It stays locked until an
+          administrator approves it and gives it a role, so you cannot sign in yet. Depending on the
+          project&apos;s settings you may also need to confirm your email address first.
         </Alert>
         <Link href="/login" className={buttonClasses({ size: "lg", className: "w-full" })}>
           Continue to sign in

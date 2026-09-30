@@ -304,3 +304,10 @@ Keep entries short. Newest entries go at the bottom.
 
 - Rewrote `README.md` (badges, mermaid data-flow diagram, screenshots from the local demo dataset, feature list incl. Wazuh rules as code, engineering highlights), added `SECURITY.md`, `.github/workflows/ci.yml` (lint, typecheck, format check, unit tests on Node 24) and `docs/images/` (landing, dashboard, alerts, indicators). MITRE / alert-detail / telemetry / detection-rules shots were dropped on purpose: the local demo data leaves them empty. Retake them from real data after step 3.
 - Committed and pushed to `main`. No `gh` CLI on this machine, so the repo description/topics/social preview must be set by hand in the GitHub UI. No LICENSE added (the user's choice).
+
+### 2026-09-30 (session 10, continued — SOC roles, approved sign-up, demo script)
+
+- User needs a recorded video demo tomorrow (project must look at least 75% done) and asked for: L1/L2 SOC analyst roles instead of admin/analyst/viewer, and accounts that cannot be used until he approves them and picks the role.
+- Migration `20260930170000`: `analyst` → `soc_l2`, new `soc_l1` (viewer perms + `alerts:write` + `ai:use`), `profiles.approved_at`, sign-ups made by GoTrue start inactive/unapproved (`session_user = 'supabase_auth_admin'`; SQL inserts stay approved), `account_state()`. App: `ROLE_LABELS`/`roleLabel()`, `ACCOUNT_PENDING` error + "Waiting for approval" screen, Settings shows pending accounts first with an "Approve as <role>" button (audit `user.approved`). Decision 31 in the progress file. `docs/DEMO_SCRIPT.md` is the recording plan.
+- Validated locally: lint, typecheck, format, 856 unit tests, all SQL tests incl. `soc_roles_and_approval.test.sql`, `api:smoke` 442/442 (real GoTrue sign-up → pending → approve → sign in), E2E all green after adapting the disabled-account test.
+- **Committed locally, NOT pushed and NOT deployed.** Pushing first would break production (new code reads `approved_at` / `account_state()`): push the migration to the hosted project first (`supabase db push`, needs the user's Supabase token), then `git push`. Also check the hosted project's "confirm email" setting for the demo.

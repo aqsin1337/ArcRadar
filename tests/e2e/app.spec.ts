@@ -118,12 +118,26 @@ test.describe("accounts that cannot use the app", () => {
     try {
       const context = await browser.newContext();
       const page = await context.newPage();
+
+      // A new account starts locked: the sign-in says so and leaves no session behind.
       await page.goto("/login");
       await page.getByLabel("Email").fill(email);
       await page.getByLabel(/^Password/).fill(DEMO_PASSWORD);
       await page.getByRole("button", { name: "Sign in" }).click();
+      await expect(page.getByText("waiting for an administrator to approve it")).toBeVisible();
+      await expect(page).toHaveURL(/\/login$/);
+
+      // The administrator approves it (the same write the Settings page makes).
+      const approve = await adminFetch(`/rest/v1/profiles?id=eq.${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role_name: "soc_l1", is_active: true }),
+        headers: { prefer: "return=minimal" },
+      });
+      expect(approve.status).toBe(204);
+
+      await page.getByRole("button", { name: "Sign in" }).click();
       await expect(page).toHaveURL(/\/dashboard$/);
-      await expect(page.getByTestId("user-role")).toHaveText("Viewer"); // new accounts are viewers
+      await expect(page.getByTestId("user-role")).toHaveText("SOC L1"); // the role the admin chose
 
       const disable = await adminFetch(`/rest/v1/profiles?id=eq.${id}`, {
         method: "PATCH",

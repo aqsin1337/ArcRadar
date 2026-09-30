@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { humanize } from "@/components/ui/domain-badges";
+import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { useAction } from "@/components/ui/use-action";
 import { apiFetch } from "@/lib/api/client";
 import { formatRelative } from "@/lib/format";
-import { ROLE_NAMES, type RoleName } from "@/types/domain";
+import { ROLE_NAMES, roleLabel, type RoleName } from "@/types/domain";
 import type { AdminUser } from "@/lib/users/types";
 
 /** Every account, with a role and active-status control for everyone except the caller themselves. */
@@ -22,13 +22,20 @@ export function UsersTable({
   now: Date;
 }) {
   const { pending, error, run } = useAction();
-  const [rows, setRows] = useState(users);
+  const [rows, setRows] = useState(() =>
+    [...users].sort((a, b) => Number(b.pending) - Number(a.pending)),
+  );
 
   async function patch(id: string, body: { role_name?: RoleName; is_active?: boolean }) {
+    const approving = body.is_active === true;
     // Optimistic: the role select and the active checkbox are both controlled, so they must reflect
     // the change in the same tick as the click, or React's re-render snaps them straight back.
     const previous = rows.find((u) => u.id === id);
-    setRows((current) => current.map((u) => (u.id === id ? { ...u, ...body } : u)));
+    setRows((current) =>
+      current.map((u) =>
+        u.id === id ? { ...u, ...body, pending: approving ? false : u.pending } : u,
+      ),
+    );
     const ok = await run(id, () => apiFetch(`/api/users/${id}`, { method: "PATCH", body }));
     if (!ok && previous) {
       setRows((current) => current.map((u) => (u.id === id ? previous : u)));
@@ -59,7 +66,7 @@ export function UsersTable({
                 </Td>
                 <Td>
                   {isSelf ? (
-                    <Badge tone="brand">{humanize(user.role)}</Badge>
+                    <Badge tone="brand">{roleLabel(user.role)}</Badge>
                   ) : (
                     <Select
                       aria-label={`Role for ${user.email ?? user.id}`}
@@ -68,11 +75,11 @@ export function UsersTable({
                       onChange={(event) =>
                         patch(user.id, { role_name: event.target.value as RoleName })
                       }
-                      className="h-8 w-32 text-xs"
+                      className="h-8 w-36 text-xs"
                     >
                       {ROLE_NAMES.map((role) => (
                         <option key={role} value={role}>
-                          {humanize(role)}
+                          {roleLabel(role)}
                         </option>
                       ))}
                     </Select>
@@ -81,6 +88,18 @@ export function UsersTable({
                 <Td>
                   {isSelf ? (
                     <Badge tone="green">Active</Badge>
+                  ) : user.pending ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone="amber">Pending approval</Badge>
+                      <Button
+                        size="sm"
+                        loading={busy}
+                        onClick={() => patch(user.id, { role_name: user.role, is_active: true })}
+                        aria-label={`Approve ${user.email ?? user.id} as ${roleLabel(user.role)}`}
+                      >
+                        Approve as {roleLabel(user.role)}
+                      </Button>
+                    </div>
                   ) : (
                     <label className="flex items-center gap-2 text-sm">
                       <input

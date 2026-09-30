@@ -22,7 +22,7 @@ const { getVulnerability, getVulnerabilityProvider, importVulnerability, listVul
   await import("@/lib/vulnerabilities/service");
 
 const NOW = new Date("2026-09-26T12:00:00.000Z");
-const auth = (role: "admin" | "analyst" | "viewer" = "admin"): AuthContext => ({
+const auth = (role: "admin" | "soc_l2" | "viewer" = "admin"): AuthContext => ({
   supabase: {} as AuthClient,
   user: { id: "user-1", email: "admin@arcradar.test" },
   profile: { display_name: role, role },

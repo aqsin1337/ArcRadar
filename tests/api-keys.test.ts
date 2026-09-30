@@ -30,7 +30,7 @@ const ADMIN = "3f0d3a86-5a53-4c8e-8f7e-1f2d3c4b5a69";
 const KEY_ID = "0b8f4f3e-2f4e-4c55-9e0a-6a1a3a4b5c6d";
 const request = { headers: new Headers() };
 
-const auth = (role: "admin" | "analyst" | "viewer"): AuthContext => ({
+const auth = (role: "admin" | "soc_l2" | "viewer"): AuthContext => ({
   supabase: {} as AuthClient,
   user: { id: ADMIN, email: `${role}@arcradar.test` },
   profile: { display_name: role, role },
@@ -269,7 +269,7 @@ describe("createApiKey", () => {
   });
 
   it("refuses a role that may not use the scope (403), before anything is stored", async () => {
-    for (const role of ["analyst", "viewer"] as const) {
+    for (const role of ["soc_l2", "viewer"] as const) {
       const error = await failureOf(
         createApiKey(auth(role), { name: "x", scopes: ["ingest:wazuh"] }, request, NOW),
       );
@@ -323,7 +323,7 @@ describe("listing and revoking", () => {
 
   it("answers 404 for a key the caller cannot see (row level security) and for a malformed id", async () => {
     repo.findVisibleApiKey.mockResolvedValue(null);
-    expect(await failureOf(revokeApiKey(auth("analyst"), KEY_ID, request, NOW))).toMatchObject({
+    expect(await failureOf(revokeApiKey(auth("soc_l2"), KEY_ID, request, NOW))).toMatchObject({
       status: 404,
     });
     expect(repo.revokeApiKeyRow).not.toHaveBeenCalled();
@@ -386,7 +386,7 @@ describe("verifyApiKey", () => {
       ["expired", owned({ expires_at: new Date(NOW.getTime() - 1000).toISOString() })],
       ["owner disabled", owned({}, { is_active: false, role_name: "admin" })],
       ["owner deleted", owned({}, null)],
-      ["owner demoted below the scope", owned({}, { is_active: true, role_name: "analyst" })],
+      ["owner demoted below the scope", owned({}, { is_active: true, role_name: "soc_l2" })],
       ["owner with an unknown role", owned({}, { is_active: true, role_name: "root" })],
     ];
     const seen = new Set<string>();

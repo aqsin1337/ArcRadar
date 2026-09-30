@@ -73,14 +73,19 @@ export async function login(
   } catch (failure) {
     // Valid credentials but no usable account (disabled, no profile): do not leave a session behind.
     await signOutLocal(supabase);
-    if (failure instanceof ApiError && failure.code === "ACCOUNT_DISABLED") {
+    if (
+      failure instanceof ApiError &&
+      (failure.code === "ACCOUNT_DISABLED" || failure.code === "ACCOUNT_PENDING")
+    ) {
       await writeAuditLog(
         {
           action: "auth.login_failed",
           userId: data.user.id,
           entityType: "user",
           entityId: data.user.id,
-          metadata: { reason: "account_disabled" },
+          metadata: {
+            reason: failure.code === "ACCOUNT_PENDING" ? "account_pending" : "account_disabled",
+          },
         },
         request,
       );
@@ -115,7 +120,7 @@ export async function logout(supabase: AuthClient, request: RequestLike): Promis
 }
 
 /**
- * Registers a new account. New users are always `viewer` (the role is set by a database trigger and
+ * Registers a new account. New users are always `viewer` and inactive until an administrator approves them (the role is set by a database trigger and
  * never read from the request). The outcome is identical whether or not the email is already
  * registered, and the caller is never signed in by registering, so the endpoint cannot be used to
  * discover accounts. Turn sign-ups off entirely in the Supabase dashboard if the deployment is

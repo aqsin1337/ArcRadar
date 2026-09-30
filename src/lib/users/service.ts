@@ -65,13 +65,18 @@ export async function updateUser(
     );
   }
   if (input.is_active !== undefined && input.is_active !== current.is_active) {
+    const approval = input.is_active && current.approved_at === null;
     await writeAuditLog(
       {
-        action: input.is_active ? "user.activated" : "user.deactivated",
+        action: approval
+          ? "user.approved"
+          : input.is_active
+            ? "user.activated"
+            : "user.deactivated",
         userId: auth.user.id,
         entityType: "profile",
         entityId: id,
-        metadata: {},
+        metadata: approval ? { role: nextRole } : {},
       },
       request,
     );

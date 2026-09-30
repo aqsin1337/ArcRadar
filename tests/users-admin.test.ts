@@ -35,7 +35,7 @@ describe("updateUserSchema", () => {
   it("needs at least one field and only known roles", () => {
     expect(updateUserSchema.safeParse({}).success).toBe(false);
     expect(updateUserSchema.safeParse({ role_name: "superuser" }).success).toBe(false);
-    expect(updateUserSchema.safeParse({ role_name: "analyst" }).success).toBe(true);
+    expect(updateUserSchema.safeParse({ role_name: "soc_l2" }).success).toBe(true);
     expect(updateUserSchema.safeParse({ is_active: false }).success).toBe(true);
     expect(updateUserSchema.safeParse({ role_name: "admin", extra: 1 }).success).toBe(false);
   });
@@ -71,29 +71,58 @@ describe("updateUser", () => {
   });
 
   it("changes a role and audits it, only when the role actually changes", async () => {
-    repo.findProfileForAdmin.mockResolvedValue({ role_name: "viewer", is_active: true });
-    await updateUser(admin(), TARGET, { role_name: "analyst" }, request);
+    repo.findProfileForAdmin.mockResolvedValue({
+      role_name: "viewer",
+      is_active: true,
+      approved_at: "2026-01-01T00:00:00Z",
+    });
+    await updateUser(admin(), TARGET, { role_name: "soc_l2" }, request);
     expect(repo.updateProfileForAdmin).toHaveBeenCalledWith(TARGET, {
-      role_name: "analyst",
+      role_name: "soc_l2",
       is_active: undefined,
     });
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "user.role_changed",
         entityId: TARGET,
-        metadata: { from: "viewer", to: "analyst" },
+        metadata: { from: "viewer", to: "soc_l2" },
       }),
       request,
     );
 
     audit.mockClear();
-    repo.findProfileForAdmin.mockResolvedValue({ role_name: "analyst", is_active: true });
-    await updateUser(admin(), TARGET, { role_name: "analyst" }, request);
+    repo.findProfileForAdmin.mockResolvedValue({
+      role_name: "soc_l2",
+      is_active: true,
+      approved_at: "2026-01-01T00:00:00Z",
+    });
+    await updateUser(admin(), TARGET, { role_name: "soc_l2" }, request);
     expect(audit).not.toHaveBeenCalled();
   });
 
+  it("approving a waiting account is audited as an approval with the chosen role", async () => {
+    repo.findProfileForAdmin.mockResolvedValue({
+      role_name: "viewer",
+      is_active: false,
+      approved_at: null,
+    });
+    await updateUser(admin(), TARGET, { role_name: "soc_l1", is_active: true }, request);
+    expect(repo.updateProfileForAdmin).toHaveBeenCalledWith(TARGET, {
+      role_name: "soc_l1",
+      is_active: true,
+    });
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "user.approved", metadata: { role: "soc_l1" } }),
+      request,
+    );
+  });
+
   it("activates and deactivates with the right action name", async () => {
-    repo.findProfileForAdmin.mockResolvedValue({ role_name: "viewer", is_active: true });
+    repo.findProfileForAdmin.mockResolvedValue({
+      role_name: "viewer",
+      is_active: true,
+      approved_at: "2026-01-01T00:00:00Z",
+    });
     await updateUser(admin(), TARGET, { is_active: false }, request);
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({ action: "user.deactivated" }),
@@ -101,7 +130,11 @@ describe("updateUser", () => {
     );
 
     audit.mockClear();
-    repo.findProfileForAdmin.mockResolvedValue({ role_name: "viewer", is_active: false });
+    repo.findProfileForAdmin.mockResolvedValue({
+      role_name: "viewer",
+      is_active: false,
+      approved_at: "2026-01-01T00:00:00Z",
+    });
     await updateUser(admin(), TARGET, { is_active: true }, request);
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({ action: "user.activated" }),
@@ -110,7 +143,11 @@ describe("updateUser", () => {
   });
 
   it("refuses to leave the workspace with no active administrator", async () => {
-    repo.findProfileForAdmin.mockResolvedValue({ role_name: "admin", is_active: true });
+    repo.findProfileForAdmin.mockResolvedValue({
+      role_name: "admin",
+      is_active: true,
+      approved_at: "2026-01-01T00:00:00Z",
+    });
     repo.countActiveAdmins.mockResolvedValue(1); // the target is the only one
     await expect(
       updateUser(admin(), TARGET, { role_name: "viewer" }, request),
@@ -122,14 +159,22 @@ describe("updateUser", () => {
   });
 
   it("allows demoting the last administrator's role as long as another stays an active admin", async () => {
-    repo.findProfileForAdmin.mockResolvedValue({ role_name: "admin", is_active: true });
+    repo.findProfileForAdmin.mockResolvedValue({
+      role_name: "admin",
+      is_active: true,
+      approved_at: "2026-01-01T00:00:00Z",
+    });
     repo.countActiveAdmins.mockResolvedValue(2);
-    await updateUser(admin(), TARGET, { role_name: "analyst" }, request);
+    await updateUser(admin(), TARGET, { role_name: "soc_l2" }, request);
     expect(repo.updateProfileForAdmin).toHaveBeenCalled();
   });
 
   it("does not run the last-admin check for someone who was never an active admin", async () => {
-    repo.findProfileForAdmin.mockResolvedValue({ role_name: "viewer", is_active: true });
+    repo.findProfileForAdmin.mockResolvedValue({
+      role_name: "viewer",
+      is_active: true,
+      approved_at: "2026-01-01T00:00:00Z",
+    });
     repo.countActiveAdmins.mockResolvedValue(0); // must not matter here
     await updateUser(admin(), TARGET, { is_active: false }, request);
     expect(repo.updateProfileForAdmin).toHaveBeenCalled();

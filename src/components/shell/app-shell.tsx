@@ -5,7 +5,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Logo } from "@/components/ui/logo";
 import type { SessionInfo } from "@/lib/auth/context";
-import { humanize } from "@/components/ui/domain-badges";
+import { roleLabel } from "@/types/domain";
 import { GlobalSearch } from "./global-search";
 import { MobileNav } from "./mobile-nav";
 import { SidebarNav } from "./sidebar-nav";
@@ -67,7 +67,7 @@ export function AppShell({ session, children }: { session: SessionInfo; children
             </div>
             <span className="hidden sm:inline-flex">
               <Badge tone="brand" data-testid="user-role">
-                {humanize(session.profile.role)}
+                {roleLabel(session.profile.role)}
               </Badge>
             </span>
           </Link>

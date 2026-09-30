@@ -1,4 +1,4 @@
-import { ShieldX } from "lucide-react";
+import { Hourglass, ShieldX } from "lucide-react";
 import type { ReactNode } from "react";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { RefreshButton } from "@/components/refresh-button";
@@ -9,6 +9,20 @@ function FullPage({ children }: { children: ReactNode }) {
     <main id="main" className="flex min-h-dvh items-center justify-center px-4">
       {children}
     </main>
+  );
+}
+
+/** Signed up and confirmed, but an administrator has not approved the account yet. */
+export function AccountPendingScreen() {
+  return (
+    <FullPage>
+      <ErrorState
+        icon={Hourglass}
+        title="Waiting for approval"
+        description="Your account was created, but an administrator has to approve it and give it a role before you can use ArcRadar. Try again once you have been told it is approved."
+        action={<SignOutButton variant="secondary" showLabel />}
+      />
+    </FullPage>
   );
 }
 

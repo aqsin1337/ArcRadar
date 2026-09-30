@@ -43,6 +43,7 @@ export const AUDIT_ACTIONS = [
   "report.deleted",
   "profile.updated",
   "user.role_changed",
+  "user.approved",
   "user.activated",
   "user.deactivated",
   "integration.updated",

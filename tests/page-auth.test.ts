@@ -29,6 +29,7 @@ describe("getPageAuth", () => {
     const cases: [unknown, string][] = [
       [apiErrors.unauthenticated(), "signed_out"],
       [apiErrors.accountDisabled(), "disabled"],
+      [apiErrors.accountPending(), "pending"],
       [apiErrors.forbidden(), "disabled"],
       [apiErrors.unavailable(), "unavailable"],
       [apiErrors.internal(), "unavailable"],

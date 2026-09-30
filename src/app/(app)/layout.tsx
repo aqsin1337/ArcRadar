@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation";
 import { SessionProvider } from "@/components/session-provider";
 import { AppShell } from "@/components/shell/app-shell";
-import { AccountDisabledScreen, ServiceUnavailableScreen } from "@/components/shell/screens";
+import {
+  AccountDisabledScreen,
+  AccountPendingScreen,
+  ServiceUnavailableScreen,
+} from "@/components/shell/screens";
 import { toSessionInfo } from "@/lib/auth/context";
 import { getPageAuth } from "@/lib/auth/session";
 
@@ -14,6 +18,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const result = await getPageAuth();
 
   if (result.status === "signed_out") redirect("/login");
+  if (result.status === "pending") return <AccountPendingScreen />;
   if (result.status === "disabled") return <AccountDisabledScreen />;
   if (result.status === "unavailable") return <ServiceUnavailableScreen />;
 

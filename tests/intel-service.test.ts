@@ -134,7 +134,7 @@ describe("lookupIntel without any live provider", () => {
 
   it("says so when even the demo dataset has no record", async () => {
     const { deps: d } = deps([]);
-    const result = await lookupIntel(auth("analyst"), target("ip", "203.0.113.190"), request, d);
+    const result = await lookupIntel(auth("soc_l2"), target("ip", "203.0.113.190"), request, d);
     expect(result.results).toEqual([]);
     expect(result.attempts).toEqual([
       { provider: expect.objectContaining({ id: "demo" }), status: "not_found" },
@@ -176,7 +176,7 @@ describe("lookupIntel with live providers", () => {
   it("asks a live provider for an analyst, shows only its answer and audits the lookup", async () => {
     const vt = liveProvider("virustotal", async (ip) => liveProfile(ip));
     const { deps: d, audit, demoLookup } = deps([vt.provider]);
-    const result = await lookupIntel(auth("analyst"), target("ip", "8.8.8.8"), request, d);
+    const result = await lookupIntel(auth("soc_l2"), target("ip", "8.8.8.8"), request, d);
 
     expect(vt.lookupIp).toHaveBeenCalledOnce();
     expect(vt.lookupIp.mock.calls[0][0]).toBe("8.8.8.8");
@@ -220,7 +220,7 @@ describe("lookupIntel with live providers", () => {
     const { deps: d, audit } = deps([vt.provider]);
 
     const documentation = await lookupIntel(
-      auth("analyst"),
+      auth("soc_l2"),
       target("ip", "198.51.100.23"),
       request,
       d,
@@ -233,7 +233,7 @@ describe("lookupIntel with live providers", () => {
     const urlProvider: IntelProvider = { info: liveInfo("virustotal"), lookupUrl };
     const { deps: urlDeps } = deps([urlProvider], { audit });
     const url = await lookupIntel(
-      auth("analyst"),
+      auth("soc_l2"),
       target("url", "https://user:pw@google.com/x"),
       request,
       urlDeps,
@@ -274,7 +274,7 @@ describe("lookupIntel with live providers", () => {
     });
     const { deps: d } = deps([vt.provider]);
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const result = await lookupIntel(auth("analyst"), target("ip", "8.8.8.8"), request, d);
+    const result = await lookupIntel(auth("soc_l2"), target("ip", "8.8.8.8"), request, d);
     error.mockRestore();
 
     expect(result.attempts[0]).toMatchObject({ status: "failed", reason: "unavailable" });
@@ -288,7 +288,7 @@ describe("lookupIntel with live providers", () => {
     });
     const abuse = liveProvider("abuseipdb", async (ip) => liveProfile(ip), ["ip"]);
     const { deps: d, demoLookup } = deps([vt.provider, abuse.provider]);
-    const result = await lookupIntel(auth("analyst"), target("ip", "8.8.8.8"), request, d);
+    const result = await lookupIntel(auth("soc_l2"), target("ip", "8.8.8.8"), request, d);
 
     expect(result.results.map((entry) => entry.provider.id)).toEqual(["abuseipdb"]);
     expect(result.attempts.map((attempt) => attempt.status)).toEqual(["failed", "ok"]);
@@ -310,7 +310,7 @@ describe("lookupIntel with live providers", () => {
     const abuse = slow("abuseipdb");
     const { deps: d } = deps([vt.provider, abuse.provider], { timeoutMs: 5000 });
 
-    const pending = lookupIntel(auth("analyst"), target("ip", "8.8.8.8"), request, d);
+    const pending = lookupIntel(auth("soc_l2"), target("ip", "8.8.8.8"), request, d);
     await vi.waitFor(() => expect(started).toEqual(["virustotal", "abuseipdb"]));
     release();
     expect((await pending).results).toHaveLength(2);
@@ -325,7 +325,7 @@ describe("lookupIntel with live providers", () => {
         }),
     );
     const { deps: d } = deps([stuck.provider], { timeoutMs: 20 });
-    const result = await lookupIntel(auth("analyst"), target("ip", "8.8.8.8"), request, d);
+    const result = await lookupIntel(auth("soc_l2"), target("ip", "8.8.8.8"), request, d);
     expect(result.attempts[0]).toMatchObject({ status: "failed", reason: "timeout" });
     expect(result.fallback).toBe(true);
   });
@@ -333,7 +333,7 @@ describe("lookupIntel with live providers", () => {
   it("only asks providers that can answer this kind of lookup", async () => {
     const abuse = liveProvider("abuseipdb", async (ip) => liveProfile(ip), ["ip"]);
     const { deps: d, audit } = deps([abuse.provider]);
-    const result = await lookupIntel(auth("analyst"), target("domain", "google.com"), request, d);
+    const result = await lookupIntel(auth("soc_l2"), target("domain", "google.com"), request, d);
 
     expect(result.live_providers).toEqual([]);
     expect(result.attempts.map((attempt) => attempt.provider.id)).toEqual(["demo"]);
@@ -346,7 +346,7 @@ describe("lookupIntel with live providers", () => {
     const provider: IntelProvider = { info: liveInfo("virustotal"), lookupUrl };
     const { deps: d, audit } = deps([provider]);
     await lookupIntel(
-      auth("analyst"),
+      auth("soc_l2"),
       target("url", "https://google.com/login?token=SECRET#frag"),
       request,
       d,
@@ -539,7 +539,7 @@ describe("lookupIntel recording what a live lookup learned", () => {
     const abuse = liveProvider("abuseipdb", async (ip) => malicious(ip));
     const record = vi.fn().mockResolvedValue(summary({ created: 1 }));
     const { deps: d, audit, loadLocal } = deps([abuse.provider], { record });
-    const result = await lookupIntel(auth("analyst"), target("ip", "8.8.8.8"), request, d);
+    const result = await lookupIntel(auth("soc_l2"), target("ip", "8.8.8.8"), request, d);
 
     expect(record).toHaveBeenCalledOnce();
     expect(record.mock.calls[0][0]).toBe("lookup:abuseipdb");
@@ -564,7 +564,7 @@ describe("lookupIntel recording what a live lookup learned", () => {
     const abuse = liveProvider("abuseipdb", async (ip) => malicious(ip));
     const record = vi.fn().mockResolvedValue(summary({ untouched: 1 }));
     const { deps: d, audit, loadLocal } = deps([abuse.provider], { record });
-    const result = await lookupIntel(auth("analyst"), target("ip", "8.8.8.8"), request, d);
+    const result = await lookupIntel(auth("soc_l2"), target("ip", "8.8.8.8"), request, d);
     expect(result.recorded).toBe("untouched");
     expect(loadLocal).toHaveBeenCalledOnce();
     expect(audit).toHaveBeenCalledOnce();
@@ -578,7 +578,7 @@ describe("lookupIntel recording what a live lookup learned", () => {
       null,
     );
     expect(
-      (await lookupIntel(auth("analyst"), target("ip", "192.168.1.5"), request, d)).recorded,
+      (await lookupIntel(auth("soc_l2"), target("ip", "192.168.1.5"), request, d)).recorded,
     ).toBe(null);
 
     const none = deps([], { record });
@@ -594,7 +594,7 @@ describe("lookupIntel recording what a live lookup learned", () => {
     });
     const record = vi.fn().mockResolvedValue(summary({ created: 1 }));
     const { deps: d } = deps([down.provider], { record });
-    const result = await lookupIntel(auth("analyst"), target("ip", "8.8.8.8"), request, d);
+    const result = await lookupIntel(auth("soc_l2"), target("ip", "8.8.8.8"), request, d);
     expect(result.fallback).toBe(true);
     expect(result.recorded).toBe(null);
     expect(record).not.toHaveBeenCalled();
@@ -604,7 +604,7 @@ describe("lookupIntel recording what a live lookup learned", () => {
     const abuse = liveProvider("abuseipdb", async (ip) => malicious(ip));
     const record = vi.fn().mockRejectedValue(new Error("database down"));
     const { deps: d } = deps([abuse.provider], { record });
-    const result = await lookupIntel(auth("analyst"), target("ip", "8.8.8.8"), request, d);
+    const result = await lookupIntel(auth("soc_l2"), target("ip", "8.8.8.8"), request, d);
     expect(result.results).toHaveLength(1);
     expect(result.recorded).toBe(null);
   });

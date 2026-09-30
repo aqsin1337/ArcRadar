@@ -236,7 +236,7 @@ describe("navigation", () => {
   });
 
   it("gives analysts integrations and their own API keys but not the audit log", () => {
-    const labels = visibleNavGroups(permissionsForRole("analyst")).flatMap((g) =>
+    const labels = visibleNavGroups(permissionsForRole("soc_l2")).flatMap((g) =>
       g.items.map((i) => i.label),
     );
     expect(labels).toEqual(expect.arrayContaining(["Integrations", "API keys"]));

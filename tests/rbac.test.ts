@@ -19,6 +19,7 @@ const RBAC_MIGRATION = "20260925100100_rbac_profiles.sql";
 const RBAC_EXTENSION_MIGRATIONS = [
   "20260927130000_ai_foundation.sql",
   "20260928100000_alert_deduplication_and_detection_rules.sql",
+  "20260930170000_soc_roles_and_signup_approval.sql",
 ];
 const ALL_RBAC_MIGRATIONS = [RBAC_MIGRATION, ...RBAC_EXTENSION_MIGRATIONS];
 
@@ -31,18 +32,38 @@ function insertedTuples(sql: string, table: string): string[][] {
   );
 }
 
+/** `update public.roles set name = new ... where name = old` in the extension migrations. */
+function roleRenames(): Map<string, string> {
+  const renames = new Map<string, string>();
+  for (const file of ALL_RBAC_MIGRATIONS) {
+    const text = readFileSync(join(migrationsDir, file), "utf8");
+    for (const [, next, previous] of text.matchAll(
+      /update public\.roles\s+set name = '([^']+)'[^;]*?where name = '([^']+)'/gi,
+    )) {
+      renames.set(previous, next);
+    }
+  }
+  return renames;
+}
+
 /** The same extraction, but merged across every migration allowed to add reference data. */
 function allInsertedTuples(table: string): string[][] {
-  return ALL_RBAC_MIGRATIONS.flatMap((file) =>
+  const renames = roleRenames();
+  const rename = (name: string) => renames.get(name) ?? name;
+  const tuples = ALL_RBAC_MIGRATIONS.flatMap((file) =>
     insertedTuples(readFileSync(join(migrationsDir, file), "utf8"), table),
   );
+  // A later migration may rename a role; the mirror follows the final name.
+  if (table === "roles") return tuples.map(([name]) => [rename(name)]);
+  if (table === "role_permissions") return tuples.map(([role, key]) => [rename(role), key]);
+  return tuples;
 }
 
 describe("RBAC mirror stays in sync with the database reference data", () => {
   const sql = readFileSync(join(migrationsDir, RBAC_MIGRATION), "utf8");
 
   it("has the same roles", () => {
-    const dbRoles = insertedTuples(sql, "roles").map(([name]) => name);
+    const dbRoles = allInsertedTuples("roles").map(([name]) => name);
     expect([...dbRoles].sort()).toEqual([...ROLE_NAMES].sort());
   });
 
@@ -53,7 +74,7 @@ describe("RBAC mirror stays in sync with the database reference data", () => {
 
   it("grants each role the same permissions (admin gets everything)", () => {
     const explicit = allInsertedTuples("role_permissions");
-    for (const role of ["analyst", "viewer"] as const) {
+    for (const role of ["soc_l2", "soc_l1", "viewer"] as const) {
       const dbGrants = explicit.filter(([r]) => r === role).map(([, key]) => key);
       expect([...dbGrants].sort()).toEqual([...ROLE_PERMISSIONS[role]].sort());
     }
@@ -89,12 +110,31 @@ describe("role helpers", () => {
   it("keeps privileged permissions away from analysts and viewers", () => {
     for (const permission of ["audit:read", "users:manage", "settings:manage"] as const) {
       expect(roleHasPermission("admin", permission)).toBe(true);
-      expect(roleHasPermission("analyst", permission)).toBe(false);
+      expect(roleHasPermission("soc_l2", permission)).toBe(false);
       expect(roleHasPermission("viewer", permission)).toBe(false);
     }
     expect(roleHasPermission("viewer", "indicators:write")).toBe(false);
-    expect(roleHasPermission("analyst", "indicators:write")).toBe(true);
-    expect(roleHasPermission("analyst", "indicators:delete")).toBe(false);
+    expect(roleHasPermission("soc_l2", "indicators:write")).toBe(true);
+    expect(roleHasPermission("soc_l2", "indicators:delete")).toBe(false);
+  });
+
+  it("gives L1 triage rights but not case, indicator or admin rights", () => {
+    for (const permission of ["alerts:read", "alerts:write", "ai:use"] as const) {
+      expect(roleHasPermission("soc_l1", permission)).toBe(true);
+    }
+    for (const permission of [
+      "investigations:write",
+      "indicators:write",
+      "reports:write",
+      "rules:manage",
+      "users:manage",
+    ] as const) {
+      expect(roleHasPermission("soc_l1", permission)).toBe(false);
+    }
+    // L2 keeps everything L1 can do.
+    for (const permission of ROLE_PERMISSIONS.soc_l1) {
+      expect(roleHasPermission("soc_l2", permission)).toBe(true);
+    }
   });
 
   it("returns a set of the role's permissions", () => {

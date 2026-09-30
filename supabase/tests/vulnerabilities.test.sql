@@ -16,7 +16,7 @@ insert into auth.users (id, email) values
   ('cccccccc-0000-4000-8000-000000000005', 'vul-inactive@arcradar.test');
 
 update public.profiles set role_name = 'admin' where id = 'cccccccc-0000-4000-8000-000000000001';
-update public.profiles set role_name = 'analyst' where id in
+update public.profiles set role_name = 'soc_l2' where id in
   ('cccccccc-0000-4000-8000-000000000002', 'cccccccc-0000-4000-8000-000000000005');
 update public.profiles set is_active = false where id = 'cccccccc-0000-4000-8000-000000000005';
 

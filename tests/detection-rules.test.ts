@@ -25,7 +25,7 @@ const {
 const request = { headers: new Headers() };
 const RULE_ID = 100010;
 
-const auth = (role: "admin" | "analyst" | "viewer" = "admin"): AuthContext => ({
+const auth = (role: "admin" | "soc_l2" | "viewer" = "admin"): AuthContext => ({
   supabase: {} as AuthClient,
   user: { id: "user-1", email: `${role}@arcradar.test` },
   profile: { display_name: role, role },

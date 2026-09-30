@@ -32,8 +32,8 @@ const request = { headers: new Headers() };
 const auth = (): AuthContext => ({
   supabase: {} as AuthClient,
   user: { id: "user-1", email: "analyst@arcradar.test" },
-  profile: { display_name: "Analyst", role: "analyst" },
-  permissions: permissionsForRole("analyst"),
+  profile: { display_name: "Analyst", role: "soc_l2" },
+  permissions: permissionsForRole("soc_l2"),
 });
 
 async function failureOf(promise: Promise<unknown>): Promise<ApiError> {

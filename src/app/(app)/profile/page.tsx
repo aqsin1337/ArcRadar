@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { humanize } from "@/components/ui/domain-badges";
+import { roleLabel } from "@/types/domain";
 import { PageHeader } from "@/components/ui/page-header";
 import { TimeText } from "@/components/ui/detail-list";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
@@ -36,7 +36,7 @@ export default async function ProfilePage() {
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between gap-3">
               <span className="text-muted">Role</span>
-              <Badge tone="brand">{humanize(auth.profile.role)}</Badge>
+              <Badge tone="brand">{roleLabel(auth.profile.role)}</Badge>
             </div>
             {profile?.created_at && (
               <div className="flex items-center justify-between gap-3">

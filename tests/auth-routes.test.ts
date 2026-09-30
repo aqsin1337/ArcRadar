@@ -56,7 +56,7 @@ describe("POST /api/auth/login", () => {
       password: VALID_PASSWORD,
     });
     expect(body.data.user).toEqual({ id: USER_ID, email: "analyst@arcradar.test" });
-    expect(body.data.profile.role).toBe("analyst");
+    expect(body.data.profile.role).toBe("soc_l2");
     expect(body.data.permissions).toContain("indicators:write");
     expect(body.data.permissions).not.toContain("audit:read");
     expect(JSON.stringify(body)).not.toMatch(/access_token|refresh_token/);
@@ -108,6 +108,22 @@ describe("POST /api/auth/login", () => {
     });
     const response = await login(post("/api/auth/login", credentials));
     expect((await response.json()).error.code).toBe("EMAIL_NOT_CONFIRMED");
+  });
+
+  it("tells a person whose account waits for approval, and signs out again", async () => {
+    mockSupabase({
+      profile: { display_name: null, role_name: "viewer", is_active: false },
+      accountState: "pending",
+    });
+    const response = await login(post("/api/auth/login", credentials));
+
+    expect(response.status).toBe(403);
+    expect((await response.json()).error.code).toBe("ACCOUNT_PENDING");
+    expect(supabase.auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: { reason: "account_pending" } }),
+      expect.anything(),
+    );
   });
 
   it("signs out again when the account is disabled", async () => {
