@@ -1,0 +1,281 @@
+@import "tailwindcss";
+
+/*
+ * ArcRadar design tokens. Dark is the default theme (a security operations tool is read for long
+ * stretches); light is one click away. The theme is a `data-theme` attribute on <html>, set on the
+ * server from a cookie so there is no flash. Every color below is checked for WCAG contrast in both
+ * themes by `npm run check:contrast` — run it after changing a value.
+ */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #0a0e14;
+  --surface: #10161e;
+  --surface-2: #17202b;
+  --border: #253244;
+  --input-border: #5b6e86;
+  --foreground: #e8eef5;
+  --muted: #9aa8b9;
+
+  --primary: #22d3ee;
+  --primary-hover: #67e8f9;
+  --primary-foreground: #041c24;
+  --ring: #22d3ee;
+
+  --tone-slate-bg: #1a222d;
+  --tone-slate-fg: #b4c0cf;
+  --tone-slate-border: #364559;
+  --tone-brand-bg: #082f3a;
+  --tone-brand-fg: #67e8f9;
+  --tone-brand-border: #0e6478;
+  --tone-blue-bg: #0f2444;
+  --tone-blue-fg: #8ab4ff;
+  --tone-blue-border: #23508f;
+  --tone-green-bg: #0c2e1d;
+  --tone-green-fg: #6ee7a0;
+  --tone-green-border: #1b6b41;
+  --tone-amber-bg: #33260a;
+  --tone-amber-fg: #fcd34d;
+  --tone-amber-border: #7c5d10;
+  --tone-orange-bg: #38200c;
+  --tone-orange-fg: #fdba74;
+  --tone-orange-border: #8a4a12;
+  --tone-red-bg: #3a1116;
+  --tone-red-fg: #fda4af;
+  --tone-red-border: #8c2a37;
+  --tone-violet-bg: #241a44;
+  --tone-violet-fg: #c4b5fd;
+  --tone-violet-border: #5b45a8;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --background: #f4f7fa;
+  --surface: #ffffff;
+  --surface-2: #eaf0f5;
+  --border: #d3dce6;
+  --input-border: #7b8a9c;
+  --foreground: #0e1722;
+  --muted: #4b5a6c;
+
+  --primary: #0b7285;
+  --primary-hover: #095c6c;
+  --primary-foreground: #ffffff;
+  --ring: #0b7285;
+
+  --tone-slate-bg: #e8edf2;
+  --tone-slate-fg: #3a4757;
+  --tone-slate-border: #bcc7d4;
+  --tone-brand-bg: #dcf3f7;
+  --tone-brand-fg: #085566;
+  --tone-brand-border: #98d0db;
+  --tone-blue-bg: #e1ecff;
+  --tone-blue-fg: #1a4a9c;
+  --tone-blue-border: #a3c1f4;
+  --tone-green-bg: #dcf4e6;
+  --tone-green-fg: #146236;
+  --tone-green-border: #98d6b2;
+  --tone-amber-bg: #fcefc8;
+  --tone-amber-fg: #7a5200;
+  --tone-amber-border: #e6c87c;
+  --tone-orange-bg: #fde6d0;
+  --tone-orange-fg: #99400a;
+  --tone-orange-border: #eeb88a;
+  --tone-red-bg: #fde1e5;
+  --tone-red-fg: #a1202f;
+  --tone-red-border: #eea5af;
+  --tone-violet-bg: #eae3fb;
+  --tone-violet-fg: #5033a6;
+  --tone-violet-border: #c2b2ef;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-input-border: var(--input-border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+
+  --color-tone-slate-bg: var(--tone-slate-bg);
+  --color-tone-slate-fg: var(--tone-slate-fg);
+  --color-tone-slate-border: var(--tone-slate-border);
+  --color-tone-brand-bg: var(--tone-brand-bg);
+  --color-tone-brand-fg: var(--tone-brand-fg);
+  --color-tone-brand-border: var(--tone-brand-border);
+  --color-tone-blue-bg: var(--tone-blue-bg);
+  --color-tone-blue-fg: var(--tone-blue-fg);
+  --color-tone-blue-border: var(--tone-blue-border);
+  --color-tone-green-bg: var(--tone-green-bg);
+  --color-tone-green-fg: var(--tone-green-fg);
+  --color-tone-green-border: var(--tone-green-border);
+  --color-tone-amber-bg: var(--tone-amber-bg);
+  --color-tone-amber-fg: var(--tone-amber-fg);
+  --color-tone-amber-border: var(--tone-amber-border);
+  --color-tone-orange-bg: var(--tone-orange-bg);
+  --color-tone-orange-fg: var(--tone-orange-fg);
+  --color-tone-orange-border: var(--tone-orange-border);
+  --color-tone-red-bg: var(--tone-red-bg);
+  --color-tone-red-fg: var(--tone-red-fg);
+  --color-tone-red-border: var(--tone-red-border);
+  --color-tone-violet-bg: var(--tone-violet-bg);
+  --color-tone-violet-fg: var(--tone-violet-fg);
+  --color-tone-violet-border: var(--tone-violet-border);
+
+  --font-sans:
+    var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+}
+
+@layer base {
+  html {
+    background: var(--background);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 35%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Native controls and long lists get thin, theme-aware scrollbars. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--input-border) transparent;
+  }
+
+  /* IOCs, hashes and identifiers read better in monospace and must wrap instead of overflowing. */
+  code,
+  kbd,
+  samp {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Keyboard users jump past the sidebar with this; it only appears on focus. */
+  .skip-link {
+    position: absolute;
+    left: 0.75rem;
+    top: 0.75rem;
+    z-index: 100;
+    transform: translateY(-200%);
+    border-radius: 0.5rem;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    padding: 0.5rem 0.875rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .skip-link:focus {
+    transform: translateY(0);
+  }
+}
+
+@keyframes arcradar-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Landing page only: decorative backdrops and motion. All colors come from the tokens above. */
+@keyframes arcradar-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes arcradar-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(1.5);
+  }
+}
+
+@keyframes arcradar-flow {
+  to {
+    background-position: 24px 0;
+  }
+}
+
+@layer components {
+  .landing-grid {
+    background-image:
+      linear-gradient(
+        to right,
+        color-mix(in srgb, var(--border) 55%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        color-mix(in srgb, var(--border) 55%, transparent) 1px,
+        transparent 1px
+      );
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 75%);
+  }
+  .landing-glow {
+    background: radial-gradient(
+      ellipse 60% 55% at 50% 0%,
+      color-mix(in srgb, var(--primary) 22%, transparent),
+      transparent 70%
+    );
+  }
+  .landing-rise {
+    animation: arcradar-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  .landing-pulse-dot {
+    animation: arcradar-pulse 2s ease-in-out infinite;
+  }
+  .landing-flow {
+    background-image: linear-gradient(to right, var(--primary) 0 12px, transparent 12px 24px);
+    background-size: 24px 2px;
+    background-repeat: repeat-x;
+    animation: arcradar-flow 1.2s linear infinite;
+  }
+}
