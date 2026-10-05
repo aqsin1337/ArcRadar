@@ -5,7 +5,7 @@ import { getAlert } from "@/lib/alerts/service";
 import type { AlertDetail } from "@/lib/alerts/types";
 import { writeAuditLog } from "@/lib/audit/write";
 import type { AuthClient, AuthContext } from "@/lib/auth/context";
-import { getServerEnv } from "@/lib/env/server";
+import { getEffectiveEnv } from "@/lib/secrets/service";
 import { getIndicator } from "@/lib/indicators/service";
 import type { IndicatorDetail } from "@/lib/indicators/types";
 import { getIntegrations } from "@/lib/integrations/service";
@@ -66,9 +66,9 @@ export type AiDeps = {
   audit: typeof writeAuditLog;
 };
 
-export function defaultDeps(): AiDeps {
+export async function defaultDeps(): Promise<AiDeps> {
   return {
-    registry: buildAiRegistry(getServerEnv()),
+    registry: buildAiRegistry(await getEffectiveEnv()),
     timeoutMs: AI_TIMEOUT_MS,
     audit: writeAuditLog,
   };
@@ -336,7 +336,7 @@ export async function generateAlertAnalysis(
   alertId: string,
   kind: AiAnalysisKind,
   request: RequestLike,
-  deps: AiDeps = defaultDeps(),
+  deps?: AiDeps,
 ): Promise<AiAnalysisRow> {
   const alert = await getAlert(auth.supabase, alertId);
   const prompt = buildAlertPrompt(kind, alertPromptContextFrom(alert));
@@ -344,7 +344,7 @@ export async function generateAlertAnalysis(
     auth,
     { subjectType: "alert", subjectId: alertId, kind, prompt },
     request,
-    deps,
+    deps ?? (await defaultDeps()),
   );
 
   if (kind === "false_positive_score") {
@@ -382,7 +382,7 @@ export async function generateInvestigationAnalysis(
   investigationId: string,
   kind: AiAnalysisKind,
   request: RequestLike,
-  deps: AiDeps = defaultDeps(),
+  deps?: AiDeps,
 ): Promise<AiAnalysisRow> {
   const investigation = await getInvestigation(auth.supabase, investigationId);
   const prompt = buildInvestigationPrompt(kind, investigationPromptContextFrom(investigation));
@@ -390,7 +390,7 @@ export async function generateInvestigationAnalysis(
     auth,
     { subjectType: "investigation", subjectId: investigationId, kind, prompt },
     request,
-    deps,
+    deps ?? (await defaultDeps()),
   );
 
   if (kind === "investigation_checklist") {
@@ -415,7 +415,7 @@ export async function generateIndicatorAnalysis(
   indicatorId: string,
   kind: AiAnalysisKind,
   request: RequestLike,
-  deps: AiDeps = defaultDeps(),
+  deps?: AiDeps,
 ): Promise<AiAnalysisRow> {
   const indicator = await getIndicator(auth.supabase, indicatorId);
   const prompt = buildIndicatorPrompt(kind, indicatorPromptContextFrom(indicator));
@@ -423,6 +423,6 @@ export async function generateIndicatorAnalysis(
     auth,
     { subjectType: "indicator", subjectId: indicatorId, kind, prompt },
     request,
-    deps,
+    deps ?? (await defaultDeps()),
   );
 }

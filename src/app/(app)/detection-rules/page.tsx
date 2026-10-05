@@ -8,7 +8,7 @@ import { getAiAvailability } from "@/lib/ai/service";
 import { getPageAuthContext } from "@/lib/auth/session";
 import { cn } from "@/lib/cn";
 import { listDetectionRules } from "@/lib/detection-rules/service";
-import { getServerEnv } from "@/lib/env/server";
+import { getEffectiveEnv } from "@/lib/secrets/service";
 import { getGithubRulesConfig } from "@/lib/github/contents";
 import { listWazuhRules } from "@/lib/wazuh-rules/service";
 
@@ -64,7 +64,7 @@ export default async function DetectionRulesPage({ searchParams }: PageProps<"/d
 type Auth = NonNullable<Awaited<ReturnType<typeof getPageAuthContext>>>;
 
 async function WazuhTab({ auth }: { auth: Auth }) {
-  const config = getGithubRulesConfig(getServerEnv());
+  const config = getGithubRulesConfig(await getEffectiveEnv());
   const [rules, availability] = await Promise.all([
     listWazuhRules(auth.supabase),
     getAiAvailability(auth.supabase),

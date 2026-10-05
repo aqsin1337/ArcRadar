@@ -35,6 +35,9 @@ const serverEnvSchema = z.object({
   GITHUB_TOKEN: optionalSecret,
   GITHUB_RULES_REPO: optionalSecret,
   GITHUB_RULES_BRANCH: optionalSecret,
+  // 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts the provider keys an administrator
+  // saves from the app. Without it those keys can only come from the variables above.
+  SECRETS_ENCRYPTION_KEY: optionalSecret,
 });
 
 export type ServerEnv = z.output<typeof serverEnvSchema>;

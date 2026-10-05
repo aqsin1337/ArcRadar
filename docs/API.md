@@ -695,6 +695,19 @@ way, since it never sat in anyone's queue as a fresh row. `GET /api/alerts/:id` 
 `duplicate_of` and, via the same object shape used everywhere else, its primary's own detail is one more
 `GET` away; on a primary it returns its `duplicates` array directly.
 
+## Provider keys saved from the app
+
+`GET /api/secrets` lists the settings an administrator can save (VirusTotal, AbuseIPDB, OTX, NVD,
+Shodan InternetDB switch, Groq, OpenAI, Anthropic, DeepSeek, GitHub token / repository / branch) with
+where each comes from (`app`, `server` or `none`); a saved secret is never returned, only its last four
+characters. `PUT /api/secrets/:name` `{ value }` saves one (validated per setting) and
+`DELETE /api/secrets/:name` removes it. All need `integrations:manage`. Values are encrypted with
+AES-256-GCM (key: `SECRETS_ENCRYPTION_KEY`, bound to the setting name) before they reach
+`provider_secrets`, a table closed to every client role; `getEffectiveEnv()` (`src/lib/secrets/`) lays
+saved values over the server environment and is what every provider registry reads. Without
+`SECRETS_ENCRYPTION_KEY`, `PUT` answers `503` and the environment variables keep working. The Ollama
+address is deliberately not editable here (SSRF, see `docs/AI_AND_ORCHESTRATION_ARCHITECTURE.md`).
+
 ## Adding an endpoint
 
 1. Create `src/app/api/<name>/route.ts` and export handlers built with `publicRoute(...)` or

@@ -506,8 +506,8 @@ export function WazuhRulesManager({
       {!githubReady && (
         <Alert tone="warning" title="GitHub is not connected">
           Rules can be drafted, edited and rejected, but &quot;Send to GitHub&quot; stays
-          unavailable until the server has GITHUB_TOKEN and GITHUB_RULES_REPO (see
-          docs/WAZUH_RULES.md).
+          unavailable until a GitHub token and the rules repository are saved on the API keys page
+          (see docs/WAZUH_RULES.md).
         </Alert>
       )}
 

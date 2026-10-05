@@ -13,7 +13,7 @@ import { VulnerabilityTable } from "@/components/vulnerabilities/vulnerability-t
 import { getPageAuthContext } from "@/lib/auth/session";
 import { isCveId, parseVulnerabilityListParams } from "@/lib/vulnerabilities/schema";
 import {
-  getVulnerabilityProvider,
+  resolveVulnerabilityProvider,
   getVulnerabilityStats,
   listVulnerabilities,
 } from "@/lib/vulnerabilities/service";
@@ -47,7 +47,7 @@ export default async function VulnerabilitiesPage({ searchParams }: PageProps<"/
 
   // A CVE id that is not in the database can be fetched from the connected provider (administrators).
   const searchedCve = query.q && isCveId(query.q) ? query.q.toUpperCase() : null;
-  const provider = getVulnerabilityProvider();
+  const provider = await resolveVulnerabilityProvider();
   const canImport = auth.permissions.has("vulnerabilities:write");
 
   return (

@@ -18,7 +18,7 @@ import { ImportCveButton } from "@/components/vulnerabilities/import-button";
 import { ApiError } from "@/lib/api/errors";
 import { getPageAuthContext } from "@/lib/auth/session";
 import { isCveId } from "@/lib/vulnerabilities/schema";
-import { getVulnerability, getVulnerabilityProvider } from "@/lib/vulnerabilities/service";
+import { getVulnerability, resolveVulnerabilityProvider } from "@/lib/vulnerabilities/service";
 import type { VulnerabilityDetail } from "@/lib/vulnerabilities/types";
 
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value);
@@ -39,7 +39,7 @@ export default async function VulnerabilityPage({ params }: PageProps<"/vulnerab
   }
   if (!vulnerability) notFound();
 
-  const provider = getVulnerabilityProvider();
+  const provider = await resolveVulnerabilityProvider();
   const canRefresh =
     vulnerability.origin === "external" &&
     provider !== null &&

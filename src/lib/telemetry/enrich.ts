@@ -11,7 +11,7 @@ import { buildRegistry, type IntelRegistry } from "@/lib/intel/registry";
 import { recordFromLookup } from "@/lib/intel/record";
 import { externalSkipReason, parseTarget, type IntelTarget } from "@/lib/intel/target";
 import type { ProviderAttempt } from "@/lib/intel/types";
-import { getServerEnv } from "@/lib/env/server";
+import { getEffectiveEnv } from "@/lib/secrets/service";
 import { logError } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { IndicatorType } from "@/types/domain";
@@ -86,9 +86,9 @@ export type EnrichDeps = {
   audit: typeof writeAuditLog;
 };
 
-export function defaultEnrichDeps(): EnrichDeps {
+export async function defaultEnrichDeps(): Promise<EnrichDeps> {
   return {
-    registry: buildRegistry(getServerEnv()),
+    registry: buildRegistry(await getEffectiveEnv()),
     now: () => new Date(),
     timeoutMs: LIVE_TIMEOUT_MS,
     findUnresearched: async (items) => {
@@ -122,11 +122,13 @@ const none: RecordSummary = { created: 0, updated: 0, untouched: 0, skipped: 0 }
 export async function enrichIngestedIndicators(
   records: readonly NormalizedRecord[],
   request?: { headers: Headers },
-  deps: EnrichDeps = defaultEnrichDeps(),
+  providedDeps?: EnrichDeps,
 ): Promise<EnrichSummary> {
   const candidates = candidatesFrom(records);
   const summary: EnrichSummary = { candidates: candidates.length, researched: 0, recorded: none };
-  if (candidates.length === 0 || deps.registry.external.length === 0) return summary;
+  if (candidates.length === 0) return summary;
+  const deps = providedDeps ?? (await defaultEnrichDeps());
+  if (deps.registry.external.length === 0) return summary;
 
   try {
     const disabled = await deps.disabledProviders();

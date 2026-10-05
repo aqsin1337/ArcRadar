@@ -3,7 +3,7 @@ import { z } from "zod";
 import { apiErrors } from "@/lib/api/errors";
 import { writeAuditLog } from "@/lib/audit/write";
 import type { AuthContext } from "@/lib/auth/context";
-import { getServerEnv } from "@/lib/env/server";
+import { getEffectiveEnv } from "@/lib/secrets/service";
 import { logError, logWarn } from "@/lib/log";
 import { recordExternalIndicators, type RecordSummary } from "@/lib/indicators/external";
 import { loadLocalContext } from "./local";
@@ -80,9 +80,9 @@ export type LookupDeps = {
 // parallel under this one deadline, so a slow one costs only itself (it shows as failed, timeout).
 export const LIVE_TIMEOUT_MS = 15000;
 
-export function defaultDeps(): LookupDeps {
+export async function defaultDeps(): Promise<LookupDeps> {
   return {
-    registry: buildRegistry(getServerEnv()),
+    registry: buildRegistry(await getEffectiveEnv()),
     now: () => new Date(),
     timeoutMs: LIVE_TIMEOUT_MS,
     loadLocal: (auth, target) => loadLocalContext(auth.supabase, target),
@@ -189,8 +189,9 @@ export async function lookupIntel(
   auth: AuthContext,
   target: IntelTarget,
   request: { headers: Headers },
-  deps: LookupDeps = defaultDeps(),
+  providedDeps?: LookupDeps,
 ): Promise<LookupResult> {
+  const deps = providedDeps ?? (await defaultDeps());
   const { registry } = deps;
   const live = registry.external.filter((provider) => supportsKind(provider, target.kind));
   const liveAllowed = auth.permissions.has("indicators:write");

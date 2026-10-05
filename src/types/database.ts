@@ -1087,6 +1087,30 @@ export type Database = {
           },
         ];
       };
+      provider_secrets: {
+        Row: {
+          ciphertext: string;
+          last4: string | null;
+          name: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          ciphertext: string;
+          last4?: string | null;
+          name: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          ciphertext?: string;
+          last4?: string | null;
+          name?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
       rate_limit_buckets: {
         Row: {
           bucket_key: string;

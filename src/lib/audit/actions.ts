@@ -47,6 +47,8 @@ export const AUDIT_ACTIONS = [
   "user.activated",
   "user.deactivated",
   "integration.updated",
+  "secret.saved",
+  "secret.removed",
   "ai.settings_updated",
   "ai.analysis_generated",
   "investigation.checklist_item_added",

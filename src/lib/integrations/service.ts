@@ -3,7 +3,8 @@ import { apiErrors } from "@/lib/api/errors";
 import { writeAuditLog } from "@/lib/audit/write";
 import type { AuthContext } from "@/lib/auth/context";
 import type { AuthClient } from "@/lib/auth/context";
-import { getServerEnv, type ServerEnv } from "@/lib/env/server";
+import type { ServerEnv } from "@/lib/env/server";
+import { getEffectiveEnv } from "@/lib/secrets/service";
 import { FEED_GROUPS } from "@/lib/feeds/groups";
 import { INTEGRATION_PROVIDERS, PROVIDER_ENV_KEYS } from "./constants";
 import { findDisabledProviders, findIntegrationRows, updateIntegrationEnabled } from "./repository";
@@ -29,10 +30,13 @@ function isConfigured(provider: string, env: ServerEnv): boolean {
 
 export async function getIntegrations(
   supabase: AuthClient,
-  env: ServerEnv = getServerEnv(),
+  env?: ServerEnv,
 ): Promise<IntegrationRow[]> {
-  const rows = await findIntegrationRows(supabase);
-  return rows.map((row) => ({ ...row, configured: isConfigured(row.provider, env) }));
+  const [rows, effective] = await Promise.all([
+    findIntegrationRows(supabase),
+    env ? Promise.resolve(env) : getEffectiveEnv(),
+  ]);
+  return rows.map((row) => ({ ...row, configured: isConfigured(row.provider, effective) }));
 }
 
 /**
@@ -68,5 +72,5 @@ export async function setIntegrationEnabled(
     request,
   );
 
-  return { ...row, configured: isConfigured(provider, getServerEnv()) };
+  return { ...row, configured: isConfigured(provider, await getEffectiveEnv()) };
 }

@@ -75,6 +75,12 @@ The full list, and why each one matters, is at the bottom of `docs/API.md`.
      `GROQ_API_KEY`, ...) — all optional; the app works with none of them set. `OLLAMA_BASE_URL`
      needs a server your Vercel deployment can actually reach over the network, which a laptop's
      `127.0.0.1` is not — leave it unset unless you host Ollama somewhere Vercel can reach.
+   - `SECRETS_ENCRYPTION_KEY` — 32 random bytes, base64 (`openssl rand -base64 32`). Turns on saving
+     provider keys from the app: an administrator then pastes VirusTotal, AbuseIPDB, OTX, NVD, Groq,
+     OpenAI, Anthropic, DeepSeek and GitHub settings on the **API keys** page and they take effect at
+     once (encrypted before they reach the database, never shown again; a saved key wins over the same
+     variable here, and removing it falls back to the variable). Keep this one value safe: if it is lost
+     the saved keys must be pasted again. Set it as a real Secret, never `NEXT_PUBLIC_`.
 3. Deploy. Vercel builds and serves the app; there is nothing else to configure (no `output` mode,
    no custom server) because the whole app is Route Handlers and Server Components already built for
    a serverless runtime — the same reason decision 1 rules out a background worker or in-memory state.

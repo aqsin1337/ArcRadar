@@ -4,6 +4,7 @@ import { buildPage, type Page } from "@/lib/api/pagination";
 import { writeAuditLog } from "@/lib/audit/write";
 import type { AuthClient, AuthContext } from "@/lib/auth/context";
 import { getServerEnv, type ServerEnv } from "@/lib/env/server";
+import { getEffectiveEnv } from "@/lib/secrets/service";
 import { logError, logWarn } from "@/lib/log";
 import { ProviderError } from "@/lib/intel/types";
 import type { Vulnerability } from "@/types/domain";
@@ -68,9 +69,9 @@ export type ImportDeps = {
   store: typeof importExternalVulnerability;
 };
 
-export function defaultImportDeps(): ImportDeps {
+export async function defaultImportDeps(): Promise<ImportDeps> {
   return {
-    provider: getVulnerabilityProvider(),
+    provider: await resolveVulnerabilityProvider(),
     now: () => new Date(),
     timeoutMs: IMPORT_TIMEOUT_MS,
     audit: writeAuditLog,
@@ -87,8 +88,9 @@ export async function importVulnerability(
   auth: AuthContext,
   cveId: string,
   request: RequestLike,
-  deps: ImportDeps = defaultImportDeps(),
+  providedDeps?: ImportDeps,
 ): Promise<ImportResult> {
+  const deps = providedDeps ?? (await defaultImportDeps());
   const id = cveId.toUpperCase();
   if (!isCveId(id))
     throw apiErrors.validation({
@@ -138,4 +140,11 @@ export async function importVulnerability(
     request,
   );
   return { vulnerability: await getVulnerability(auth.supabase, id), created: existing === null };
+}
+
+/** Like getVulnerabilityProvider, but also sees an NVD key an administrator saved in the app. */
+export async function resolveVulnerabilityProvider(
+  fetchImpl?: typeof fetch,
+): Promise<VulnerabilityProvider | null> {
+  return getVulnerabilityProvider(await getEffectiveEnv(), fetchImpl);
 }

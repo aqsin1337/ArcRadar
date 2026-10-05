@@ -31,7 +31,7 @@ export const GET = protectedRoute<Params>(
     const { value } = parseQuery(request, intelQuerySchema);
 
     const disabled = await findDisabledLookupProviders(auth.supabase);
-    const deps = defaultDeps();
+    const deps = await defaultDeps();
     if (disabled.size > 0) {
       deps.registry = {
         ...deps.registry,

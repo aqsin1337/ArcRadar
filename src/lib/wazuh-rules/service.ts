@@ -4,12 +4,13 @@ import { AiProviderError } from "@/lib/ai/types";
 import { apiErrors } from "@/lib/api/errors";
 import { writeAuditLog } from "@/lib/audit/write";
 import type { AuthClient, AuthContext } from "@/lib/auth/context";
-import { getServerEnv } from "@/lib/env/server";
+import { getEffectiveEnv } from "@/lib/secrets/service";
 import {
   commitRepoFile,
   GITHUB_TIMEOUT_MS,
   getGithubRulesConfig,
   GithubError,
+  type GithubRepoConfig,
 } from "@/lib/github/contents";
 import { logError, logWarn } from "@/lib/log";
 import {
@@ -46,8 +47,8 @@ export const isWazuhRuleId = (id: number) =>
   Number.isInteger(id) && id >= WAZUH_RULE_ID_MIN && id <= WAZUH_RULE_ID_MAX;
 
 export type WazuhRuleDeps = {
-  ai: () => AiDeps;
-  githubConfig: () => ReturnType<typeof getGithubRulesConfig>;
+  ai: () => AiDeps | Promise<AiDeps>;
+  githubConfig: () => GithubRepoConfig | null | Promise<GithubRepoConfig | null>;
   fetchImpl?: typeof fetch;
   githubTimeoutMs: number;
   audit: typeof writeAuditLog;
@@ -56,14 +57,15 @@ export type WazuhRuleDeps = {
 export function defaultWazuhRuleDeps(): WazuhRuleDeps {
   return {
     ai: defaultDeps,
-    githubConfig: () => getGithubRulesConfig(getServerEnv()),
+    githubConfig: async () => getGithubRulesConfig(await getEffectiveEnv()),
     githubTimeoutMs: GITHUB_TIMEOUT_MS,
     audit: writeAuditLog,
   };
 }
 
 /** Whether pushing is possible at all, so the page can say so before someone presses the button. */
-export const isGithubConfigured = (deps = defaultWazuhRuleDeps()) => deps.githubConfig() !== null;
+export const isGithubConfigured = async (deps = defaultWazuhRuleDeps()) =>
+  (await deps.githubConfig()) !== null;
 
 export const listWazuhRules = (supabase: AuthClient): Promise<WazuhRule[]> =>
   findWazuhRules(supabase);
@@ -135,7 +137,7 @@ export async function generateWazuhRule(
   request: RequestLike,
   deps = defaultWazuhRuleDeps(),
 ): Promise<WazuhRule> {
-  const ai = deps.ai();
+  const ai = await deps.ai();
   const availability = await getAiAvailability(auth.supabase);
   if (!availability.ready || !availability.active_provider) {
     throw apiErrors.unavailable(
@@ -302,10 +304,10 @@ export async function pushWazuhRule(
   if (current.status === "rejected") {
     throw apiErrors.conflict("This rule was rejected. Edit it to bring it back to a draft first.");
   }
-  const config = deps.githubConfig();
+  const config = await deps.githubConfig();
   if (!config) {
     throw apiErrors.unavailable(
-      "GitHub is not configured. Set GITHUB_TOKEN and GITHUB_RULES_REPO on the server.",
+      "GitHub is not configured. An administrator can save a GitHub token and the rules repository on the API keys page.",
     );
   }
 

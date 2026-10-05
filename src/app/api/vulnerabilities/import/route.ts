@@ -20,7 +20,7 @@ export const POST = protectedRoute(
   async ({ request, auth }) => {
     const { cve_id } = await parseJsonBody(request, importVulnerabilitySchema);
     const disabled = await findDisabledLookupProviders(auth.supabase);
-    const deps = defaultImportDeps();
+    const deps = await defaultImportDeps();
     if (disabled.has("nvd")) deps.provider = null;
     const { vulnerability, created } = await importVulnerability(auth, cve_id, request, deps);
     return ok(vulnerability, { status: created ? 201 : 200 });
