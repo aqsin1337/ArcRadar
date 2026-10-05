@@ -1,0 +1,137 @@
+#!/bin/sh
+# custom-arcradar: a Wazuh integration script that forwards alerts to ArcRadar.
+#
+# Wazuh runs it for every alert matched by an <integration> block named custom-arcradar:
+#
+#     custom-arcradar <alert_file> <api_key> <hook_url> [more arguments Wazuh may add]
+#
+#   alert_file  a file holding the alert as JSON (alert_format json), one alert per line
+#   api_key     the ArcRadar API key (scope ingest:wazuh) from the <api_key> tag
+#   hook_url    the ArcRadar endpoint, https://<host>/api/ingest/wazuh, from the <hook_url> tag
+#
+# Needs only sh, awk, sort, date and curl. Nothing else is installed on the Manager.
+#
+# Delivery. The alert is written to a small spool directory first, then the spool is sent, oldest
+# first. If ArcRadar is off, unreachable or answers with an error, the alerts stay there and go out
+# on a later run, so a computer that is switched off for a while does not lose alerts. ArcRadar
+# ignores an alert it already has (same manager and alert id), so a resend is harmless. At most
+# ARCRADAR_MAX_SPOOL alerts are kept: beyond that the oldest are dropped, with a note in the log.
+#
+# Settings (environment variables, all optional):
+#   ARCRADAR_SPOOL_DIR        where undelivered alerts wait          /var/ossec/tmp/arcradar-spool
+#   ARCRADAR_LOG_FILE         where messages go                      /var/ossec/logs/integrations.log
+#   ARCRADAR_MAX_SPOOL        alerts kept while ArcRadar is away     500
+#   ARCRADAR_FLUSH_PER_RUN    old alerts sent on each run            25
+#
+# Install: see docs/WAZUH_INTEGRATION.md.
+
+set -u
+
+ALERT_FILE="${1:-}"
+API_KEY="${2:-}"
+HOOK_URL="${3:-}"
+
+SPOOL_DIR="${ARCRADAR_SPOOL_DIR:-/var/ossec/tmp/arcradar-spool}"
+LOG_FILE="${ARCRADAR_LOG_FILE:-/var/ossec/logs/integrations.log}"
+MAX_SPOOL="${ARCRADAR_MAX_SPOOL:-500}"
+FLUSH_PER_RUN="${ARCRADAR_FLUSH_PER_RUN:-25}"
+CONNECT_TIMEOUT=5
+MAX_TIME=20
+REJECTED_KEEP=50
+
+log() {
+  line="$(date '+%Y/%m/%d %H:%M:%S') custom-arcradar: $*"
+  printf '%s\n' "$line" >>"$LOG_FILE" 2>/dev/null || printf '%s\n' "$line" >&2
+}
+
+if [ -z "$ALERT_FILE" ] || [ -z "$API_KEY" ] || [ -z "$HOOK_URL" ]; then
+  log "usage: custom-arcradar <alert_file> <api_key> <hook_url>; check the <integration> block in ossec.conf"
+  exit 1
+fi
+if [ ! -s "$ALERT_FILE" ]; then
+  log "the alert file $ALERT_FILE is missing or empty"
+  exit 1
+fi
+if ! command -v curl >/dev/null 2>&1; then
+  log "curl is not installed on this host, so alerts cannot be sent"
+  exit 1
+fi
+
+# The key is a bearer secret: say so if it would travel unencrypted outside a private tunnel.
+case "$HOOK_URL" in
+  https://*) ;;
+  http://localhost* | http://127.* | "http://[::1]"*) ;;
+  http://100.* | http://*.ts.net*) ;; # inside a Tailscale tunnel the traffic is encrypted anyway
+  http://*) log "WARNING: hook_url is plain http, so the API key and the alerts cross the network unencrypted; use https" ;;
+  *) log "hook_url must start with https:// (or http:// on a private tunnel): $HOOK_URL"; exit 1 ;;
+esac
+
+umask 077
+mkdir -p "$SPOOL_DIR" "$SPOOL_DIR/rejected" 2>/dev/null || {
+  log "cannot create the spool directory $SPOOL_DIR"
+  exit 1
+}
+
+# One request body per alert file: {"alerts":[ <alert>, ... ]}. The lines of the alert file are
+# joined with commas without being parsed, so the alert reaches ArcRadar exactly as Wazuh wrote it.
+STAMP="$(date +%s)"
+BODY="$SPOOL_DIR/$STAMP-$$.json"
+{
+  printf '{"alerts":['
+  awk 'NF { if (n++) printf ","; printf "%s", $0 }' "$ALERT_FILE"
+  printf ']}'
+} >"$BODY.part" && mv "$BODY.part" "$BODY"
+
+# Sends one spooled body. Prints the HTTP status ("000" when nothing answered).
+send() {
+  code="$(
+    printf 'header = "Authorization: Bearer %s"\n' "$API_KEY" |
+      curl --silent --show-error --output /dev/null --write-out '%{http_code}' --config - \
+        --request POST --header 'Content-Type: application/json' --data-binary "@$1" \
+        --connect-timeout "$CONNECT_TIMEOUT" --max-time "$MAX_TIME" "$HOOK_URL" 2>/dev/null
+  )" || true
+  case "$code" in
+    [0-9][0-9][0-9]) printf '%s' "$code" ;;
+    *) printf '000' ;;
+  esac
+}
+
+# Sends the spool, oldest first, until it is empty, FLUSH_PER_RUN have been sent, or ArcRadar says
+# "try later". A request ArcRadar can never accept is set aside in rejected/ instead of blocking the rest.
+sent=0
+for file in $(ls -1 "$SPOOL_DIR"/*.json 2>/dev/null | sort); do
+  [ "$sent" -ge "$FLUSH_PER_RUN" ] && break
+  status="$(send "$file")"
+  case "$status" in
+    2??)
+      rm -f "$file"
+      sent=$((sent + 1))
+      ;;
+    400 | 413 | 415 | 422)
+      mv "$file" "$SPOOL_DIR/rejected/" 2>/dev/null || rm -f "$file"
+      log "ArcRadar refused a request for good (HTTP $status); it was set aside in $SPOOL_DIR/rejected"
+      ;;
+    401 | 403)
+      log "ArcRadar rejected the API key (HTTP $status). Alerts are kept and will be sent once the key in ossec.conf is fixed"
+      break
+      ;;
+    *)
+      log "ArcRadar did not take the alerts (HTTP $status). They are kept and will be sent on a later run"
+      break
+      ;;
+  esac
+done
+
+# Keep the spool and the set-aside folder from growing without limit.
+count="$(ls -1 "$SPOOL_DIR"/*.json 2>/dev/null | wc -l | tr -d ' ')"
+if [ "${count:-0}" -gt "$MAX_SPOOL" ]; then
+  drop=$((count - MAX_SPOOL))
+  ls -1 "$SPOOL_DIR"/*.json | sort | head -n "$drop" | while read -r old; do rm -f "$old"; done
+  log "the spool is over $MAX_SPOOL alerts; the $drop oldest were dropped"
+fi
+extra="$(ls -1 "$SPOOL_DIR"/rejected/*.json 2>/dev/null | wc -l | tr -d ' ')"
+if [ "${extra:-0}" -gt "$REJECTED_KEEP" ]; then
+  ls -1 "$SPOOL_DIR"/rejected/*.json | sort | head -n "$((extra - REJECTED_KEEP))" | while read -r old; do rm -f "$old"; done
+fi
+
+exit 0
