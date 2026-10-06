@@ -2435,6 +2435,69 @@ async function main() {
       withDuplicates.json?.data?.pagination,
     );
 
+    // The field catalog: the Splunk host reports its fields, administrators read them.
+    const catalogUrl = "/api/ingest/splunk/catalog";
+    const catalogSource = {
+      index: "smokeidx",
+      sourcetype: "smoke:logs",
+      window_hours: 24,
+      events_sampled: 50,
+      fields: [
+        { name: "smoke_field", count: 40, distinct: 2, values: ["a", "b"] },
+        { name: "bad field|name", count: 1 },
+      ],
+    };
+    const catalogNoKey = await call(null, "POST", catalogUrl, {
+      body: { sources: [catalogSource] },
+    });
+    check(
+      "the catalog endpoint needs a key too (401)",
+      catalogNoKey.status === 401,
+      catalogNoKey.status,
+    );
+    const catalogBadIndex = await call(null, "POST", catalogUrl, {
+      body: { sources: [{ ...catalogSource, index: "Bad Index" }] },
+      headers: bearer(splunkKey),
+    });
+    check(
+      "a bad index name is refused (422)",
+      catalogBadIndex.status === 422,
+      catalogBadIndex.status,
+    );
+    const catalogSent = await call(null, "POST", catalogUrl, {
+      body: { sources: [catalogSource] },
+      headers: bearer(splunkKey),
+    });
+    check(
+      "a report is stored; the field with an illegal name is skipped (200)",
+      catalogSent.status === 200 &&
+        catalogSent.json?.data?.sources === 1 &&
+        catalogSent.json?.data?.fields === 1,
+      catalogSent.json,
+    );
+    const catalogRead = await call(
+      admin.jar,
+      "GET",
+      "/api/siem-rules/splunk/fields?index=smokeidx",
+    );
+    const catalogFields = catalogRead.json?.data?.sources?.[0]?.fields ?? [];
+    check(
+      "an administrator reads the fields with counts and example values",
+      catalogRead.status === 200 &&
+        catalogFields.length === 1 &&
+        catalogFields[0].name === "smoke_field" &&
+        catalogFields[0].events_with_field === 40 &&
+        catalogFields[0].sample_values.join() === "a,b",
+      catalogRead.json,
+    );
+    const catalogAnalyst = await call(analyst.jar, "GET", "/api/siem-rules/splunk/fields");
+    check(
+      "an analyst cannot read the catalog (403)",
+      catalogAnalyst.status === 403,
+      catalogAnalyst.status,
+    );
+    await adminRest("DELETE", "/rest/v1/siem_field_catalog?index_name=eq.smokeidx");
+
     // Clean-up: only what this run created.
     await adminRest(
       "DELETE",

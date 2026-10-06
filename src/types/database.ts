@@ -1347,6 +1347,48 @@ export type Database = {
         };
         Relationships: [];
       };
+      siem_field_catalog: {
+        Row: {
+          distinct_values: number | null;
+          events_sampled: number;
+          events_with_field: number;
+          field: string;
+          index_name: string;
+          origin: Database["public"]["Enums"]["data_origin"];
+          reported_at: string;
+          sample_values: string[];
+          siem: string;
+          sourcetype: string;
+          window_hours: number;
+        };
+        Insert: {
+          distinct_values?: number | null;
+          events_sampled: number;
+          events_with_field: number;
+          field: string;
+          index_name: string;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          reported_at?: string;
+          sample_values?: string[];
+          siem: string;
+          sourcetype: string;
+          window_hours: number;
+        };
+        Update: {
+          distinct_values?: number | null;
+          events_sampled?: number;
+          events_with_field?: number;
+          field?: string;
+          index_name?: string;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          reported_at?: string;
+          sample_values?: string[];
+          siem?: string;
+          sourcetype?: string;
+          window_hours?: number;
+        };
+        Relationships: [];
+      };
       siem_rules: {
         Row: {
           ai_model: string | null;
@@ -1745,6 +1787,7 @@ export type Database = {
         Args: { p_type: Database["public"]["Enums"]["indicator_type"]; p_value: string };
         Returns: boolean;
       };
+      max_text_len: { Args: { p_values: string[] }; Returns: number };
       mitre_observed_techniques: {
         Args: Record<PropertyKey, never>;
         Returns: {
@@ -1915,6 +1958,7 @@ export type Database = {
         Args: { p_severity: Database["public"]["Enums"]["severity"] };
         Returns: number;
       };
+      sync_field_catalog: { Args: { p_siem: string; p_sources: Json }; Returns: Json };
       telemetry_source_health: {
         Args: Record<PropertyKey, never>;
         Returns: {

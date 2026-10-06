@@ -340,6 +340,13 @@ export const splunkDialect: RuleDialect = {
   prompt: {
     version: SPLUNK_RULE_PROMPT_VERSION,
     maxOutputTokens: 700,
-    build: (description) => ({ system: SYSTEM_PROMPT, user: `Detect this:\n${description}` }),
+    build: (description, context) => ({
+      system: context
+        ? `${SYSTEM_PROMPT}
+- THE REAL DATA. This Splunk reported which fields exist: index, sourcetype, then the field names with a few example values. Use ONLY an index, a sourcetype and field names from this list. If the request needs something that is not here, use the closest field that is and say so in "description". Do not invent a field.
+${context}`
+        : SYSTEM_PROMPT,
+      user: `Detect this:\n${description}`,
+    }),
   },
 };

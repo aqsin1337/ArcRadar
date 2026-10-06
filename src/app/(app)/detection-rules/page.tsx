@@ -11,6 +11,7 @@ import { cn } from "@/lib/cn";
 import { listDetectionRules } from "@/lib/detection-rules/service";
 import { getEffectiveEnv } from "@/lib/secrets/service";
 import { getGithubRulesConfig } from "@/lib/github/contents";
+import { getFieldCatalog } from "@/lib/siem-rules/catalog-service";
 import { listSiemRules } from "@/lib/siem-rules/service";
 import { listWazuhRules } from "@/lib/wazuh-rules/service";
 
@@ -94,14 +95,16 @@ async function WazuhTab({ auth }: { auth: Auth }) {
 
 async function SplunkTab({ auth }: { auth: Auth }) {
   const config = getGithubRulesConfig(await getEffectiveEnv());
-  const [rules, availability] = await Promise.all([
+  const [rules, catalog, availability] = await Promise.all([
     listSiemRules(auth.supabase, "splunk"),
+    getFieldCatalog(auth.supabase, "splunk"),
     getAiAvailability(auth.supabase),
   ]);
   return (
     <SiemRulesManager
       siem="splunk"
       rules={rules}
+      catalog={catalog}
       githubReady={config !== null}
       githubBlobBase={
         config ? `https://github.com/${config.owner}/${config.repo}/blob/${config.branch}` : null

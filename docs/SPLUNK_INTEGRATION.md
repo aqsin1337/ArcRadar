@@ -55,6 +55,33 @@ Done on the lab VM (Ubuntu 24.04, Splunk Enterprise 10.0.2 from the `.deb`, `/op
    the way the Wazuh Manager does it. Settings (repository, branch) are environment variables at the top of the
    script; the default repository is the one ArcRadar commits to.
 
+## Reporting the real fields (field catalog)
+
+So that the rule form offers real index, sourcetype and field names instead of guesses, and the AI is told
+which fields exist, the Splunk host reports them to ArcRadar with `sync-arcradar-catalog.py`
+(installed as `/usr/local/sbin/arcradar-splunk-sync`). It reads from Splunk on this machine and writes only
+to ArcRadar; ArcRadar replaces its earlier report per source, so running it again is harmless.
+
+1. **A Splunk account for it, not `admin`.** Create a role with only the `search` capability and a user with
+   that role (once, as an administrator; `arcradar_sync` is the name used on the lab):
+
+   ```
+   curl -k -u admin:... https://localhost:8089/services/authorization/roles -d name=arcradar_sync_role -d capabilities=search -d srchIndexesAllowed='*' -d srchIndexesDefault=main
+   curl -k -u admin:... https://localhost:8089/services/authentication/users -d name=arcradar_sync -d password=... -d roles=arcradar_sync_role
+   ```
+
+   Put `arcradar_sync:<password>` in `/etc/arcradar/splunk-sync` (mode 600, root only). (Internal indexes, whose
+   names start with an underscore, are never reported.)
+
+2. **Run it** (as root, it uses the ArcRadar address and key from the app's `local/arcradar_forward.json`):
+   `arcradar-splunk-sync`. It prints "reported N source(s), M field(s) to ArcRadar".
+3. **Schedule it**, for example every 30 minutes under `flock` in `/etc/cron.d/arcradar-splunk-sync`.
+
+Per source it looks at up to 1000 events of the last 24 hours (`ARCRADAR_CATALOG_*` variables change that), keeps
+the 300 most common fields with up to five example values (one line each, cut to 100 characters) and skips the
+fields Splunk adds to every event. The example values come from real logs (account names, addresses): ArcRadar
+shows them only to administrators.
+
 ## What a rule file can and cannot contain
 
 A rule is stored as fields: an index, an optional sourcetype, up to 10 conditions (`field` `contains` / `equals`

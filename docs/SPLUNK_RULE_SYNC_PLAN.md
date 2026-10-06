@@ -1,6 +1,6 @@
 # Splunk rule sync: real fields, imported rules, AI enhancement
 
-Status: **plan only, nothing built** (2026-10-06). Follows [MULTI_SIEM_PLAN.md](MULTI_SIEM_PLAN.md) and
+Status: **phase A1 (field catalog) built and verified locally and on the lab Splunk (2026-10-06), not yet deployed to production; A2 (backtest), B, C, D not started.** Follows [MULTI_SIEM_PLAN.md](MULTI_SIEM_PLAN.md) and
 [SPLUNK_INTEGRATION.md](SPLUNK_INTEGRATION.md). The request came from using the finished Splunk integration:
 writing a rule in ArcRadar felt like guessing (field names typed by hand, no way to know before pushing whether the
 rule finds anything), and an analyst who writes alerts in Splunk itself had no way to bring them into ArcRadar.

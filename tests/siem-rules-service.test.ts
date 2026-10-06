@@ -14,11 +14,13 @@ const repo = vi.hoisted(() => ({
   nextRuleKey: vi.fn(),
   updateSiemRuleRow: vi.fn(),
 }));
+const catalogRepo = vi.hoisted(() => ({ findCatalog: vi.fn(), storeCatalog: vi.fn() }));
 const aiService = vi.hoisted(() => ({ getAiAvailability: vi.fn(), defaultDeps: vi.fn() }));
 const github = vi.hoisted(() => ({ commitRepoFile: vi.fn() }));
 const audit = vi.hoisted(() => vi.fn().mockResolvedValue(true));
 
 vi.mock("@/lib/siem-rules/repository", () => repo);
+vi.mock("@/lib/siem-rules/catalog-repository", () => catalogRepo);
 vi.mock("@/lib/ai/service", () => aiService);
 vi.mock("@/lib/audit/write", () => ({ writeAuditLog: audit }));
 vi.mock("@/lib/github/contents", async (importOriginal) => ({
@@ -131,6 +133,7 @@ function aiSetup(complete: AiProvider["complete"], ready = true) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  catalogRepo.findCatalog.mockResolvedValue({ sources: [] });
   audit.mockResolvedValue(true);
   repo.insertSiemRule.mockImplementation(async (_s, row) => rule({ ...row } as Partial<SiemRule>));
   repo.nextRuleKey.mockResolvedValue("1001");
@@ -182,6 +185,38 @@ describe("generateSiemRule", () => {
       expect.objectContaining({ action: "siem_rule.generated" }),
       request,
     );
+  });
+
+  it("tells the AI which fields the SIEM really has, but only when it has reported them", async () => {
+    const complete = vi.fn().mockResolvedValue({ data: validDraft, model: "m1" });
+    aiSetup(complete);
+    await generateSiemRule(admin, "splunk", "Detect a failed logon", request, deps());
+    expect(complete.mock.calls[0][0].system).not.toContain("THE REAL DATA");
+
+    catalogRepo.findCatalog.mockResolvedValue({
+      sources: [
+        {
+          index: "main",
+          sourcetype: "WinEventLog:Security",
+          events_sampled: 100,
+          window_hours: 24,
+          reported_at: "2026-10-06T10:00:00Z",
+          fields: [
+            {
+              name: "EventCode",
+              events_with_field: 100,
+              distinct_values: 3,
+              sample_values: ["4625", "4624"],
+            },
+          ],
+        },
+      ],
+    });
+    await generateSiemRule(admin, "splunk", "Detect a failed logon", request, deps());
+    const system = complete.mock.calls[1][0].system as string;
+    expect(system).toContain("THE REAL DATA");
+    expect(system).toContain("index=main sourcetype=WinEventLog:Security");
+    expect(system).toContain("EventCode [4625, 4624]");
   });
 
   it("refuses a draft with SPL smuggled into a value and stores nothing", async () => {

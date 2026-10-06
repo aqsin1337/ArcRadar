@@ -20,6 +20,7 @@ export interface RuleDialect {
   readonly prompt: {
     version: number;
     maxOutputTokens: number;
-    build(description: string): { system: string; user: string };
+    /** `context` is what is known about the real data (the field catalog), when the SIEM has reported it. */
+    build(description: string, context?: string): { system: string; user: string };
   };
 }

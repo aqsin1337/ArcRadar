@@ -16,6 +16,7 @@ import {
   type SiemRuleStatus,
 } from "@/lib/siem-rules/constants";
 import { SPLUNK_SCHEDULES, type SplunkSpec } from "@/lib/siem-rules/dialects/splunk";
+import type { FieldCatalog } from "@/lib/siem-rules/catalog";
 import type { SiemRule } from "@/lib/siem-rules/types";
 import { SplunkRuleForm, type SiemRuleFormProps } from "./splunk-rule-form";
 
@@ -79,12 +80,15 @@ const formatTime = (iso: string) => `${iso.slice(0, 16).replace("T", " ")} UTC`;
 export function SiemRulesManager({
   siem,
   rules,
+  catalog,
   githubBlobBase,
   githubReady,
   aiReady,
 }: {
   siem: SiemId;
   rules: SiemRule[];
+  /** The fields the SIEM reported; empty until it has. */
+  catalog: FieldCatalog;
   /** `https://github.com/owner/name/blob/branch` when configured, else null. */
   githubBlobBase: string | null;
   githubReady: boolean;
@@ -246,6 +250,7 @@ export function SiemRulesManager({
               pending={pending === "create"}
               submitLabel="Save as draft"
               serverErrors={fieldErrors}
+              catalog={catalog}
               onSubmit={create}
               onCancel={() => setPanel("none")}
             />
@@ -336,6 +341,7 @@ export function SiemRulesManager({
                       pending={pending === `edit-${rule.id}`}
                       submitLabel="Save changes"
                       serverErrors={fieldErrors}
+                      catalog={catalog}
                       onSubmit={(payload) => saveEdit(rule, payload)}
                       onCancel={() => setEditingId(null)}
                     />

@@ -18,8 +18,10 @@ import {
   type SplunkSchedule,
   type SplunkSpec,
 } from "@/lib/siem-rules/dialects/splunk";
+import { fieldOptions, sourcesFor, type FieldCatalog } from "@/lib/siem-rules/catalog";
 import { createSiemRuleSchema, updateSiemRuleSchema } from "@/lib/siem-rules/schema";
 import type { SiemRule } from "@/lib/siem-rules/types";
+import { formatRelative } from "@/lib/format";
 import { WAZUH_CONDITION_OP_LABELS } from "@/lib/wazuh-rules/constants";
 
 /** What every SIEM's form component receives: the rule being edited (if any) and how to report back. */
@@ -28,6 +30,8 @@ export type SiemRuleFormProps = {
   pending: boolean;
   submitLabel: string;
   serverErrors: Record<string, string>;
+  /** The fields Splunk reported (empty until it has). */
+  catalog: FieldCatalog;
   onSubmit: (payload: Record<string, unknown>) => void;
   onCancel: () => void;
 };
@@ -115,6 +119,7 @@ export function SplunkRuleForm({
   pending,
   submitLabel,
   serverErrors,
+  catalog,
   onSubmit,
   onCancel,
 }: SiemRuleFormProps) {
@@ -124,6 +129,29 @@ export function SplunkRuleForm({
   const shown = { ...serverErrors, ...errors };
   const set = (patch: Partial<FormState>) => setForm((current) => ({ ...current, ...patch }));
   const idPrefix = editing ? "sp-edit" : "sp-new";
+
+  // What Splunk really holds for the index and sourcetype typed so far.
+  const indexName = form.index.trim();
+  const sourcetypeName = form.sourcetype.trim() || null;
+  const known = sourcesFor(catalog, indexName, sourcetypeName);
+  const options = fieldOptions(catalog, indexName, sourcetypeName);
+  const optionByName = new Map(options.map((option) => [option.name, option]));
+  const indexNames = [...new Set(catalog.sources.map((source) => source.index))];
+  const sourcetypeNames =
+    catalog.sources.length > 0
+      ? [
+          ...new Set(
+            catalog.sources
+              .filter((source) => source.index === indexName)
+              .map((source) => source.sourcetype),
+          ),
+        ]
+      : [...SPLUNK_SOURCETYPE_SUGGESTIONS];
+  const reported = catalog.sources
+    .map((source) => source.reported_at)
+    .sort()
+    .at(-1);
+  const windowHours = known[0]?.window_hours ?? catalog.sources[0]?.window_hours ?? 24;
 
   function updateCondition(index: number, patch: Partial<Condition>) {
     set({
@@ -213,14 +241,27 @@ export function SplunkRuleForm({
         error={shown.description}
       />
 
+      <p className="text-xs text-muted">
+        {reported
+          ? `Index, sourcetype and fields below come from what Splunk reported ${formatRelative(reported, new Date())} (a sample of its last ${windowHours} h). You can still type a name that is not listed.`
+          : "Splunk has not reported its fields yet, so these are only suggestions. Run the catalog sync on the Splunk host (docs/SPLUNK_INTEGRATION.md) to list the real ones."}
+      </p>
       <div className="grid gap-3 sm:grid-cols-[160px_1fr_200px]">
-        <TextField
-          id={`${idPrefix}-index`}
-          label="Index"
-          value={form.index}
-          onChange={(event) => set({ index: event.target.value })}
-          error={shown["spec.index"]}
-        />
+        <div>
+          <TextField
+            id={`${idPrefix}-index`}
+            label="Index"
+            list={`${idPrefix}-indexes`}
+            value={form.index}
+            onChange={(event) => set({ index: event.target.value })}
+            error={shown["spec.index"]}
+          />
+          <datalist id={`${idPrefix}-indexes`}>
+            {indexNames.map((item) => (
+              <option key={item} value={item} />
+            ))}
+          </datalist>
+        </div>
         <div>
           <TextField
             id={`${idPrefix}-sourcetype`}
@@ -231,7 +272,7 @@ export function SplunkRuleForm({
             error={shown["spec.sourcetype"]}
           />
           <datalist id={`${idPrefix}-sourcetypes`}>
-            {SPLUNK_SOURCETYPE_SUGGESTIONS.map((item) => (
+            {sourcetypeNames.map((item) => (
               <option key={item} value={item} />
             ))}
           </datalist>
@@ -252,52 +293,78 @@ export function SplunkRuleForm({
       <div className="space-y-2">
         <p className="text-sm font-medium">Conditions (every one must match)</p>
         <datalist id={`${idPrefix}-fields`}>
-          {SPLUNK_FIELD_SUGGESTIONS.map((field) => (
-            <option key={field} value={field} />
-          ))}
+          {options.length > 0
+            ? options.map((option) => (
+                <option
+                  key={option.name}
+                  value={option.name}
+                  label={`${option.percent}%${option.examples.length > 0 ? " · " + option.examples.slice(0, 3).join(", ") : ""}`}
+                />
+              ))
+            : SPLUNK_FIELD_SUGGESTIONS.map((field) => <option key={field} value={field} />)}
         </datalist>
-        {form.conditions.map((condition, index) => (
-          <div key={index} className="flex flex-wrap items-center gap-2">
-            <Input
-              aria-label={`Condition ${index + 1} field`}
-              list={`${idPrefix}-fields`}
-              value={condition.field}
-              onChange={(event) => updateCondition(index, { field: event.target.value })}
-              className="min-w-44 flex-1"
-            />
-            <Select
-              aria-label={`Condition ${index + 1} comparison`}
-              value={condition.op}
-              onChange={(event) =>
-                updateCondition(index, { op: event.target.value as SplunkConditionOp })
-              }
-              className="w-auto min-w-36"
-            >
-              {SPLUNK_CONDITION_OPS.map((op) => (
-                <option key={op} value={op}>
-                  {WAZUH_CONDITION_OP_LABELS[op]}
-                </option>
-              ))}
-            </Select>
-            <Input
-              aria-label={`Condition ${index + 1} value`}
-              value={condition.value}
-              onChange={(event) => updateCondition(index, { value: event.target.value })}
-              maxLength={200}
-              className="min-w-40 flex-[2]"
-            />
-            {(form.conditions.length > 1 || form.repeat) && (
-              <button
-                type="button"
-                aria-label={`Remove condition ${index + 1}`}
-                className="shrink-0 rounded-md p-2 text-muted hover:bg-surface-2 hover:text-foreground"
-                onClick={() => set({ conditions: form.conditions.filter((_, i) => i !== index) })}
-              >
-                <Trash2 aria-hidden className="size-4" />
-              </button>
-            )}
-          </div>
-        ))}
+        {form.conditions.map((condition, index) => {
+          const option = optionByName.get(condition.field.trim());
+          return (
+            <div key={index} className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  aria-label={`Condition ${index + 1} field`}
+                  list={`${idPrefix}-fields`}
+                  value={condition.field}
+                  onChange={(event) => updateCondition(index, { field: event.target.value })}
+                  className="min-w-44 flex-1"
+                />
+                <Select
+                  aria-label={`Condition ${index + 1} comparison`}
+                  value={condition.op}
+                  onChange={(event) =>
+                    updateCondition(index, { op: event.target.value as SplunkConditionOp })
+                  }
+                  className="w-auto min-w-36"
+                >
+                  {SPLUNK_CONDITION_OPS.map((op) => (
+                    <option key={op} value={op}>
+                      {WAZUH_CONDITION_OP_LABELS[op]}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  aria-label={`Condition ${index + 1} value`}
+                  list={`${idPrefix}-values-${index}`}
+                  value={condition.value}
+                  onChange={(event) => updateCondition(index, { value: event.target.value })}
+                  maxLength={200}
+                  className="min-w-40 flex-[2]"
+                />
+                {(form.conditions.length > 1 || form.repeat) && (
+                  <button
+                    type="button"
+                    aria-label={`Remove condition ${index + 1}`}
+                    className="shrink-0 rounded-md p-2 text-muted hover:bg-surface-2 hover:text-foreground"
+                    onClick={() =>
+                      set({ conditions: form.conditions.filter((_, i) => i !== index) })
+                    }
+                  >
+                    <Trash2 aria-hidden className="size-4" />
+                  </button>
+                )}
+              </div>
+              <datalist id={`${idPrefix}-values-${index}`}>
+                {(option?.examples ?? []).map((value) => (
+                  <option key={value} value={value} />
+                ))}
+              </datalist>
+              {condition.field.trim() !== "" && known.length > 0 && (
+                <p className={option ? "text-xs text-muted" : "text-xs text-tone-amber-fg"}>
+                  {option
+                    ? `Seen in ${option.percent}% of events${option.examples.length > 0 ? " · examples: " + option.examples.join(", ") : ""}`
+                    : `Not seen in this data in the last ${windowHours} h. Check the spelling, or the sourcetype.`}
+                </p>
+              )}
+            </div>
+          );
+        })}
         {conditionErrors(shown).map((message, index) => (
           <p key={index} className="text-sm text-tone-red-fg">
             {message}

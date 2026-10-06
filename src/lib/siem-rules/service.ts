@@ -14,6 +14,8 @@ import {
 import { logError, logWarn } from "@/lib/log";
 import { getEffectiveEnv } from "@/lib/secrets/service";
 import { SIEM_LABELS, type SiemId } from "./constants";
+import { summarizeCatalog } from "./catalog";
+import { findCatalog } from "./catalog-repository";
 import { getDialect } from "./dialects";
 import {
   deleteSiemRuleRow,
@@ -137,7 +139,12 @@ export async function generateSiemRule(
   }
 
   const schema = aiSiemRuleSchema(dialect);
-  const { system, user } = dialect.prompt.build(prompt);
+  // The AI is told which fields the SIEM really has, when it has reported them.
+  const catalog = await findCatalog(auth.supabase, siem);
+  const { system, user } = dialect.prompt.build(
+    prompt,
+    catalog.sources.length > 0 ? summarizeCatalog(catalog) : undefined,
+  );
   let result: Awaited<ReturnType<typeof provider.complete>>;
   try {
     result = await provider.complete({

@@ -32,6 +32,10 @@ async function cleanUp() {
     method: "DELETE",
     headers: { prefer: "return=minimal" },
   });
+  await adminFetch("/rest/v1/siem_field_catalog?index_name=eq.e2eidx", {
+    method: "DELETE",
+    headers: { prefer: "return=minimal" },
+  });
   await adminFetch("/rest/v1/tags?name=ilike.e2e-*", {
     method: "DELETE",
     headers: { prefer: "return=minimal" },
@@ -756,6 +760,41 @@ test.describe("Detection rules and alert deduplication (Phase 10)", () => {
 
       await edited.getByRole("button", { name: `Delete ${renamed}` }).click();
       await expect(edited).toHaveCount(0);
+    });
+
+    test("the Splunk form offers the fields Splunk reported and warns about one it has never seen", async ({
+      page,
+    }) => {
+      await adminFetch("/rest/v1/rpc/sync_field_catalog", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          p_siem: "splunk",
+          p_sources: [
+            {
+              index: "e2eidx",
+              sourcetype: "e2e:logs",
+              window_hours: 24,
+              events_sampled: 100,
+              fields: [
+                { name: "e2e_status", count: 80, distinct: 3, values: ["failed", "ok"] },
+                { name: "e2e_user", count: 100, distinct: 9, values: ["amy"] },
+              ],
+            },
+          ],
+        }),
+      });
+      await page.goto("/detection-rules?tab=splunk");
+      await page.getByRole("button", { name: "Manual rule" }).click();
+      await expect(
+        page.getByText("Index, sourcetype and fields below come from what Splunk reported"),
+      ).toBeVisible();
+      await page.getByLabel("Index", { exact: true }).fill("e2eidx");
+      await page.getByLabel("Sourcetype (optional)").fill("e2e:logs");
+      await page.getByLabel("Condition 1 field").fill("e2e_status");
+      await expect(page.getByText("Seen in 80% of events · examples: failed, ok")).toBeVisible();
+      await page.getByLabel("Condition 1 field").fill("e2e_statuss");
+      await expect(page.getByText("Not seen in this data in the last 24 h")).toBeVisible();
     });
 
     test("a Splunk field that is not a plain name is refused on the form", async ({ page }) => {
