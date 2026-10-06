@@ -51,7 +51,9 @@ Done on the lab VM (Ubuntu 24.04, Splunk Enterprise 10.0.2 from the `.deb`, `/op
    (mode 600, root only); it is used only to reload the saved searches. Without that file the rules are
    installed and Splunk loads them on its next refresh or restart.
 4. **Restart Splunk once** so it reads the new app, then run `arcradar-apply-splunk-rules --check`.
-5. **Run it on a schedule**, for example every 10 minutes under `flock` in `/etc/cron.d/arcradar-splunk-rules`,
+5. **Run it on a schedule**, every minute under `flock` in `/etc/cron.d/arcradar-splunk-rules` (it only fetches and
+   compares; it is quiet when nothing changed, and starts a backtest as soon as it installs a change, so a pushed rule
+   is on Splunk and tested within about two minutes),
    the way the Wazuh Manager does it. Settings (repository, branch) are environment variables at the top of the
    script; the default repository is the one ArcRadar commits to.
 

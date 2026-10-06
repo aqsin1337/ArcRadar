@@ -381,3 +381,5 @@ Keep entries short. Newest entries go at the bottom.
 - Validated: lint, typecheck, format, 956 unit tests, all SQL tests, `api:smoke` 482/482, E2E operations + accessibility + telemetry 66/66.
 - Gotchas: the Bash heredoc eats backslashes and long inline scripts with quotes break: write scripts with the Write tool into the scratchpad and run them; `String.replace` needs a function replacer.
 - Next: deploy A2 (`supabase db push`, push, `vercel deploy --prod`), then phases B (imported rules), C (AI on imported rules), D (optional, SPL editing) per `docs/SPLUNK_RULE_SYNC_PLAN.md`.
+
+- Follow-up the same day: the user found the wait for a backtest too long. Now the apply cron on the VM runs **every minute** (it only fetches and compares, and is quiet when nothing changed; a backtest starts as soon as it installs a change: about 7 s), and the rule card **polls every 10 s for up to 5 minutes** while a pushed rule has no backtest or an out-of-date one, so a pushed rule is tested and shown in about a minute and a half without reloading. ArcRadar still cannot ask Splunk directly (it never connects to the SIEM): the latency is the cron interval.

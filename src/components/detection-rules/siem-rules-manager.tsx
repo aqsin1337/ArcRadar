@@ -10,7 +10,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Badge, type Tone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -130,8 +130,8 @@ function BacktestPanel({ rule }: { rule: SiemRule }) {
   if (rule.backtests.length === 0) {
     return (
       <p className="text-xs text-muted" data-testid="backtest">
-        Waiting for Splunk&apos;s test on past data. It runs a few minutes after Splunk pulls the
-        rule.
+        Waiting for Splunk&apos;s test on past data. It starts when Splunk pulls the rule (about a
+        minute) and this card updates by itself.
       </p>
     );
   }
@@ -204,6 +204,37 @@ export function SiemRulesManager({
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Splunk tests a pushed rule on its own, a minute or two after it pulls it. While a result is missing or out
+  // of date, look again every 10 seconds (for at most five minutes) so nobody has to reload the page.
+  const waiting = items.some(
+    (item) =>
+      item.status === "pushed" &&
+      (item.backtests.length === 0 || item.backtests.some((backtest) => backtest.stale)),
+  );
+  useEffect(() => {
+    if (!waiting) return;
+    const startedAt = Date.now();
+    const timer = setInterval(async () => {
+      if (Date.now() - startedAt > 5 * 60_000) {
+        clearInterval(timer);
+        return;
+      }
+      const result = await apiFetch<SiemRule[]>(base);
+      if (!result.ok) return;
+      const latest = new Map(result.data.map((rule) => [rule.id, rule]));
+      // Only the test results change here: a form being edited is never overwritten.
+      setItems((current) =>
+        current.map((item) => {
+          const fresh = latest.get(item.id);
+          return fresh && fresh.updated_at === item.updated_at
+            ? { ...item, backtests: fresh.backtests }
+            : item;
+        }),
+      );
+    }, 10_000);
+    return () => clearInterval(timer);
+  }, [waiting, base]);
 
   const replace = (rule: SiemRule) =>
     setItems((current) => current.map((item) => (item.id === rule.id ? rule : item)));
