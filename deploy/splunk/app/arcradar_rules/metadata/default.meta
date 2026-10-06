@@ -1,7 +1,3 @@
-# Share the alert action and the field extractions with every app, so an alert built in the Search app
-# can use "Send to ArcRadar" and searches there see the same fields.
+# Share the alert action with every app, so an alert built in the Search app can use "Send to ArcRadar".
 [alert_actions/arcradar_forward]
-export = system
-
-[props]
 export = system

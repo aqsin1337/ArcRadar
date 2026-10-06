@@ -97,10 +97,22 @@ item it already has. Splunk's log shows the action under `component=sendmodalert
 
 ## Verified on the lab
 
-On Splunk Enterprise 10.0.2 (2026-10-06): a rule created through ArcRadar's API was applied by
-`arcradar-apply-splunk-rules` from a repository, Splunk parsed and reloaded it, the saved search returned the
-expected row (`203.0.113.99`, 4) on events indexed with `sourcetype=WinEventLog:Security`, and the alert action
-delivered it to ArcRadar as a `high` alert with `T1110` and the address as an indicator. With ArcRadar switched
-off the item went to the spool and was delivered later; a second trigger for the same address inside the
-window was suppressed. The repository used in that test was a local Git repository, not GitHub. The real GitHub
-hop and the real Windows event source (a Splunk Universal Forwarder on the Windows VM) were not part of it.
+On Splunk Enterprise 10.0.2 (2026-10-06), end to end against production:
+
+- A rule drafted by the AI in the live ArcRadar ("Five failed Windows logons from the same address within five
+  minutes"), sent to GitHub with the button, was pulled by `arcradar-apply-splunk-rules` (cron, real GitHub),
+  parsed and reloaded by Splunk, and fired; the alert reached the live ArcRadar as a `high` alert with
+  `T1110.001` (and the address as an indicator when it is public).
+- A Universal Forwarder on the Windows 10 lab VM (Security log, `sourcetype=WinEventLog:Security`) delivered real
+  `EventCode=4625` events (failed SMB logons made with `net use` against loopback) to the Splunk server. Splunk's
+  automatic `key: value` extraction already gives `EventCode` and `Source_Network_Address` for the classic
+  Windows format, so no add-on is needed for these rules; the rule fired on those real events too.
+- With ArcRadar switched off, items went to the spool and were delivered later; a second trigger for the same
+  address inside the window was suppressed.
+
+Not covered: Windows events other than the failed-logon ones; Sysmon or XML-rendered logs (different field
+names); a threshold rule's alert has no asset unless `host` is among the "Count per" fields.
+
+Operational notes from the lab: Splunk refuses to run searches below 5 GB of free disk (`minFreeSpace`), so the
+VM needs a disk of 20 GB or more and room to grow; the apply script takes a lock so a manual run cannot collide
+with the cron job.

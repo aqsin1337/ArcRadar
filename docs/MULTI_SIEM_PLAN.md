@@ -1,6 +1,6 @@
 # Multi-SIEM plan: Splunk first, pluggable for the rest
 
-Status: **steps 1-5 built (2026-10-06)**; step 6 (deploy) not started (decision 32 in `ARCRADAR_PROGRESS.md`).
+Status: **steps 1-6 done (2026-10-06)**: built, deployed to production and verified against the live site (decision 32 in `ARCRADAR_PROGRESS.md`).
 
 Goal: ArcRadar is not only a Wazuh companion. The same two abilities work for Splunk, and a third SIEM
 (QRadar, Sentinel, Elastic) is a new small module, not a rewrite:

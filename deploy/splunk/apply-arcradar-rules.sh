@@ -36,6 +36,9 @@ log() { printf '%s arcradar-splunk-rules: %s\n' "$(date -u +%FT%TZ)" "$*"; }
 die() { log "ERROR: $*"; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "run as root"
+# One run at a time: the cron job and a manual run (or two slow runs) must not touch the clone together.
+exec 9>/var/lock/arcradar-splunk-rules.lock
+flock -n 9 || die "another run is in progress"
 command -v git >/dev/null || die "git is not installed"
 command -v python3 >/dev/null || die "python3 is not installed"
 [ -d "$SPLUNK_HOME/etc/apps/$APP" ] || die "the $APP app is not installed in $SPLUNK_HOME/etc/apps"
