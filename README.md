@@ -49,12 +49,12 @@ keeps the trail.
 ```mermaid
 flowchart LR
     subgraph NET["Your network"]
-        EP["Endpoints<br/>Wazuh Agent · Universal Forwarder"] --> SIEM["Wazuh Manager<br/>or Splunk"]
+        EP["Endpoints<br/>Wazuh Agent or<br/>Universal Forwarder"] --> SIEM["Wazuh Manager<br/>or Splunk"]
     end
-    SIEM -- "alerts over HTTPS<br/>scoped API key" --> ARC["ArcRadar<br/>queue · research · ATT#amp;CK · AI · cases"]
+    SIEM -- "alerts over HTTPS<br/>scoped API key" --> ARC["ArcRadar<br/>queue, research,<br/>ATT#amp;CK, AI, cases"]
     ARC -- "approved rule<br/>one commit, one file" --> GH[("Your rules<br/>repository")]
-    GH -. "pulled, checked<br/>and tested by the SIEM host" .-> SIEM
-    ARC -- "public indicators only" --> TI["VirusTotal · AbuseIPDB<br/>AlienVault OTX · Shodan"]
+    GH -. "pulled, checked and<br/>tested by the SIEM host" .-> SIEM
+    ARC -- "public indicators only" --> TI["VirusTotal, AbuseIPDB,<br/>AlienVault OTX, Shodan"]
 ```
 
 Every arrow that touches your network starts **inside** it. There is no inbound firewall rule to
@@ -62,16 +62,15 @@ write, and ArcRadar holds no SIEM password that could leak.
 
 ## A look inside
 
-|                                                                           |                                                                               |
-| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| **Overview.** Real counts, what is open, which techniques were seen most. | **Alerts.** One queue for every source, with severity, owner and status.      |
-| ![Overview](docs/images/dashboard.png)                                    | ![Alerts](docs/images/alerts.png)                                             |
-| **An alert.** The machine, the indicators, the technique, the timeline.   | **ATT&CK matrix.** Built from your own alerts. Click a technique to see them. |
-| ![An alert](docs/images/alert.png)                                        | ![MITRE ATT&CK matrix](docs/images/mitre.png)                                 |
-| **Detection rules.** The exact file a rule becomes, before it is sent.    | **Team.** Four roles. Add an account, or approve one that signed up.          |
-| ![Detection rules](docs/images/rules.png)                                 | ![Settings](docs/images/settings.png)                                         |
-| **Indicators.** Verdict, confidence, tags and where each one came from.   | **Telemetry.** When each source last sent something. Never "connected".       |
-| ![Indicators](docs/images/indicators.png)                                 | ![Telemetry](docs/images/telemetry.png)                                       |
+| Overview: real counts, what is open, which techniques were seen most    | Alerts: one queue for every source, with severity, owner and status           |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| ![Overview](docs/images/dashboard.png)                                  | ![Alerts](docs/images/alerts.png)                                             |
+| **An alert.** The machine, the indicators, the technique, the timeline. | **ATT&CK matrix.** Built from your own alerts. Click a technique to see them. |
+| ![An alert](docs/images/alert.png)                                      | ![MITRE ATT&CK matrix](docs/images/mitre.png)                                 |
+| **Detection rules.** The exact file a rule becomes, before it is sent.  | **Team.** Four roles. Add an account, or approve one that signed up.          |
+| ![Detection rules](docs/images/rules.png)                               | ![Settings](docs/images/settings.png)                                         |
+| **Indicators.** Verdict, confidence, tags and where each one came from. | **Telemetry.** When each source last sent something. Never "connected".       |
+| ![Indicators](docs/images/indicators.png)                               | ![Telemetry](docs/images/telemetry.png)                                       |
 
 The screenshots show a local demonstration dataset. In the app every record carries a label that says
 whether it is demo data, typed in by your team, or arrived from an outside source.
