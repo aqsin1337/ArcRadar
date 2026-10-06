@@ -50,3 +50,7 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 /tests/e2e/.auth/
+
+# assistant working files: kept on this machine, not in the repository
+/CLAUDE.md
+/.claude/

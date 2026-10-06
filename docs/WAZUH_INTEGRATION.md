@@ -8,10 +8,12 @@ Wazuh credentials. Design and rules: `docs/TELEMETRY_ARCHITECTURE.md`. Endpoint 
 Windows 10 + Wazuh Agent ──> Wazuh Manager ──(custom-arcradar, HTTPS + API key)──> ArcRadar ──> Supabase
 ```
 
-> **Not verified against a real Wazuh Manager.** The endpoint, the adapter and the delivery script were
-> tested with recorded alert shapes, a local ArcRadar, and `curl` from a POSIX shell (spool, retry, refusal
-> handling). The `<integration>` options below follow the Wazuh documentation; check them against the
-> version you have (`/var/ossec/bin/wazuh-control info`) and expect to adjust small things on first contact.
+> **Verified on a lab.** Wazuh Manager 4.14.8 on Ubuntu 24.04 with a Windows 10 agent, sending to an
+> ArcRadar deployed on Vercel: a burst of failed Windows logons (Wazuh rule 60204, level 10, technique
+> T1110) arrived as an alert with its machine and technique. Research on arrival was checked separately,
+> with an ingested alert that carried a public address: VirusTotal and AbuseIPDB answered within seconds.
+> Other Wazuh versions should behave the same; check the `<integration>` options against yours
+> (`/var/ossec/bin/wazuh-control info`).
 
 ## What you need
 
@@ -22,24 +24,33 @@ Windows 10 + Wazuh Agent ──> Wazuh Manager ──(custom-arcradar, HTTPS + A
 
 ## 1. Create an API key
 
-From the ArcRadar project folder, signed in as an administrator (the password is read from the environment,
-never from the command line):
+In ArcRadar, signed in as an administrator, open **API keys**, press **New key**, give it a name (for
+example "Wazuh Manager"), choose the scope **Send Wazuh alerts to ArcRadar** and a lifetime.
 
-```powershell
-$env:ARCRADAR_EMAIL = "admin@arcradar.test"      # your administrator
-$env:ARCRADAR_PASSWORD = "..."
-npm run apikey:create -- --url http://localhost:3000 --name "Wazuh lab" --days 90
-```
-
-The key (`arc_` followed by 43 characters) is printed **once**. ArcRadar keeps only its SHA-256 hash, so a
+The key (`arc_` followed by 43 characters) is shown **once**. ArcRadar keeps only its SHA-256 hash, so a
 lost key cannot be shown again: revoke it (`DELETE /api/api-keys/:id`) and make another. A key stops working
 the moment it is revoked, expires, or its owner is disabled or loses the permission. Give each Manager its
 own key, a short lifetime while you experiment, and never commit it or paste it into a chat.
 
-## 2. Try the pipeline without a Manager
+<details>
+<summary>From the command line instead</summary>
+
+From the ArcRadar project folder (the password is read from the environment, never from the command line):
 
 ```powershell
-npm run ingest:sample -- --url http://localhost:3000 --key arc_...
+$env:ARCRADAR_EMAIL = "you@example.com"      # your administrator
+$env:ARCRADAR_PASSWORD = "..."
+npm run apikey:create -- --url https://YOUR-ARCRADAR --name "Wazuh Manager" --days 90
+```
+
+</details>
+
+## 2. Try the pipeline without a Manager (optional)
+
+From the ArcRadar project folder on any computer:
+
+```powershell
+npm run ingest:sample -- --url https://YOUR-ARCRADAR --key arc_...
 npm run ingest:sample -- --replay          # the same alerts again: nothing new is created
 ```
 
@@ -109,7 +120,9 @@ Environment variables can change the spool location, log file and limits (see th
 For each alert: an **event** (always), and for level 7+ an **alert** with the machine (**asset**, made from the
 agent), the ATT&CK techniques named in the rule, and up to five **indicators** taken from the alert (public or
 documentation IP addresses, file hashes, domains, URLs; never private addresses or internal names). Indicators
-made this way have the verdict "unknown": a sensor saw them, nobody has judged them. A tracked indicator that
+made this way start with the verdict "unknown": a sensor saw them, nobody has judged them. Right after the
+delivery is stored, ArcRadar looks up the new public ones at the intelligence providers that are switched on
+and records the worst verdict it finds (at most four per delivery; a verdict only ever moves up). A tracked indicator that
 already exists (any origin) is linked, never changed. A bounded copy of the raw alert (16 KiB, raw log line
 first) is kept with the event and shown on the alert page. Every batch writes one `ingest.batch` audit entry
 (who sent it, how many of each outcome; never the alerts).
@@ -143,7 +156,9 @@ because the key and the alerts would then cross the network unencrypted.
 
 ## Limits worth knowing
 
-- The endpoint accepts up to 100 alerts and 1 MiB per request. There is no rate limit yet (Phase 8).
-- No correlation or de-duplication beyond the alert id: the same rule firing twice is two alerts.
+- The endpoint accepts up to 100 alerts and 1 MiB per request, and 120 requests a minute per key.
+- A repeat of an alert (same rule title, machine and indicator, within 60 minutes, while the first is still
+  open) is linked to the first one as a duplicate instead of opening a new alert. The alert list hides
+  duplicates unless you ask for them.
 - The machine's operating system is inferred only for Windows event data; other systems show no OS.
 - Retention is not built: Wazuh is chatty, so watch the size of the `events` table on a free tier.

@@ -1,150 +1,269 @@
-# Deploying ArcRadar (Vercel + Supabase)
+# Deploying ArcRadar
 
-This is a guide for **you** to follow with your own Vercel and Supabase accounts — Claude Code does not
-deploy the app or sign in to either service (`CLAUDE.md`'s constraints). It has been checked against how
-the app is built (env parsing, migrations, Auth settings, the local seed) but the steps themselves have not
-been run against a real hosted project yet (decision 17 in `docs/ARCRADAR_PROGRESS.md`).
+This guide takes you from nothing to a running ArcRadar of your own: a database on Supabase, the app on
+Vercel, your first administrator, your team, and a SIEM sending alerts. It fits in the free plans of both
+services. There is no server to keep running: the app is serverless, and all state lives in Postgres.
 
-There is no always-on server, no local-filesystem persistence and no background worker anywhere in the
-app (decision 1) — nothing here needs a bigger plan than Vercel Hobby and Supabase Free.
+The short version of the same steps is the [Quick start in the README](../README.md#quick-start).
+
+| Step                                                               | Where                  | Time   |
+| ------------------------------------------------------------------ | ---------------------- | ------ |
+| [1. Create the database](#1-create-the-database)                   | Supabase, your machine | 10 min |
+| [2. Set the sign-in rules](#2-set-the-sign-in-rules)               | Supabase               | 3 min  |
+| [3. Deploy the app](#3-deploy-the-app)                             | Vercel                 | 5 min  |
+| [4. Make the first administrator](#4-make-the-first-administrator) | The app, Supabase      | 3 min  |
+| [5. Add your team](#5-add-your-team)                               | The app                | 2 min  |
+| [6. Load reference data](#6-load-reference-data)                   | The app, your machine  | 5 min  |
+| [7. Add provider keys](#7-add-provider-keys)                       | The app                | 5 min  |
+| [8. Connect a SIEM](#8-connect-a-siem)                             | Your SIEM host         | 15 min |
 
 ## What you need
 
-- A [Vercel](https://vercel.com) account, with this repository pushed to GitHub (or GitLab/Bitbucket).
-- A [Supabase](https://supabase.com) account.
-- The Supabase CLI you already have as a dev dependency (`npx supabase`); you do not need to install it
-  globally.
-- Optional: a domain you own, if you want something other than the free `*.vercel.app` address.
+- A [GitHub](https://github.com) account, with your own fork of this repository.
+- A [Supabase](https://supabase.com) account and a [Vercel](https://vercel.com) account. The free plans
+  are enough.
+- On your own computer, once, to create the database: [git](https://git-scm.com) and
+  [Node.js](https://nodejs.org) 20.19 or newer.
 
-## 1. Create the hosted Supabase project
+## 1. Create the database
 
-1. In the Supabase dashboard, create a new project (any region close to you; note the **database
-   password** you set — you will not need it again unless you connect a SQL client directly).
-2. From the project's **Settings > API** page, copy the **Project URL**, the **anon / publishable key**
-   and the **service_role / secret key**. Keep the service-role key private — it bypasses every
-   permission check in the app (`src/lib/supabase/admin.ts`).
-3. Link your local checkout to the new project and push the schema (this runs every file in
-   `supabase/migrations/`, in order; it does **not** run `supabase/seed.sql`, which is local-only and
-   would fail — it references `pg_temp` helpers that only exist inside `db reset`):
+1. In the Supabase dashboard, create a **new project**. Pick a region near you and set a database
+   password (you will not need it again).
+2. Open **Project Settings > API** and keep three values at hand:
+
+   | Value               | Used as                         |
+   | ------------------- | ------------------------------- |
+   | Project URL         | `NEXT_PUBLIC_SUPABASE_URL`      |
+   | `anon` `public` key | `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
+   | `service_role` key  | `SUPABASE_SERVICE_ROLE_KEY`     |
+
+   The service-role key bypasses every permission check. It only ever goes into Vercel as a secret.
+
+3. On your computer, get the code and send the schema to the project. The project reference is the
+   part of the Project URL before `.supabase.co`.
+
    ```bash
+   git clone https://github.com/<your-account>/ArcRadar.git
+   cd ArcRadar
+   npm install
+   npx supabase login
    npx supabase link --project-ref <project-ref>
    npx supabase db push
    ```
-4. Confirm it worked: the Supabase dashboard's **Table Editor** should show the same tables `npm run
-db:reset` gives you locally (40 tables as of Phase 11 — `select count(*) from pg_tables where
-schemaname = 'public';` in the SQL editor if you want the exact number for the version you deployed).
 
-## 2. Match the Auth settings
+   `db push` runs every file in `supabase/migrations/` in order. It creates the tables, the roles and
+   permissions, the row-level security policies and the audit log. It does not load any demo data.
 
-A hosted Supabase project's Auth defaults are not the same as `supabase/config.toml`'s local defaults.
-In the dashboard, **Authentication > Providers > Email** and **Authentication > URL Configuration**:
+4. Check it: the **Table Editor** in the dashboard now lists the tables (`alerts`, `indicators`,
+   `investigations`, `profiles` and so on).
 
-- Password policy: minimum length **10**, requiring lowercase, uppercase and digits (mirrors
-  `[auth]` in `supabase/config.toml`) — otherwise a client-side-valid sign-up can be rejected by the
-  server in a confusing way, since `src/lib/validation/auth.ts`'s `PASSWORD_RULES` assumes this policy.
-- **Site URL** and **Redirect URLs**: set to your deployed app's URL (the `*.vercel.app` address, or your
-  domain once you add one), allowing `<your app url>/**`. This is what
-  `POST /api/auth/forgot-password`'s recovery link and `GET /auth/callback` depend on.
-- **Confirm email**: on (sign-up answers `201` either way — see "Auth behavior worth knowing" in
-  `docs/API.md` — but a real deployment should require the click).
-- **Allow new users to sign up**: turn this **off** once you have made your admin account (step 5), if
-  the deployment is meant to be invite-only. A new sign-up is always a read-only `viewer` regardless
-  (enforced by a database trigger, not by anything the client sends), so leaving it on is not a
-  privilege-escalation risk, just an open door.
+## 2. Set the sign-in rules
 
-The full list, and why each one matters, is at the bottom of `docs/API.md`.
+A new Supabase project does not start with the settings ArcRadar expects. In the dashboard:
 
-## 3. Deploy to Vercel
+- **Authentication > URL Configuration**
+  - **Site URL**: the address your app will have (`https://<project-name>.vercel.app`, or your own
+    domain).
+  - **Redirect URLs**: add `https://<that address>/**`. Password-reset links depend on it.
+- **Authentication > Sign In / Providers > Email**
+  - **Minimum password length**: `10`, and require **lowercase, uppercase and digits**. The app shows
+    the same rules on its forms, so the two must agree.
+  - **Confirm email**: your choice.
+    - **On**: someone who signs up must click a link in a mail before they can sign in. Supabase's
+      built-in mail sender only sends a few mails an hour, so set up your own SMTP server under
+      **Authentication > Emails** if you expect more than a handful of sign-ups.
+    - **Off**: no mail is needed. This is safe to choose: an account still cannot do anything until an
+      administrator approves it (step 5), and that approval, not the mail, is what protects the
+      workspace.
 
-1. Import the GitHub repository as a new Vercel project. The defaults are correct: Next.js is
-   auto-detected, the build command is `next build`, no `vercel.json` is needed.
-2. In **Project Settings > Environment Variables**, add (see `.env.example` for what each one is):
-   - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — from step 1.
-   - `NEXT_PUBLIC_APP_URL` — the exact URL Vercel will serve this project at (its `*.vercel.app`
-     address, or your domain). Auth redirects depend on this matching what you set in step 2.
-   - `SUPABASE_SERVICE_ROLE_KEY` — from step 1. **Never** put this in a `NEXT_PUBLIC_*` variable.
-   - `NEXT_PUBLIC_DEMO_LOGINS` — leave unset (or `false`). Setting it to `true` would show the
-     one-click demo-account buttons on the sign-in page, and the local seed's demo accounts do not
-     exist on a hosted project anyway.
-   - `OTX_API_KEY` (free, otx.alienvault.com) and `SHODAN_INTERNETDB=true` (free, no key) switch on two
-     more lookup providers; `VIRUSTOTAL_API_KEY` and `ABUSEIPDB_API_KEY` two others.
-   - `GITHUB_TOKEN`, `GITHUB_RULES_REPO`, `GITHUB_RULES_BRANCH` — only for the Detection rules page's
-     "Send to GitHub" (a fine-grained token limited to the rules repository with Contents: Read and write;
-     `docs/WAZUH_RULES.md`). Without them the page still drafts and reviews rules.
-   - Any intel or AI provider keys you want live from day one (`VIRUSTOTAL_API_KEY`,
-     `GROQ_API_KEY`, ...) — all optional; the app works with none of them set. `OLLAMA_BASE_URL`
-     needs a server your Vercel deployment can actually reach over the network, which a laptop's
-     `127.0.0.1` is not — leave it unset unless you host Ollama somewhere Vercel can reach.
-   - `SECRETS_ENCRYPTION_KEY` — 32 random bytes, base64 (`openssl rand -base64 32`). Turns on saving
-     provider keys from the app: an administrator then pastes VirusTotal, AbuseIPDB, OTX, NVD, Groq,
-     OpenAI, Anthropic, DeepSeek and GitHub settings on the **API keys** page and they take effect at
-     once (encrypted before they reach the database, never shown again; a saved key wins over the same
-     variable here, and removing it falls back to the variable). Keep this one value safe: if it is lost
-     the saved keys must be pasted again. Set it as a real Secret, never `NEXT_PUBLIC_`.
-3. Deploy. Vercel builds and serves the app; there is nothing else to configure (no `output` mode,
-   no custom server) because the whole app is Route Handlers and Server Components already built for
-   a serverless runtime — the same reason decision 1 rules out a background worker or in-memory state.
+Accounts an administrator creates from inside the app (step 5) never need a confirmation mail, whichever
+you choose.
 
-## 4. Make your first admin account
+## 3. Deploy the app
 
-Every sign-up is a read-only `viewer` — the role is set by a database trigger, never read from the
-request (decision 7) — so there is no way to sign up as an admin, and no admin exists yet to promote
-anyone through the app itself (`PATCH /api/users/:id` needs an admin session).
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Faqsin1337%2FArcRadar&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,SUPABASE_SERVICE_ROLE_KEY,NEXT_PUBLIC_APP_URL,SECRETS_ENCRYPTION_KEY&envDescription=The%20three%20Supabase%20values%20from%20step%201%2C%20the%20address%20of%20this%20deployment%2C%20and%2032%20random%20bytes%20in%20base64.&envLink=https%3A%2F%2Fgithub.com%2Faqsin1337%2FArcRadar%2Fblob%2Fmain%2Fdocs%2FDEPLOYMENT.md%233-deploy-the-app&project-name=arcradar&repository-name=arcradar)
 
-1. Open the deployed app and sign up with your own email.
-2. From your machine, with the hosted project's URL and **service-role key** (never commit either):
-   ```bash
-   SUPABASE_SERVICE_ROLE_KEY=<hosted service role key> \
-   NEXT_PUBLIC_SUPABASE_URL=<hosted project URL> \
-     npm run bootstrap:admin -- --email you@example.com
+The button copies the repository into your GitHub account and asks for the settings below. If you
+already forked it, use **Add New > Project** in Vercel and import your fork instead. Either way the
+defaults are right: Next.js is detected, and no build settings need changing.
+
+| Setting                         | Value                                                                                                     |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | The Project URL from step 1                                                                               |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | The `anon` key from step 1                                                                                |
+| `SUPABASE_SERVICE_ROLE_KEY`     | The `service_role` key from step 1. Mark it **Sensitive**                                                 |
+| `NEXT_PUBLIC_APP_URL`           | The address of this deployment, the same one you set as Site URL in step 2                                |
+| `SECRETS_ENCRYPTION_KEY`        | 32 random bytes in base64. Make one with `openssl rand -base64 32`. Mark it **Sensitive** and keep a copy |
+
+No `openssl`? This prints the same thing:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+`SECRETS_ENCRYPTION_KEY` is what lets you paste provider keys inside the app later (step 7) instead of
+editing Vercel settings. If you lose it, the saved keys cannot be read and must be pasted again.
+
+Press **Deploy**. When it finishes, open `https://<your address>/api/health`. It should answer:
+
+```json
+{ "success": true, "data": { "app": "arcradar", "status": "ok", "supabase": "ok" }, "error": null }
+```
+
+If `supabase` is not `ok`, one of the Supabase values is wrong. Paste them again (typing them into
+the Vercel dashboard by hand is where mistakes happen) and redeploy.
+
+Every other setting is optional and is listed under [Configuration in the README](../README.md#configuration).
+
+## 4. Make the first administrator
+
+Nobody can sign up as an administrator, and a fresh workspace has no administrator to approve anyone.
+So the first one is made by hand, once.
+
+1. Open your app, choose **Request access** and sign up with your own email and a password. If you left
+   **Confirm email** on, click the link in the mail.
+2. In the Supabase dashboard, open the **SQL Editor** and run this with your email:
+
+   ```sql
+   update public.profiles
+   set role_name = 'admin', is_active = true
+   where id = (select id from auth.users where email = 'you@example.com');
    ```
-   This is the **one** place the service-role key is used outside the app itself: there is no admin
-   session yet for `PATCH /api/users/:id` to check, so the script talks to the database directly
-   (`scripts/bootstrap-admin.mjs`). It only ever changes the role of an account that already signed
-   up; it cannot create one.
-3. Sign in again (or refresh) — you now have the `admin` role and can promote or manage anyone else
-   from **Settings**, the ordinary way, for good.
 
-## 4b. Load the reference data
+   It should report one row updated. Prefer the command line? From the project folder,
+   `npm run bootstrap:admin -- --email you@example.com --url <Project URL>` does the same, with
+   `SUPABASE_SERVICE_ROLE_KEY` set in your shell for that one command.
 
-A hosted project starts empty. Two things fill it without any typing:
+3. Sign in. You are the administrator, and from now on everything is done inside the app.
 
-- **Threat feeds** are imported by an administrator pressing **Import now** on the Integrations page (abuse.ch indicators, CISA known-exploited vulnerabilities).
-- **MITRE ATT&CK** (the technique catalog the matrix page lays out) is loaded once from your machine:
+## 5. Add your team
+
+Open **Settings**. There are two ways for a teammate to get an account:
+
+- **You add them.** Press **Add account**, enter their name, email, role and a first password, and pass
+  the password on. The account works at once, and they can change the password on their **Profile**
+  page.
+- **They sign up.** They use **Request access** on the front page. Their account appears in Settings as
+  **Pending approval**, and cannot do anything until you pick a role and press **Approve**.
+
+| Role   | For                                                                                            |
+| ------ | ---------------------------------------------------------------------------------------------- |
+| Viewer | Reading alerts, cases, indicators, vulnerabilities and reports                                 |
+| SOC L1 | Triage: acknowledge, assign and close alerts, ask the AI for an analysis                       |
+| SOC L2 | Investigation: open cases, write indicators and reports, run live lookups                      |
+| Admin  | Everything, including detection rules, integrations, provider keys, accounts and the audit log |
+
+An administrator cannot change their own role or disable themselves, and the last active administrator
+cannot be removed, so the workspace can never be locked out of itself.
+
+## 6. Load reference data
+
+A new workspace is empty on purpose: ArcRadar shows what happens on the machines it watches, not a
+catalogue. Two things are still worth loading.
+
+- **MITRE ATT&CK technique names.** The matrix page needs them to name the techniques your alerts
+  mention. From the project folder on your computer:
+
   ```bash
-  SUPABASE_SERVICE_ROLE_KEY=<hosted service role key> \n    npm run import:mitre -- --url <hosted project URL>
+  SUPABASE_SERVICE_ROLE_KEY=<service_role key> npm run import:mitre -- --url <Project URL>
   ```
-  It downloads the official 54 MB STIX file and can be rerun any time to pick up a newer release.
 
-## 5. Verify
+  On Windows PowerShell, set the key first with `$env:SUPABASE_SERVICE_ROLE_KEY = "<service_role key>"`
+  and then run the `npm` part. It downloads the official ATT&CK file (about 54 MB) and can be run again
+  whenever MITRE publishes a new version.
 
-- `<your app url>/api/health` answers `{"success":true,"data":{"app":"arcradar","status":"ok","supabase":"ok"},"error":null}`.
-- Sign in, and check the response headers (browser DevTools, Network tab, or `curl -I`) carry a
-  `Content-Security-Policy` with a `nonce-...` and `Strict-Transport-Security` (both are
-  production-only — see decision 25 — so seeing them confirms `NODE_ENV=production`, which Vercel
-  always sets).
-- Rate limiting (`src/lib/rate-limit/`) needs no setup: it is backed by the `rate_limit_buckets` table
-  you already pushed in step 1.
-- If you plan to connect a real Wazuh Manager, it needs this deployment's public URL and an API key
-  made the same way as locally (`docs/WAZUH_INTEGRATION.md`); the Manager pushes over HTTPS, so the
-  free `*.vercel.app` certificate is enough.
+- **Public threat feeds.** Open **Integrations** in the app and press **Import now**. It brings in
+  abuse.ch indicators (URLhaus, Feodo Tracker, ThreatFox) and CISA's list of known exploited
+  vulnerabilities. Nothing is imported on a schedule: it happens when you press the button.
 
-## Things a hosted deployment is missing on purpose
+## 7. Add provider keys
 
-- **No demo data.** `supabase/seed.sql` never runs on `supabase db push` (by design — it is local-only
-  fixture data with a fictional scenario). A hosted project starts completely empty except for the
-  reference data every migration inserts (permissions, role_permissions, the integration catalog,
-  ATT&CK techniques where seeded — check which of those live in a migration versus `seed.sql` if you
-  want a specific one on the hosted project too). If you want a demo to show people, create real
-  `local` records by hand, or add a small, clearly-`demo`-labelled dataset of your own as a new
-  migration (never edit an existing one).
-- **No public landing page.** The bare app URL redirects a signed-out visitor straight to `/login`; the
-  original spec's marketing pages (features, about, contact, docs) were deferred after Phase 7 and
-  were never picked up in a later phase. A first-time visitor sees a sign-in form, not an explanation
-  of what ArcRadar is.
-- **The free Supabase tier pauses an inactive project** after about a week with no traffic. Visit the
-  dashboard (or hit `/api/health`) before showing the deployment to anyone, or it needs a minute to wake
-  up on the first request.
-- **Nothing here has been run against a real hosted project yet.** Treat the first attempt as the trial
-  deployment decision 17 always meant to be — expect to adjust something small, the same caveat every
-  phase's live-service integration (VirusTotal, NVD, a real Wazuh Manager) has carried.
+Everything here is optional. ArcRadar works with none of it, and each one you add switches on one more
+thing. Open **API keys** in the app and scroll to **Keys ArcRadar uses**. Paste a key, press save, and it
+is used at once. Keys are encrypted before they are stored and are never shown again.
+
+| Key                               | Switches on                                                          | Where to get it                              |
+| --------------------------------- | -------------------------------------------------------------------- | -------------------------------------------- |
+| VirusTotal                        | Lookups of addresses, domains, URLs and file hashes                  | virustotal.com, free account                 |
+| AbuseIPDB                         | Reputation of IP addresses                                           | abuseipdb.com, free account                  |
+| AlienVault OTX                    | Community threat reports for an indicator                            | otx.alienvault.com, free account             |
+| Shodan InternetDB                 | Open ports and known vulnerabilities of an address. A switch, no key | No account needed                            |
+| NVD                               | Importing a CVE into the vulnerability list                          | nvd.nist.gov, free key                       |
+| Groq, OpenAI, Anthropic, DeepSeek | AI analysis of alerts, cases and indicators, and AI rule drafts      | The provider's console. Groq has a free tier |
+| GitHub token, repository, branch  | Sending detection rules to your rules repository                     | See [step 8](#8-connect-a-siem)              |
+
+After adding an AI key, open **Integrations**, find **AI provider** and make that provider the active
+one. Only one is active at a time.
+
+The same keys can be set as Vercel environment variables instead (names in the
+[README](../README.md#configuration)). A key saved in the app wins over the variable.
+
+## 8. Connect a SIEM
+
+ArcRadar never logs in to your SIEM. The SIEM sends its alerts to ArcRadar, and picks up detection rules
+from a Git repository you own.
+
+1. **Make an API key for the SIEM.** In the app, open **API keys**, press **New key**, give it a name
+   such as "Wazuh Manager" and choose the scope for your SIEM. The key is shown once: copy it now.
+2. **Install the sender on the SIEM host**, with your app's address and that key:
+   - Wazuh: [`docs/WAZUH_INTEGRATION.md`](WAZUH_INTEGRATION.md)
+   - Splunk: [`docs/SPLUNK_INTEGRATION.md`](SPLUNK_INTEGRATION.md)
+3. **Check it.** Open **Telemetry** in the app. The card for your SIEM says **Receiving** once the first
+   alert has arrived.
+
+To also write detection rules in ArcRadar and have the SIEM load them:
+
+1. Create a GitHub repository for the rules. It can be empty, and public or private.
+2. Create a **fine-grained personal access token** on GitHub that can reach only that repository, with
+   the permission **Contents: Read and write** and nothing else.
+3. In the app, under **API keys > Keys ArcRadar uses**, save the token, the repository
+   (`owner/name`) and the branch (`main`).
+4. Install the apply script on the SIEM host. It pulls the repository, checks every file, tests it and
+   only then loads it: [`docs/WAZUH_RULES.md`](WAZUH_RULES.md) for Wazuh,
+   [`docs/SPLUNK_INTEGRATION.md`](SPLUNK_INTEGRATION.md) for Splunk.
+
+## Check the deployment
+
+- `/api/health` answers `"status": "ok"` and `"supabase": "ok"`.
+- The response headers of any page carry a `Content-Security-Policy` with a `nonce-` and a
+  `Strict-Transport-Security` header (your browser's developer tools show them, or `curl -I`).
+- Signing in with a wrong password thirty times in five minutes from one address is answered with
+  `429`. Rate limiting needs no setup: it uses a table that step 1 created.
+- **Audit log** in the app shows your own sign-in and everything you changed.
+
+## Updating to a newer version
+
+```bash
+git pull                 # in your copy of the repository
+npx supabase db push     # applies any new database migrations
+git push                 # Vercel builds and deploys the new version
+```
+
+Run `db push` before the new code goes live: the code may expect tables the old database does not have.
+
+## Good to know
+
+- **The free Supabase plan pauses a project** after about a week without traffic. The first request
+  after that takes a minute. Opening `/api/health` wakes it.
+- **Secrets stay on the server.** Only the two `NEXT_PUBLIC_SUPABASE_*` values and the app address reach
+  the browser, and they are public by design: row-level security is what protects the data.
+- **Do not set `NEXT_PUBLIC_DEMO_LOGINS`.** It shows one-click demo accounts that only exist in a local
+  development database.
+- **A local AI model (Ollama)** can be used by setting `OLLAMA_BASE_URL` in Vercel, but only if it runs
+  somewhere your Vercel deployment can reach. An address on your own laptop is not.
+- **Your own domain** is added in Vercel under **Settings > Domains**. Afterwards change
+  `NEXT_PUBLIC_APP_URL` in Vercel and the Site URL and Redirect URLs in Supabase (step 2) to match, and
+  redeploy.
+
+## When something is wrong
+
+| You see                                              | Cause and fix                                                                                                                 |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `/api/health` says `"supabase": "not_configured"`    | The Supabase URL or `anon` key is missing in Vercel. Add it and redeploy.                                                     |
+| `/api/health` says `"supabase": "unreachable"`       | A Supabase value is wrong, or the project is paused. Paste the values again; open the Supabase dashboard to wake the project. |
+| "Confirm your email address before signing in"       | **Confirm email** is on and the link was not clicked. Click it, or turn the setting off (step 2).                             |
+| "Your account is waiting for an administrator"       | Working as designed. An administrator approves it in **Settings**.                                                            |
+| The password is refused on sign-up but looks valid   | The password rules in Supabase differ from step 2. Set them to 10 characters with lowercase, uppercase and digits.            |
+| The password-reset link opens an error page          | The Site URL or Redirect URLs in Supabase do not match the app's real address (step 2).                                       |
+| A provider shows "not configured" after saving a key | `SECRETS_ENCRYPTION_KEY` is missing or changed in Vercel. Set it, redeploy, and save the key again.                           |
+| The matrix page shows technique ids without names    | The ATT&CK catalogue was not loaded (step 6).                                                                                 |

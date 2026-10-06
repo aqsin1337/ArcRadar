@@ -6,7 +6,7 @@ implied, in the same spirit as `docs/TELEMETRY_ARCHITECTURE.md`: written so a fr
 Everything below describes the plan as agreed; where a phase actually built something slightly differently, or
 narrower, a note says so inline and decisions 22/23/24 have the full account. Phase 11 (security/quality/
 responsiveness hardening, renumbered by this plan's insertion) still needs its own explicit go-ahead per the
-phased workflow in `CLAUDE.md`.
+project's phased workflow.
 
 ## Requirement (as given by the user, 2026-09-27)
 
