@@ -7,13 +7,16 @@ const repo = vi.hoisted(() => ({
   findProfileForAdmin: vi.fn(),
   countActiveAdmins: vi.fn(),
   updateProfileForAdmin: vi.fn().mockResolvedValue(undefined),
+  createAccountForAdmin: vi.fn(),
+  deleteAccountForAdmin: vi.fn().mockResolvedValue(undefined),
 }));
 const audit = vi.hoisted(() => vi.fn().mockResolvedValue(true));
 vi.mock("@/lib/users/repository", () => repo);
 vi.mock("@/lib/audit/write", () => ({ writeAuditLog: audit }));
 
-const { isUserId, updateUser } = await import("@/lib/users/service");
-const { updateUserSchema } = await import("@/lib/users/schema");
+const { createUser, isUserId, updateUser } = await import("@/lib/users/service");
+const { createUserSchema, updateUserSchema } = await import("@/lib/users/schema");
+const { apiErrors } = await import("@/lib/api/errors");
 
 const request = { headers: new Headers() };
 const admin = (id = "admin-1"): AuthContext => ({
@@ -28,6 +31,11 @@ const TARGET = "33333333-3333-4333-8333-333333333333";
 beforeEach(() => {
   vi.clearAllMocks();
   repo.updateProfileForAdmin.mockResolvedValue(undefined);
+  repo.deleteAccountForAdmin.mockResolvedValue(undefined);
+  repo.createAccountForAdmin.mockResolvedValue({
+    id: TARGET,
+    created_at: "2026-10-07T00:00:00Z",
+  });
   repo.countActiveAdmins.mockResolvedValue(5); // plenty, unless a test says otherwise
 });
 
@@ -178,5 +186,102 @@ describe("updateUser", () => {
     repo.countActiveAdmins.mockResolvedValue(0); // must not matter here
     await updateUser(admin(), TARGET, { is_active: false }, request);
     expect(repo.updateProfileForAdmin).toHaveBeenCalled();
+  });
+});
+
+describe("createUserSchema", () => {
+  const valid = {
+    email: " New.Analyst@Example.com ",
+    password: "Str0ngPassword",
+    display_name: " Leyla ",
+    role_name: "soc_l1",
+  };
+
+  it("normalizes the email and the name, and needs every field", () => {
+    expect(createUserSchema.parse(valid)).toEqual({
+      email: "new.analyst@example.com",
+      password: "Str0ngPassword",
+      display_name: "Leyla",
+      role_name: "soc_l1",
+    });
+    for (const field of Object.keys(valid)) {
+      const body: Record<string, unknown> = { ...valid };
+      delete body[field];
+      expect(createUserSchema.safeParse(body).success, field).toBe(false);
+    }
+  });
+
+  it("holds the password to the sign-up policy and refuses unknown roles or extra fields", () => {
+    expect(createUserSchema.safeParse({ ...valid, password: "short1A" }).success).toBe(false);
+    expect(createUserSchema.safeParse({ ...valid, password: "alllowercase123" }).success).toBe(
+      false,
+    );
+    expect(createUserSchema.safeParse({ ...valid, role_name: "root" }).success).toBe(false);
+    expect(createUserSchema.safeParse({ ...valid, is_active: true }).success).toBe(false);
+    expect(createUserSchema.safeParse({ ...valid, display_name: "   " }).success).toBe(false);
+  });
+});
+
+describe("createUser", () => {
+  const input = {
+    email: "leyla@example.com",
+    password: "Str0ngPassword",
+    display_name: "Leyla",
+    role_name: "soc_l1" as const,
+  };
+
+  it("makes the sign-in, activates it with the chosen role and returns the new row", async () => {
+    const created = await createUser(admin(), input, request);
+
+    expect(repo.createAccountForAdmin).toHaveBeenCalledWith({
+      email: "leyla@example.com",
+      password: "Str0ngPassword",
+      display_name: "Leyla",
+    });
+    expect(repo.updateProfileForAdmin).toHaveBeenCalledWith(TARGET, {
+      role_name: "soc_l1",
+      is_active: true,
+    });
+    expect(created).toEqual({
+      id: TARGET,
+      email: "leyla@example.com",
+      display_name: "Leyla",
+      role: "soc_l1",
+      is_active: true,
+      pending: false,
+      created_at: "2026-10-07T00:00:00Z",
+      last_sign_in_at: null,
+    });
+  });
+
+  it("audits who made the account and its role, and never the password", async () => {
+    await createUser(admin("admin-9"), input, request);
+    expect(audit).toHaveBeenCalledTimes(1);
+    const [entry] = audit.mock.calls[0];
+    expect(entry).toMatchObject({
+      action: "user.created",
+      userId: "admin-9",
+      entityType: "profile",
+      entityId: TARGET,
+      metadata: { role: "soc_l1" },
+    });
+    expect(JSON.stringify(entry)).not.toContain("Str0ngPassword");
+  });
+
+  it("removes the half-made sign-in when the role cannot be given, and reports the failure", async () => {
+    repo.updateProfileForAdmin.mockRejectedValue(apiErrors.internal());
+    await expect(createUser(admin(), input, request)).rejects.toMatchObject({ status: 500 });
+    expect(repo.deleteAccountForAdmin).toHaveBeenCalledWith(TARGET);
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("changes nothing when the email already has an account", async () => {
+    repo.createAccountForAdmin.mockRejectedValue(
+      apiErrors.conflict("An account with this email already exists."),
+    );
+    await expect(createUser(admin(), input, request)).rejects.toMatchObject({ status: 409 });
+    expect(repo.updateProfileForAdmin).not.toHaveBeenCalled();
+    expect(repo.deleteAccountForAdmin).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
   });
 });

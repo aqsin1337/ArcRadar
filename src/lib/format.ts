@@ -1,3 +1,5 @@
+import { roleLabel } from "@/types/domain";
+
 const DATE = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
   month: "short",
@@ -45,6 +47,15 @@ export function formatRelative(iso: string, now: Date): string {
 /** The name to show for a person, whichever way their profile was filled in. */
 export function personLabel(person: { display_name: string | null } | null | undefined): string {
   return person?.display_name?.trim() || "Unknown user";
+}
+
+/**
+ * A person in a "who gets this" menu: the name with the role beside it, so an SOC L1 and an SOC L2
+ * with similar names can be told apart ("Leyla (SOC L1)"). Without a role it is just the name.
+ */
+export function personWithRole(person: { display_name: string | null; role?: string }): string {
+  const name = personLabel(person);
+  return person.role ? `${name} (${roleLabel(person.role)})` : name;
 }
 
 /** A file size the way people read it: "812 B", "1.4 MB". Fixed units and dot decimals, on server and client alike. */

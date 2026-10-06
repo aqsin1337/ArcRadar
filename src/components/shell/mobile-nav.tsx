@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { Button } from "@/components/ui/button";
-import { Logo } from "@/components/ui/logo";
+import { LogoLink } from "@/components/ui/logo";
 import { SidebarNav } from "./sidebar-nav";
 
 /**
@@ -45,7 +45,11 @@ export function MobileNav() {
       >
         <div className="flex h-full flex-col">
           <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
-            <Logo />
+            <LogoLink
+              href="/dashboard"
+              label="ArcRadar, go to Overview"
+              onClick={() => dialog.current?.close()}
+            />
             <Button
               variant="ghost"
               size="sm"

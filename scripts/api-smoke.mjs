@@ -3799,6 +3799,95 @@ async function main() {
     }
   }
 
+  section("An administrator adds an account (throwaway, removed afterwards)");
+  {
+    const email = `smoke-added-${stamp}@arcradar.test`;
+    const password = "Smoke-Added-Pass-1";
+    const body = { email, password, display_name: "Smoke Added", role_name: "soc_l1" };
+    let addedId = null;
+    try {
+      const denied = await call(analyst.jar, "POST", "/api/users", { body });
+      check("an L2 analyst cannot add an account (403)", denied.status === 403, denied.json);
+      const anonymous = await call(null, "POST", "/api/users", { body });
+      check("nobody adds an account without a session (401)", anonymous.status === 401);
+      const weak = await call(admin.jar, "POST", "/api/users", {
+        body: { ...body, password: "weakpass" },
+      });
+      check(
+        "the password policy applies, on the password field (422)",
+        weak.status === 422 &&
+          (weak.json?.error?.details?.issues ?? []).some((issue) => issue.path === "password"),
+        weak.json,
+      );
+      const noRole = await call(admin.jar, "POST", "/api/users", {
+        body: { email, password, display_name: "Smoke Added" },
+      });
+      check("a role is required (422)", noRole.status === 422, noRole.json);
+      const extra = await call(admin.jar, "POST", "/api/users", {
+        body: { ...body, is_active: false },
+      });
+      check("unknown fields are refused (422)", extra.status === 422, extra.json);
+
+      const created = await call(admin.jar, "POST", "/api/users", { body });
+      addedId = created.json?.data?.id ?? null;
+      check(
+        "an admin adds an account: 201, active, with the chosen role, no password echoed",
+        created.status === 201 &&
+          created.json.data.email === email &&
+          created.json.data.role === "soc_l1" &&
+          created.json.data.is_active === true &&
+          created.json.data.pending === false &&
+          !created.text.includes(password),
+        created.json,
+      );
+      const again = await call(admin.jar, "POST", "/api/users", { body });
+      check("the same email a second time is 409", again.status === 409, again.json);
+
+      const fresh = await loginAs(email, password);
+      check(
+        "the new account signs in at once, with no confirmation mail or approval",
+        fresh.response.status === 200,
+        fresh.response.json,
+      );
+      const me = await call(fresh.jar, "GET", "/api/auth/me");
+      check(
+        "it has the L1 role and can work alerts but not open cases",
+        me.json?.data?.profile?.role === "soc_l1" &&
+          me.json.data.permissions.includes("alerts:write") &&
+          !me.json.data.permissions.includes("investigations:write"),
+        me.json?.data?.profile,
+      );
+      const listed = await call(admin.jar, "GET", "/api/users");
+      const row = (listed.json?.data ?? []).find((user) => user.id === addedId);
+      check(
+        "the list shows it as approved, not pending",
+        row?.is_active === true && row.pending === false && row.role === "soc_l1",
+        row,
+      );
+
+      const logs = await call(
+        admin.jar,
+        "GET",
+        `/api/audit-logs?entity_type=profile&entity_id=${addedId}`,
+      );
+      const entry = (logs.json?.data?.items ?? []).find((item) => item.action === "user.created");
+      check(
+        "adding it is audited with the role and never the password",
+        entry?.metadata?.role === "soc_l1" && !JSON.stringify(logs.json).includes(password),
+        entry,
+      );
+    } finally {
+      const id = addedId ?? (await userIdByEmail(email));
+      if (id) {
+        const removed = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${id}`, {
+          method: "DELETE",
+          headers: { apikey: SERVICE_KEY, authorization: `Bearer ${SERVICE_KEY}` },
+        });
+        check("(cleanup) added account deleted", removed.ok, removed.status);
+      }
+    }
+  }
+
   section("Logout");
   const logout = await call(viewer.jar, "POST", "/api/auth/logout");
   check("logout is 200", logout.status === 200, logout.json);

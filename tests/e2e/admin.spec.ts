@@ -227,6 +227,63 @@ test.describe("Settings (users)", () => {
     await expect(analystRow.getByRole("checkbox")).toBeChecked();
   });
 
+  test("adds an account for a teammate, ready to sign in with the chosen role", async ({
+    page,
+    playwright,
+    baseURL,
+  }) => {
+    const email = `${marker.toLowerCase()}-l1@example.com`;
+    const password = "E2e-Teammate-1";
+    const removeAccount = async () => {
+      const found = await adminFetch(
+        `/rest/v1/profiles?select=id&display_name=eq.${encodeURIComponent(`${marker} Teammate`)}`,
+      );
+      for (const row of (await found.json()) as { id: string }[]) {
+        await adminFetch(`/auth/v1/admin/users/${row.id}`, { method: "DELETE" });
+      }
+    };
+
+    try {
+      await page.goto("/settings");
+      await page.getByRole("button", { name: "Add account" }).click();
+      const form = page.getByRole("form", { name: "Add an account" });
+
+      // The password policy is checked before anything is sent.
+      await form.getByLabel(/^Name/).fill(`${marker} Teammate`);
+      await form.getByLabel(/^Email/).fill(email);
+      await form.getByLabel(/^First password/).fill("short");
+      await form.getByRole("button", { name: "Create account" }).click();
+      await expect(form.getByText("Password must be at least 10 characters.")).toBeVisible();
+
+      await form.getByLabel(/^First password/).fill(password);
+      await form.getByLabel(/^Role/).selectOption("soc_l1");
+      await form.getByRole("button", { name: "Create account" }).click();
+
+      await expect(page.getByText(`${email} can sign in now as SOC L1.`)).toBeVisible();
+      const row = page.locator("tbody tr", { has: page.getByText(email) });
+      await expect(row.getByRole("combobox")).toHaveValue("soc_l1");
+      await expect(row.getByRole("checkbox")).toBeChecked();
+
+      // It really is usable at once: no confirmation mail, no approval step.
+      const api = await playwright.request.newContext({ baseURL });
+      const login = await api.post("/api/auth/login", { data: { email, password } });
+      expect(login.status(), await login.text()).toBe(200);
+      const me = await api.get("/api/auth/me");
+      expect((await me.json()).data.profile.role).toBe("soc_l1");
+      await api.dispose();
+
+      // The same email a second time is refused, and says why.
+      await page.getByRole("button", { name: "Add account" }).click();
+      await form.getByLabel(/^Name/).fill(`${marker} Teammate`);
+      await form.getByLabel(/^Email/).fill(email);
+      await form.getByLabel(/^First password/).fill(password);
+      await form.getByRole("button", { name: "Create account" }).click();
+      await expect(form.getByText("An account with this email already exists.")).toBeVisible();
+    } finally {
+      await removeAccount();
+    }
+  });
+
   test("a viewer never reaches the page", async ({ browser, baseURL }) => {
     const context = await browser.newContext({ storageState: STORAGE.viewer, baseURL });
     const page = await context.newPage();

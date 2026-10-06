@@ -358,7 +358,7 @@ export function SiemRulesManager({
         <Alert tone="warning" title="GitHub is not connected">
           Rules can be drafted, edited and rejected, but &quot;Send to GitHub&quot; stays
           unavailable until a GitHub token and the rules repository are saved on the API keys page
-          (see docs/MULTI_SIEM_PLAN.md).
+          (see docs/SPLUNK_INTEGRATION.md).
         </Alert>
       )}
       <p className="text-xs text-muted">{ui.pullNote}</p>

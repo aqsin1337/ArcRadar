@@ -9,10 +9,10 @@ import { Select } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api/client";
 import { ASSIGNEE_ME } from "@/lib/alerts/constants";
 import { ALERT_TRANSITIONS, isClosed } from "@/lib/alerts/workflow";
-import { personLabel } from "@/lib/format";
+import { personWithRole } from "@/lib/format";
 import type { AlertStatus } from "@/types/domain";
 
-type Person = { id: string; display_name: string | null };
+type Person = { id: string; display_name: string | null; role?: string };
 
 /** What a move to `to` is called on a button, given where the alert is now. */
 function actionLabel(
@@ -137,7 +137,7 @@ export function AlertActions({
             <option value="">Unassigned</option>
             {people.map((person) => (
               <option key={person.id} value={person.id}>
-                {personLabel(person)}
+                {personWithRole(person)}
               </option>
             ))}
           </Select>

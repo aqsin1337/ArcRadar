@@ -10,7 +10,7 @@ import { TagInput } from "@/components/ui/tag-input";
 import { TextAreaField } from "@/components/ui/textarea";
 import { useAction } from "@/components/ui/use-action";
 import { apiFetch } from "@/lib/api/client";
-import { personLabel } from "@/lib/format";
+import { personWithRole } from "@/lib/format";
 import {
   INVESTIGATION_STATUSES,
   INVESTIGATION_STATUS_LABELS,
@@ -21,7 +21,7 @@ import { updateInvestigationSchema } from "@/lib/investigations/schema";
 import { fieldErrorsFromZod } from "@/lib/validation/form";
 import type { InvestigationStatus, Priority } from "@/types/domain";
 
-type Person = { id: string; display_name: string | null };
+type Person = { id: string; display_name: string | null; role?: string };
 
 type Props = {
   investigation: {
@@ -119,7 +119,7 @@ export function InvestigationControls({ investigation, people, tagOptions }: Pro
             <option value="">Unassigned</option>
             {people.map((person) => (
               <option key={person.id} value={person.id}>
-                {personLabel(person)}
+                {personWithRole(person)}
               </option>
             ))}
           </Select>

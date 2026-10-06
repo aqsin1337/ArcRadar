@@ -1,5 +1,7 @@
 import "server-only";
+import { apiErrors } from "@/lib/api/errors";
 import { toApiError } from "@/lib/api/supabase-errors";
+import { logError } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isRoleName } from "@/lib/rbac/permissions";
 import type { RoleName } from "@/types/domain";
@@ -80,6 +82,46 @@ export async function countActiveAdmins(): Promise<number> {
     .eq("is_active", true);
   if (error) throw toApiError(error);
   return count ?? 0;
+}
+
+/**
+ * Makes a sign-in for a teammate through Supabase Auth's admin API, with the email already
+ * confirmed (an administrator vouches for it, so no confirmation mail is needed). The new account's
+ * profile is created by the database trigger, inactive: the caller activates it with its role.
+ */
+export async function createAccountForAdmin(input: {
+  email: string;
+  password: string;
+  display_name: string;
+}): Promise<{ id: string; created_at: string }> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.createUser({
+    email: input.email,
+    password: input.password,
+    email_confirm: true,
+    user_metadata: { display_name: input.display_name },
+  });
+  if (error || !data.user) {
+    const code = error?.code;
+    if (code === "email_exists" || code === "user_already_exists") {
+      throw apiErrors.conflict("An account with this email already exists.");
+    }
+    if (code === "weak_password") {
+      throw apiErrors.validation({
+        issues: [{ path: "password", message: "The sign-in service refused this password." }],
+      });
+    }
+    logError("users.create_failed", new Error(error?.message ?? "no user returned"), { code });
+    throw apiErrors.internal();
+  }
+  return { id: data.user.id, created_at: data.user.created_at };
+}
+
+/** Removes a sign-in that could not be finished (best effort; the caller already has an error). */
+export async function deleteAccountForAdmin(id: string): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.deleteUser(id);
+  if (error) logError("users.cleanup_failed", new Error(error.message), { code: error.code });
 }
 
 export async function updateProfileForAdmin(

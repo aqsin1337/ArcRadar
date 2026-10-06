@@ -7,7 +7,8 @@ import { isDemoLoginsEnabled } from "@/lib/env/public";
 const DEMO_PASSWORD = "ArcRadar-Demo-1!";
 const DEMO_ACCOUNTS = [
   { label: "Admin", email: "admin@arcradar.test" },
-  { label: "Analyst", email: "analyst@arcradar.test" },
+  { label: "SOC L2", email: "analyst@arcradar.test" },
+  { label: "SOC L1", email: "l1@arcradar.test" },
   { label: "Viewer", email: "viewer@arcradar.test" },
 ] as const;
 

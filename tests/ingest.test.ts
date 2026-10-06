@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import samples from "../scripts/fixtures/wazuh-sample-alerts.json";
 import { ApiError, apiErrors } from "@/lib/api/errors";
 import { ok } from "@/lib/api/response";
-import { formatRelative } from "@/lib/format";
+import { formatRelative, personWithRole } from "@/lib/format";
 import type { ApiKeyPrincipal } from "@/lib/api-keys/types";
 import { buildSourceCards, statusOf } from "@/lib/telemetry/health";
 import {
@@ -558,5 +558,19 @@ describe("the proxy", () => {
     expect(matcher.test("/api/api-keys")).toBe(true);
     expect(matcher.test("/dashboard")).toBe(true);
     expect(matcher.test("/telemetry")).toBe(true);
+  });
+});
+
+describe("personWithRole", () => {
+  it("puts the role beside the name in a who-gets-this menu, and copes without either", () => {
+    expect(personWithRole({ display_name: "Leyla", role: "soc_l1" })).toBe("Leyla (SOC L1)");
+    expect(personWithRole({ display_name: "Demo Analyst", role: "soc_l2" })).toBe(
+      "Demo Analyst (SOC L2)",
+    );
+    expect(personWithRole({ display_name: "Demo Admin", role: "admin" })).toBe(
+      "Demo Admin (Admin)",
+    );
+    expect(personWithRole({ display_name: "Leyla" })).toBe("Leyla");
+    expect(personWithRole({ display_name: null, role: "soc_l1" })).toBe("Unknown user (SOC L1)");
   });
 });

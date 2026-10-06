@@ -20,7 +20,7 @@ export default async function SettingsPage() {
     <>
       <PageHeader
         title="Settings"
-        description="Workspace administration: who has an account, their role, and whether they can sign in."
+        description="Workspace administration: who has an account, their role, and whether they can sign in. Add an account for a teammate here, or approve one that signed up."
       />
       {waiting > 0 && (
         <Alert

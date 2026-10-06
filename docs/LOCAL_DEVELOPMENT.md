@@ -28,8 +28,9 @@ test mailbox `http://127.0.0.1:54324` (password-recovery and confirmation emails
 
 ## Using the app
 
-Open <http://localhost:3000>. It sends you to the sign-in page; on the local stack the page shows
-Admin / Analyst / Viewer buttons that fill in a demo account (controlled by `NEXT_PUBLIC_DEMO_LOGINS=true`,
+Open <http://localhost:3000>. A signed-out visitor sees the landing page; **Sign in** leads to the sign-in
+page, where the local stack shows Admin / SOC L2 / SOC L1 / Viewer buttons that fill in a demo account
+(controlled by `NEXT_PUBLIC_DEMO_LOGINS=true`,
 which `npm run db:env` sets; leave it empty anywhere else). Signed in, the sidebar shows what the role may
 see; every module is live (nothing is marked "Soon" right now), including AI analyses on an alert,
 investigation or indicator page (needs a provider key — see below), response-action tracking, investigation
@@ -113,11 +114,12 @@ The end-to-end tests make their own keys and telemetry (names start with `E2E-TE
 
 ## Demo users (local seed only)
 
-| Email                   | Role    | Password           |
-| ----------------------- | ------- | ------------------ |
-| `admin@arcradar.test`   | admin   | `ArcRadar-Demo-1!` |
-| `analyst@arcradar.test` | analyst | `ArcRadar-Demo-1!` |
-| `viewer@arcradar.test`  | viewer  | `ArcRadar-Demo-1!` |
+| Email                   | Role   | Password           |
+| ----------------------- | ------ | ------------------ |
+| `admin@arcradar.test`   | Admin  | `ArcRadar-Demo-1!` |
+| `analyst@arcradar.test` | SOC L2 | `ArcRadar-Demo-1!` |
+| `l1@arcradar.test`      | SOC L1 | `ArcRadar-Demo-1!` |
+| `viewer@arcradar.test`  | Viewer | `ArcRadar-Demo-1!` |
 
 These exist only in your local database. `supabase/seed.sql` never runs against a hosted project, and
 these credentials must never be used in production. All seeded records are marked `origin = 'demo'`.

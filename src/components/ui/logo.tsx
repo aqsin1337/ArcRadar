@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cn } from "@/lib/cn";
 
 /** The ArcRadar mark: concentric arcs with a sweep line, drawn in the current text color. */
@@ -30,6 +31,33 @@ export function Logo({ className }: { className?: string }) {
   );
 }
 
+/**
+ * The logo as the way home: Overview for someone inside the app, the landing page for a signed-out
+ * visitor. `label` says where it goes, since the visible text is only the name.
+ */
+export function LogoLink({
+  href,
+  label,
+  className,
+  onClick,
+}: {
+  href: "/" | "/dashboard";
+  label: string;
+  className?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-label={label}
+      onClick={onClick}
+      className="inline-flex rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+    >
+      <Logo className={className} />
+    </Link>
+  );
+}
+
 /** Decorative radar rings for hero areas. Slow sweep; disabled by the reduced-motion rule. */
 export function RadarBackdrop({ className }: { className?: string }) {
   return (
@@ -46,9 +74,8 @@ export function RadarBackdrop({ className }: { className?: string }) {
         <circle cx="200" cy="200" r="195" />
         <path d="M200 5v390M5 200h390" strokeDasharray="2 6" />
       </g>
-      <g
-        style={{ transformOrigin: "200px 200px", animation: "arcradar-sweep 14s linear infinite" }}
-      >
+      {/* Classes, not a style attribute: the Content-Security-Policy refuses inline styles. */}
+      <g className="origin-[200px_200px] animate-[arcradar-sweep_14s_linear_infinite]">
         <path d="M200 200 L200 5 A195 195 0 0 1 338 62 Z" fill="currentColor" opacity="0.08" />
         <path d="M200 200 L200 5" stroke="currentColor" opacity="0.5" />
       </g>

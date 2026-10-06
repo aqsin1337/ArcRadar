@@ -1,7 +1,7 @@
 -- ArcRadar DEMO seed data. LOCAL DEVELOPMENT ONLY.
 --
 -- * Runs automatically on `supabase db reset` (local stack). `supabase db push` never runs it.
--- * Creates three demo users with a publicly known password. Never run this against a
+-- * Creates four demo users with a publicly known password. Never run this against a
 --   production database.
 -- * Every row is marked origin = 'demo' and is fictional or documentation-range data:
 --   IPs are RFC 5737 / RFC 3849 documentation addresses, domains use reserved TLDs
@@ -9,7 +9,8 @@
 --   summaries of public vulnerabilities; verify details against NVD before relying on them.
 --
 -- Demo users (password for all: ArcRadar-Demo-1!):
---   admin@arcradar.test, analyst@arcradar.test, viewer@arcradar.test
+--   admin@arcradar.test (Admin), analyst@arcradar.test (SOC L2), l1@arcradar.test (SOC L1),
+--   viewer@arcradar.test (Viewer)
 
 -- Lookup helpers, session-scoped (pg_temp) so nothing is left behind in the schema.
 create function pg_temp.ind(v text) returns uuid language sql stable as
@@ -41,7 +42,8 @@ select
 from (values
   ('aaaaaaaa-0000-4000-8000-000000000001'::uuid, 'admin@arcradar.test', 'Demo Admin'),
   ('aaaaaaaa-0000-4000-8000-000000000002'::uuid, 'analyst@arcradar.test', 'Demo Analyst'),
-  ('aaaaaaaa-0000-4000-8000-000000000003'::uuid, 'viewer@arcradar.test', 'Demo Viewer')
+  ('aaaaaaaa-0000-4000-8000-000000000003'::uuid, 'viewer@arcradar.test', 'Demo Viewer'),
+  ('aaaaaaaa-0000-4000-8000-000000000004'::uuid, 'l1@arcradar.test', 'Demo L1 Analyst')
 ) as u (id, email, display_name);
 
 insert into auth.identities (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
@@ -53,6 +55,7 @@ where u.email like '%@arcradar.test';
 
 update public.profiles set role_name = 'admin' where id = 'aaaaaaaa-0000-4000-8000-000000000001';
 update public.profiles set role_name = 'soc_l2' where id = 'aaaaaaaa-0000-4000-8000-000000000002';
+update public.profiles set role_name = 'soc_l1' where id = 'aaaaaaaa-0000-4000-8000-000000000004';
 
 -- ---------------------------------------------------------------------------
 -- Tags

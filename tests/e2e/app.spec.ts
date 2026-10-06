@@ -27,6 +27,14 @@ test.describe("viewer", () => {
     }
   });
 
+  test("the logo goes to the Overview from any page", async ({ page }) => {
+    await page.goto("/alerts");
+    await expect(page.getByRole("heading", { level: 1, name: "Alerts" })).toBeVisible();
+    await page.getByRole("link", { name: "ArcRadar, go to Overview" }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveTitle("Overview · ArcRadar");
+  });
+
   test("the overview shows real counts, the account's access and where data comes from", async ({
     page,
   }) => {

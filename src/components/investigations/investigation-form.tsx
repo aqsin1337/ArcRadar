@@ -11,13 +11,13 @@ import { TagInput } from "@/components/ui/tag-input";
 import { TextAreaField } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/api/client";
 import { ASSIGNEE_ME } from "@/lib/alerts/constants";
-import { personLabel } from "@/lib/format";
+import { personWithRole } from "@/lib/format";
 import { PRIORITIES, PRIORITY_LABELS } from "@/lib/investigations/constants";
 import { createInvestigationSchema } from "@/lib/investigations/schema";
 import { fieldErrorsFromZod } from "@/lib/validation/form";
 import type { Priority } from "@/types/domain";
 
-type Person = { id: string; display_name: string | null };
+type Person = { id: string; display_name: string | null; role?: string };
 
 /** Opens an investigation. It starts `open`, is saved as local data and is assigned to you unless you pick someone else. */
 export function InvestigationForm({
@@ -110,7 +110,7 @@ export function InvestigationForm({
           options={[
             { value: ASSIGNEE_ME, label: "Me" },
             { value: "", label: "Unassigned" },
-            ...people.map((person) => ({ value: person.id, label: personLabel(person) })),
+            ...people.map((person) => ({ value: person.id, label: personWithRole(person) })),
           ]}
           error={errors.analyst_id}
         />

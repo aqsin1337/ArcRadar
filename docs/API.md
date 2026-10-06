@@ -127,6 +127,7 @@ Lists return `{ items, pagination: { page, page_size, total, total_pages } }` an
 | POST             | `/api/siem-rules/:siem/:id/reject`, `.../push[?mode=test     | live]`                           | `rules:manage` (admin)                                                                                                                                                                                                                  | Reject a draft; commit the generated file (`splunk/arcradar_<key>.conf`) to the rules repository (`503` when GitHub is not configured) |
 | GET              | `/api/siem-rules/:siem/fields`                               | `rules:manage` (admin)           | The fields the SIEM host reported (`?index=&sourcetype=` narrows): per source how often each field appears and a few example values; empty until it has reported                                                                        |
 | GET              | `/api/users`                                                 | `users:read` (admin)             | Every account (email, role, active, last sign-in); needs the service role to read `auth.users`                                                                                                                                          |
+| POST             | `/api/users`                                                 | `users:manage` (admin)           | `{ email, password, display_name, role_name }`; makes an account that is active at once, with no confirmation mail; `409` when the email already has one; rate limited per caller                                                       |
 | PATCH            | `/api/users/:id`                                             | `users:manage` (admin)           | `{ role_name?, is_active? }`; `409` on your own account or on the last active administrator                                                                                                                                             |
 | any              | `/api/<unknown>`                                             | -                                | `404` in the envelope (`src/app/api/[...path]`)                                                                                                                                                                                         |
 
@@ -542,6 +543,15 @@ is_active? }`** changes either or both; it refuses to act on the caller's own ac
 accidental self-lockout) and refuses to leave the workspace with no active administrator (`409`; there is no
 separate "root" account to recover with). Audited as `user.role_changed` (`from`, `to`) and
 `user.activated`/`user.deactivated`, only when the value actually changed.
+
+**`POST /api/users` `{ email, password, display_name, role_name }`** (admin, `users:manage`) lets an
+administrator make an account for a teammate. It is created through Supabase Auth's admin API with the email
+already confirmed (the administrator vouches for it, so nothing is mailed), then activated with the chosen
+role, which also counts as its approval. The password must meet the sign-up policy (`422` on the `password`
+field otherwise); a role is required and unknown fields are refused (`422`); an email that already has an
+account is `409`. If the role cannot be given, the half-made sign-in is deleted again, so no account is left
+that nobody approved. Answers `201` with the same shape as a row of `GET /api/users`. Limited to 20 a
+caller per 10 minutes (`userCreateByUser`). Audited as `user.created` with the role, never the password.
 
 ## Automatic data: lookups that record themselves, public feeds
 

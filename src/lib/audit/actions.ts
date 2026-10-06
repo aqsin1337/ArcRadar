@@ -44,6 +44,7 @@ export const AUDIT_ACTIONS = [
   "report.created",
   "report.deleted",
   "profile.updated",
+  "user.created",
   "user.role_changed",
   "user.approved",
   "user.activated",

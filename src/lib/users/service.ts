@@ -5,11 +5,13 @@ import type { AuthContext } from "@/lib/auth/context";
 import { isRoleName } from "@/lib/rbac/permissions";
 import {
   countActiveAdmins,
+  createAccountForAdmin,
+  deleteAccountForAdmin,
   findProfileForAdmin,
   findUsers,
   updateProfileForAdmin,
 } from "./repository";
-import { userIdSchema, type UpdateUserInput } from "./schema";
+import { userIdSchema, type CreateUserInput, type UpdateUserInput } from "./schema";
 import type { AdminUser } from "./types";
 
 type RequestLike = { headers: Headers };
@@ -18,6 +20,53 @@ export const isUserId = (id: string) => userIdSchema.safeParse(id).success;
 
 export function listUsers(): Promise<AdminUser[]> {
   return findUsers();
+}
+
+/**
+ * An administrator makes an account for a teammate: the sign-in exists at once (no confirmation
+ * mail), already approved, with the role the administrator chose. If giving it the role fails, the
+ * half-made sign-in is removed again, so no account is ever left that nobody approved. The password
+ * is never logged or audited; the administrator passes it on and the person changes it on Profile.
+ */
+export async function createUser(
+  auth: AuthContext,
+  input: CreateUserInput,
+  request: RequestLike,
+): Promise<AdminUser> {
+  const account = await createAccountForAdmin({
+    email: input.email,
+    password: input.password,
+    display_name: input.display_name,
+  });
+
+  try {
+    await updateProfileForAdmin(account.id, { role_name: input.role_name, is_active: true });
+  } catch (error) {
+    await deleteAccountForAdmin(account.id);
+    throw error;
+  }
+
+  await writeAuditLog(
+    {
+      action: "user.created",
+      userId: auth.user.id,
+      entityType: "profile",
+      entityId: account.id,
+      metadata: { role: input.role_name },
+    },
+    request,
+  );
+
+  return {
+    id: account.id,
+    email: input.email,
+    display_name: input.display_name,
+    role: input.role_name,
+    is_active: true,
+    pending: false,
+    created_at: account.created_at,
+    last_sign_in_at: null,
+  };
 }
 
 /**

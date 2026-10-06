@@ -257,6 +257,16 @@ test.describe("the alert workflow (analyst)", () => {
     await expect(page.getByTestId("alert-status")).toHaveText("False positive");
     await expect(timeline.getByText("Closed as false positive")).toBeVisible();
 
+    // Everyone who may work alerts can be given one, each with their role beside the name:
+    // the administrator, the SOC L2 analyst and the SOC L1 analyst, but never a viewer.
+    const assignees = actions.getByLabel("Assigned to").getByRole("option");
+    await expect(assignees.filter({ hasText: "(Admin)" })).toHaveCount(1);
+    await expect(assignees.filter({ hasText: "(SOC L2)" })).toHaveCount(1);
+    await expect(assignees.filter({ hasText: "Demo L1 Analyst (SOC L1)" })).toHaveCount(1);
+    await expect(assignees.filter({ hasText: "Viewer" })).toHaveCount(0);
+    await actions.getByLabel("Assigned to").selectOption({ label: "Demo L1 Analyst (SOC L1)" });
+    await expect(page.getByTestId("alert-assignee")).toHaveText("Demo L1 Analyst");
+
     await actions.getByLabel("Assigned to").selectOption("");
     await expect(page.getByTestId("alert-assignee")).toHaveText("Nobody");
     await actions.getByRole("button", { name: "Assign to me" }).click();

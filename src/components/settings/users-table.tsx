@@ -1,6 +1,9 @@
 "use client";
 
+import { UserPlus } from "lucide-react";
 import { useState } from "react";
+import { AddUserForm, createdNotice } from "@/components/settings/add-user-form";
+import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -11,7 +14,10 @@ import { formatRelative } from "@/lib/format";
 import { ROLE_NAMES, roleLabel, type RoleName } from "@/types/domain";
 import type { AdminUser } from "@/lib/users/types";
 
-/** Every account, with a role and active-status control for everyone except the caller themselves. */
+/**
+ * Every account, with a role and active-status control for everyone except the caller themselves,
+ * and a form to make an account for a teammate.
+ */
 export function UsersTable({
   users,
   selfId,
@@ -25,6 +31,8 @@ export function UsersTable({
   const [rows, setRows] = useState(() =>
     [...users].sort((a, b) => Number(b.pending) - Number(a.pending)),
   );
+  const [adding, setAdding] = useState(false);
+  const [created, setCreated] = useState<string | null>(null);
 
   async function patch(id: string, body: { role_name?: RoleName; is_active?: boolean }) {
     const approving = body.is_active === true;
@@ -44,6 +52,38 @@ export function UsersTable({
 
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted">
+          {rows.length} account{rows.length === 1 ? "" : "s"}
+        </p>
+        {!adding && (
+          <Button
+            size="sm"
+            onClick={() => {
+              setCreated(null);
+              setAdding(true);
+            }}
+          >
+            <UserPlus aria-hidden className="size-4" />
+            Add account
+          </Button>
+        )}
+      </div>
+      {adding && (
+        <AddUserForm
+          onCancel={() => setAdding(false)}
+          onCreated={(user) => {
+            setRows((current) => [user, ...current]);
+            setCreated(createdNotice(user));
+            setAdding(false);
+          }}
+        />
+      )}
+      {created && (
+        <Alert tone="success" title="Account created">
+          {created}
+        </Alert>
+      )}
       {error && <p className="text-sm text-tone-red-fg">{error}</p>}
       <Table caption="Accounts">
         <THead>
