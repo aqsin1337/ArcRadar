@@ -1,0 +1,12 @@
+[Unit]
+Description=Waits for ArcRadar to push Splunk rules and applies them at once
+After=network-online.target Splunkd.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/sbin/arcradar-splunk-watch
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

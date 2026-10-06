@@ -2498,6 +2498,49 @@ async function main() {
     );
     await adminRest("DELETE", "/rest/v1/siem_field_catalog?index_name=eq.smokeidx");
 
+    // The wake-up: the Splunk host waits for a push instead of asking on a timer.
+    const wakeUrl = "/api/ingest/splunk/wake";
+    const wakeNoKey = await call(null, "GET", wakeUrl + "?wait=0");
+    check("the wake endpoint needs a key (401)", wakeNoKey.status === 401, wakeNoKey.status);
+    const wakeFirst = await call(null, "GET", wakeUrl, { headers: bearer(splunkKey) });
+    check(
+      "the first call (no revision yet) answers at once with the current one",
+      wakeFirst.status === 200 &&
+        typeof wakeFirst.json?.data?.revision === "string" &&
+        wakeFirst.json?.data?.changed === false,
+      wakeFirst.json,
+    );
+    const wakeRevision = wakeFirst.json?.data?.revision ?? "";
+    const wakeSame = await call(
+      null,
+      "GET",
+      wakeUrl + "?wait=0&since=" + encodeURIComponent(wakeRevision),
+      {
+        headers: bearer(splunkKey),
+      },
+    );
+    check(
+      "with the current revision and no wait there is nothing new",
+      wakeSame.status === 200 && wakeSame.json?.data?.changed === false,
+      wakeSame.json,
+    );
+    const wakeOld = await call(null, "GET", wakeUrl + "?wait=0&since=an-older-revision", {
+      headers: bearer(splunkKey),
+    });
+    check(
+      "with an older revision it answers at once that something changed",
+      wakeOld.status === 200 && wakeOld.json?.data?.changed === true,
+      wakeOld.json,
+    );
+    const wakeTooLong = await call(null, "GET", wakeUrl + "?wait=26", {
+      headers: bearer(splunkKey),
+    });
+    check(
+      "a wait over 25 seconds is refused (422)",
+      wakeTooLong.status === 422,
+      wakeTooLong.status,
+    );
+
     // Backtests: the Splunk host reports what a rule's search found on past data.
     const backtestUrl = "/api/ingest/splunk/backtests";
     const backtestItem = {

@@ -2003,6 +2003,7 @@ export type Database = {
         Args: { p_severity: Database["public"]["Enums"]["severity"] };
         Returns: number;
       };
+      siem_rules_revision: { Args: { p_siem: string }; Returns: string };
       sync_field_catalog: { Args: { p_siem: string; p_sources: Json }; Returns: Json };
       sync_rule_backtests: { Args: { p_results: Json; p_siem: string }; Returns: Json };
       telemetry_source_health: {
