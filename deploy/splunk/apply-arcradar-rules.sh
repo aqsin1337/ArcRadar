@@ -200,5 +200,5 @@ fi
 #    is in ArcRadar within a minute or two of the push instead of at the next scheduled run. The lock is not
 #    passed on to it.
 if [ -x /usr/local/sbin/arcradar-splunk-sync ]; then
-  ( /usr/local/sbin/arcradar-splunk-sync --backtests >>/var/log/arcradar-splunk-sync.log 2>&1 || true ) 9>&- &
+  ( /usr/local/sbin/arcradar-splunk-sync --backtests >>/var/log/arcradar-splunk-sync.log 2>&1 || true ) >/dev/null 2>&1 9>&- &
 fi

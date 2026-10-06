@@ -34,8 +34,8 @@ APPLY = os.environ.get("ARCRADAR_APPLY_COMMAND", "/usr/local/sbin/arcradar-apply
 WAIT_SECONDS = 25
 REQUEST_TIMEOUT = WAIT_SECONDS + 20
 # GitHub shows a fresh commit at once, but if the first pull finds nothing new, look again a few times.
-APPLY_ATTEMPTS = 4
-APPLY_RETRY_SECONDS = 3
+APPLY_ATTEMPTS = 3
+APPLY_RETRY_SECONDS = 2
 
 
 def log(message):

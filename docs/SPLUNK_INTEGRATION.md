@@ -51,9 +51,8 @@ Done on the lab VM (Ubuntu 24.04, Splunk Enterprise 10.0.2 from the `.deb`, `/op
    (mode 600, root only); it is used only to reload the saved searches. Without that file the rules are
    installed and Splunk loads them on its next refresh or restart.
 4. **Restart Splunk once** so it reads the new app, then run `arcradar-apply-splunk-rules --check`.
-5. **Run it on a schedule**, every minute under `flock` in `/etc/cron.d/arcradar-splunk-rules` (it only fetches and
-   compares; it is quiet when nothing changed, and starts a backtest as soon as it installs a change, so a pushed rule
-   is on Splunk and tested within about two minutes),
+5. **Run it on a schedule** as a safety net, every ten minutes under `flock` in `/etc/cron.d/arcradar-splunk-rules` (it
+   only fetches and compares and is quiet when nothing changed; the watcher below does the instant work),
    the way the Wazuh Manager does it. Settings (repository, branch) are environment variables at the top of the
    script; the default repository is the one ArcRadar commits to.
 
@@ -83,6 +82,25 @@ Per source it looks at up to 1000 events of the last 24 hours (`ARCRADAR_CATALOG
 the 300 most common fields with up to five example values (one line each, cut to 100 characters) and skips the
 fields Splunk adds to every event. The example values come from real logs (account names, addresses): ArcRadar
 shows them only to administrators.
+
+## Instant delivery: the watcher
+
+A cron job that asks every minute is slow, so the Splunk host also runs **`arcradar-splunk-watch`** (a systemd service,
+`deploy/splunk/watch-arcradar.py` and `arcradar-splunk-watch.service`). It keeps one request open to ArcRadar
+(`GET /api/ingest/splunk/wake`, see [API.md](API.md)) and ArcRadar answers it the moment a rule is pushed; the watcher
+then runs the apply script (which installs the rule and starts its backtest). A rule pushed in ArcRadar is on Splunk and
+tested within about ten to fifteen seconds. It only calls ArcRadar, the way the alert action and the sync script do:
+no port of the Splunk server is opened to GitHub or to the internet. The apply cron stays, every ten minutes, as a safety
+net for a missed wake-up (the apply script takes a lock, so the two never collide).
+
+Install: copy the script to `/usr/local/sbin/arcradar-splunk-watch` (mode 755) and the unit to
+`/etc/systemd/system/arcradar-splunk-watch.service`, then `systemctl daemon-reload` and
+`systemctl enable --now arcradar-splunk-watch`. It reads the ArcRadar address and key from the app's
+`local/arcradar_forward.json`. `journalctl -u arcradar-splunk-watch` shows what it does.
+
+A GitHub Actions workflow cannot do this job: it runs in GitHub's cloud, which cannot reach a Splunk server on a private
+network (a self-hosted runner on that server could, but on a public repository it would let anyone's pull request run code
+there).
 
 ## Test mode and backtests
 
