@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { RuleDialect } from "./dialect";
-import { MITRE_ID_PATTERN, RULE_KEY_PATTERN, SIEM_RULE_SEVERITIES } from "./constants";
+import {
+  MITRE_ID_PATTERN,
+  RULE_KEY_PATTERN,
+  SIEM_RULE_MODES,
+  SIEM_RULE_SEVERITIES,
+} from "./constants";
 
 /**
  * The SIEM-independent part of a rule. The name ends up in a file a SIEM parses line by line, so it
@@ -80,6 +85,9 @@ export const generateSiemRuleSchema = z.strictObject({
     .min(10, "Describe what the rule should detect (at least a sentence).")
     .max(1000, "The description can have at most 1000 characters."),
 });
+
+/** Query of POST .../push: `?mode=test` pushes the rule in test mode; no mode means live. */
+export const pushSiemRuleQuerySchema = z.object({ mode: z.enum(SIEM_RULE_MODES).default("live") });
 
 export const rejectSiemRuleSchema = z.strictObject({
   reason: z

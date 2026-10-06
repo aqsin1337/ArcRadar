@@ -13,7 +13,7 @@ import {
 } from "@/lib/github/contents";
 import { logError, logWarn } from "@/lib/log";
 import { getEffectiveEnv } from "@/lib/secrets/service";
-import { SIEM_LABELS, type SiemId } from "./constants";
+import { SIEM_LABELS, type SiemId, type SiemRuleMode } from "./constants";
 import { summarizeCatalog } from "./catalog";
 import { findCatalog } from "./catalog-repository";
 import { getDialect } from "./dialects";
@@ -283,10 +283,16 @@ export async function rejectSiemRule(
  * Commits the rule's generated file to the rules repository. ArcRadar writes only that file; the
  * SIEM host pulls the repository itself, so nothing here reaches into the SIEM.
  */
+/**
+ * Commits the rule's generated file in the given mode. Test mode: the file is loaded by the SIEM but never
+ * runs on a schedule and has no action, so it can be backtested without ever alerting; live: the rule as
+ * written. Pushing again in the other mode replaces the file.
+ */
 export async function pushSiemRule(
   auth: AuthContext,
   siem: SiemId,
   id: string,
+  mode: SiemRuleMode,
   request: RequestLike,
   deps = defaultSiemRuleDeps(),
 ): Promise<SiemRule> {
@@ -301,7 +307,8 @@ export async function pushSiemRule(
     );
   }
 
-  const { path, content } = current.file;
+  // The file for the requested mode, which may differ from the mode the rule was last pushed in.
+  const { path, content } = getDialect(siem).render({ ...current, mode });
   let commit: Awaited<ReturnType<typeof commitRepoFile>>;
   try {
     commit = await commitRepoFile({
@@ -309,7 +316,7 @@ export async function pushSiemRule(
       path,
       content,
       message:
-        `${current.status === "pushed" ? "Update" : "Add"} ${SIEM_LABELS[siem]} rule ${current.rule_key}: ${current.name}`.slice(
+        `${current.status === "pushed" ? "Update" : "Add"} ${SIEM_LABELS[siem]} rule ${current.rule_key}${mode === "test" ? " (test mode)" : ""}: ${current.name}`.slice(
           0,
           200,
         ),
@@ -335,6 +342,7 @@ export async function pushSiemRule(
 
   const row = await updateSiemRuleRow(auth.supabase, siem, id, {
     status: "pushed",
+    mode,
     github_path: path,
     github_commit: commit.commitSha ?? current.github_commit,
     pushed_at: new Date().toISOString(),
@@ -351,6 +359,7 @@ export async function pushSiemRule(
       metadata: {
         siem,
         name: row.name,
+        mode,
         path,
         commit: commit.commitSha,
         unchanged: commit.unchanged,

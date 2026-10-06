@@ -194,3 +194,10 @@ if [ -r "$AUTH_FILE" ]; then
 else
   log "applied repository commit $COMMIT: ${#FILES[@]} rule file(s); no $AUTH_FILE, so Splunk will pick them up on its next refresh or restart"
 fi
+
+# 7. New or changed rules: measure them against past data right away, in the background (backtest), so the result
+#    is in ArcRadar within a minute or two of the push instead of at the next scheduled run. The lock is not
+#    passed on to it.
+if [ -x /usr/local/sbin/arcradar-splunk-sync ]; then
+  ( /usr/local/sbin/arcradar-splunk-sync --backtests >>/var/log/arcradar-splunk-sync.log 2>&1 || true ) 9>&- &
+fi

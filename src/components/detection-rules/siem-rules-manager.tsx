@@ -1,6 +1,15 @@
 "use client";
 
-import { ExternalLink, GitBranch, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
+import {
+  ExternalLink,
+  FlaskConical,
+  GitBranch,
+  Pencil,
+  Plus,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Badge, type Tone } from "@/components/ui/badge";
@@ -12,12 +21,13 @@ import {
   SIEM_LABELS,
   SIEM_RULE_STATUS_LABELS,
   type SiemId,
+  type SiemRuleMode,
   type SiemRuleSeverity,
   type SiemRuleStatus,
 } from "@/lib/siem-rules/constants";
 import { SPLUNK_SCHEDULES, type SplunkSpec } from "@/lib/siem-rules/dialects/splunk";
 import type { FieldCatalog } from "@/lib/siem-rules/catalog";
-import type { SiemRule } from "@/lib/siem-rules/types";
+import type { RuleBacktest, SiemRule } from "@/lib/siem-rules/types";
 import { SplunkRuleForm, type SiemRuleFormProps } from "./splunk-rule-form";
 
 const STATUS_TONES: Record<SiemRuleStatus, Tone> = {
@@ -66,6 +76,93 @@ const SIEM_UI: Record<SiemId, SiemUi> = {
     },
   },
 };
+
+const WINDOW_LABELS: Record<number, string> = { 24: "Last 24 hours", 168: "Last 7 days" };
+
+function describeBacktest(backtest: RuleBacktest): string {
+  if (backtest.error) return `the test could not run: ${backtest.error}`;
+  const matches = backtest.matches;
+  if (backtest.kind === "threshold") {
+    return matches === 0
+      ? "would not have fired"
+      : `would have fired ${matches}${matches >= 1000 ? "+" : ""} time${matches === 1 ? "" : "s"}`;
+  }
+  const scanned = backtest.scanned === null ? "" : ` out of ${backtest.scanned} events`;
+  return matches === 0
+    ? "would not have fired"
+    : `would have fired for ${matches} event${matches === 1 ? "" : "s"}${scanned}`;
+}
+
+const sampleTime = (time: string) => `${time.slice(0, 16).replace("T", " ")} UTC`;
+
+function describeSample(backtest: RuleBacktest): string {
+  // A single-event rule's examples all say the same thing (the conditions): the times are the news.
+  if (backtest.kind === "events") {
+    const times = backtest.sample.flatMap((item) => (item.time ? [sampleTime(item.time)] : []));
+    return times.length > 0 ? `latest at ${times.slice(0, 3).join(", ")}` : "";
+  }
+  return backtest.sample
+    .slice(0, 3)
+    .map((item) => {
+      const group = item.group ? Object.values(item.group).join(" · ") : "";
+      const count = item.count !== undefined ? ` ×${item.count}` : "";
+      const time = item.time ? ` (${sampleTime(item.time)})` : "";
+      return `${group}${count}${time}`.trim();
+    })
+    .filter(Boolean)
+    .join("; ");
+}
+
+/**
+ * What Splunk found when it ran the rule's search over past data: the effect of the rule before it goes live.
+ * The SIEM host reports this on its own; nothing here asks Splunk anything.
+ */
+function BacktestPanel({ rule }: { rule: SiemRule }) {
+  if (rule.status === "rejected") return null;
+  if (rule.status !== "pushed") {
+    return (
+      <p className="text-xs text-muted" data-testid="backtest">
+        Push it in test mode to see how it would have behaved on the real data of the last 24 hours
+        and 7 days, before it goes live.
+      </p>
+    );
+  }
+  if (rule.backtests.length === 0) {
+    return (
+      <p className="text-xs text-muted" data-testid="backtest">
+        Waiting for Splunk&apos;s test on past data. It runs a few minutes after Splunk pulls the
+        rule.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-1 rounded-lg border border-border p-3 text-sm" data-testid="backtest">
+      <p className="font-medium">Test on real data</p>
+      {rule.backtests.map((backtest) => (
+        <p key={backtest.window_hours} className="break-words text-muted">
+          <span className="text-foreground">
+            {WINDOW_LABELS[backtest.window_hours] ?? `${backtest.window_hours} h`}:
+          </span>{" "}
+          {describeBacktest(backtest)}
+          {backtest.sample.length > 0 && !backtest.error
+            ? ` · ${backtest.kind === "events" ? "" : "e.g. "}${describeSample(backtest)}`
+            : ""}
+          {backtest.stale && (
+            <span className="text-tone-amber-fg">
+              {" "}
+              · out of date: the rule changed after this test
+            </span>
+          )}
+        </p>
+      ))}
+      <p className="text-xs text-muted">
+        Measured by Splunk {formatTime(rule.backtests[0].reported_at)}. A rule that counts repeats
+        is tested in fixed time slices, so the numbers are close to, not exactly, what the live
+        schedule would do.
+      </p>
+    </div>
+  );
+}
 
 const SOURCE_LABELS = { manual: "Manual", ai: "AI-generated" } as const;
 
@@ -164,17 +261,25 @@ export function SiemRulesManager({
     setEditingId(null);
   }
 
-  async function push(rule: SiemRule) {
-    setPending(`push-${rule.id}`);
+  async function push(rule: SiemRule, mode: SiemRuleMode) {
+    setPending(`push-${mode}-${rule.id}`);
     setMessage(null);
-    const result = await apiFetch<SiemRule>(`${base}/${rule.id}/push`, { method: "POST" });
+    const result = await apiFetch<SiemRule>(`${base}/${rule.id}/push?mode=${mode}`, {
+      method: "POST",
+    });
     setPending(null);
     if (!result.ok) {
       setMessage({ tone: "error", text: result.message });
       return;
     }
     replace(result.data);
-    setMessage({ tone: "success", text: `Rule ${rule.rule_key} was committed to GitHub.` });
+    setMessage({
+      tone: "success",
+      text:
+        mode === "test"
+          ? `Rule ${rule.rule_key} was committed to GitHub in test mode: Splunk loads it but it does not run or alert. Splunk tests it against past data within a few minutes.`
+          : `Rule ${rule.rule_key} was committed to GitHub.`,
+    });
   }
 
   async function reject(rule: SiemRule) {
@@ -319,6 +424,9 @@ export function SiemRulesManager({
                     <Badge tone={STATUS_TONES[rule.status]} dot>
                       {SIEM_RULE_STATUS_LABELS[rule.status]}
                     </Badge>
+                    {rule.status === "pushed" && rule.mode === "test" && (
+                      <Badge tone="violet">Test mode · not alerting</Badge>
+                    )}
                     {rule.changed_since_push && <Badge tone="orange">Changed since push</Badge>}
                     <Badge tone={rule.source === "ai" ? "violet" : "slate"}>
                       {SOURCE_LABELS[rule.source]}
@@ -364,6 +472,7 @@ export function SiemRulesManager({
                           <code>{rule.file.content}</code>
                         </pre>
                       </details>
+                      <BacktestPanel rule={rule} />
                       <p className="text-xs text-muted">
                         {rule.status === "pushed" && rule.pushed_at
                           ? `Pushed ${formatTime(rule.pushed_at)}`
@@ -420,18 +529,47 @@ export function SiemRulesManager({
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           {rule.status !== "rejected" && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              loading={pending === `push-${rule.id}`}
-                              disabled={busy || !githubReady}
-                              onClick={() => push(rule)}
-                            >
-                              <GitBranch aria-hidden className="size-4" />
-                              {rule.status === "pushed"
-                                ? "Send update to GitHub"
-                                : "Send to GitHub"}
-                            </Button>
+                            <>
+                              <Button
+                                type="button"
+                                size="sm"
+                                loading={pending === `push-live-${rule.id}`}
+                                disabled={busy || !githubReady}
+                                onClick={() => push(rule, "live")}
+                              >
+                                <GitBranch aria-hidden className="size-4" />
+                                {rule.status !== "pushed"
+                                  ? "Send to GitHub"
+                                  : rule.mode === "test"
+                                    ? "Go live"
+                                    : "Send update to GitHub"}
+                              </Button>
+                              {(rule.status !== "pushed" || rule.mode === "live") && (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  loading={pending === `push-test-${rule.id}`}
+                                  disabled={busy || !githubReady}
+                                  onClick={() => push(rule, "test")}
+                                >
+                                  <FlaskConical aria-hidden className="size-4" />
+                                  Push as test
+                                </Button>
+                              )}
+                              {rule.status === "pushed" && rule.mode === "test" && (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  loading={pending === `push-test-${rule.id}`}
+                                  disabled={busy || !githubReady}
+                                  onClick={() => push(rule, "test")}
+                                >
+                                  Send update (test)
+                                </Button>
+                              )}
+                            </>
                           )}
                           <Button
                             type="button"

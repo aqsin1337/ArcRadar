@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { adminFetch, STORAGE } from "./support";
 
@@ -29,6 +30,10 @@ async function cleanUp() {
     headers: { prefer: "return=minimal" },
   });
   await adminFetch("/rest/v1/siem_rules?name=like.E2E*", {
+    method: "DELETE",
+    headers: { prefer: "return=minimal" },
+  });
+  await adminFetch("/rest/v1/siem_rules?rule_key=eq.e2ebt", {
     method: "DELETE",
     headers: { prefer: "return=minimal" },
   });
@@ -795,6 +800,75 @@ test.describe("Detection rules and alert deduplication (Phase 10)", () => {
       await expect(page.getByText("Seen in 80% of events · examples: failed, ok")).toBeVisible();
       await page.getByLabel("Condition 1 field").fill("e2e_statuss");
       await expect(page.getByText("Not seen in this data in the last 24 h")).toBeVisible();
+    });
+
+    test("a rule pushed in test mode shows what Splunk found on past data, and a stale result is flagged", async ({
+      page,
+    }) => {
+      const search = 'index=main | regex EventCode="(?i)^4625$"';
+      const digest = createHash("sha256").update(search).digest("hex");
+      await adminFetch("/rest/v1/siem_rules", {
+        method: "POST",
+        headers: { prefer: "return=minimal" },
+        body: JSON.stringify({
+          siem: "splunk",
+          rule_key: "e2ebt",
+          name: `E2E backtest rule ${stamp}`,
+          severity: "high",
+          mode: "test",
+          status: "pushed",
+          github_path: "splunk/arcradar_e2ebt.conf",
+          source: "manual",
+          origin: "local",
+          spec: {
+            index: "main",
+            sourcetype: null,
+            conditions: [{ field: "EventCode", op: "equals", value: "4625" }],
+            threshold: null,
+            schedule: "every_5_minutes",
+          },
+        }),
+      });
+      await adminFetch("/rest/v1/rpc/sync_rule_backtests", {
+        method: "POST",
+        body: JSON.stringify({
+          p_siem: "splunk",
+          p_results: [
+            {
+              rule_key: "e2ebt",
+              window_hours: 24,
+              kind: "events",
+              matches: 7,
+              scanned: 513,
+              sample: [{ time: "2026-10-06T10:00:00Z", group: { EventCode: "4625" } }],
+              search_sha256: digest,
+            },
+            {
+              rule_key: "e2ebt",
+              window_hours: 168,
+              kind: "events",
+              matches: 12,
+              scanned: 2000,
+              sample: [],
+              search_sha256: "b".repeat(64),
+            },
+          ],
+        }),
+      });
+      await page.goto("/detection-rules?tab=splunk");
+      const card = page.locator("li", { hasText: `E2E backtest rule ${stamp}` });
+      await expect(card.getByText("Test mode · not alerting")).toBeVisible();
+      await expect(card.locator("pre")).toContainText("enableSched = 0");
+      const panel = card.getByTestId("backtest");
+      await expect(panel).toContainText(
+        "Last 24 hours: would have fired for 7 events out of 513 events",
+      );
+      await expect(panel).toContainText("latest at 2026-10-06 10:00 UTC");
+      // the 7-day result was measured for another search: flagged, the 24 h one is not
+      await expect(panel).toContainText("Last 7 days: would have fired for 12 events");
+      await expect(panel.getByText("out of date: the rule changed after this test")).toHaveCount(1);
+      await expect(card.getByRole("button", { name: "Go live" })).toBeDisabled();
+      await expect(card.getByRole("button", { name: "Push as test" })).toHaveCount(0);
     });
 
     test("a Splunk field that is not a plain name is refused on the form", async ({ page }) => {

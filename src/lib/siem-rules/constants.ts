@@ -15,6 +15,14 @@ export type SiemRuleStatus = (typeof SIEM_RULE_STATUSES)[number];
 export const SIEM_RULE_SOURCES = ["manual", "ai"] as const;
 export type SiemRuleSource = (typeof SIEM_RULE_SOURCES)[number];
 
+export const SIEM_RULE_MODES = ["test", "live"] as const;
+export type SiemRuleMode = (typeof SIEM_RULE_MODES)[number];
+
+export const SIEM_RULE_MODE_LABELS: Record<SiemRuleMode, string> = {
+  test: "Test mode",
+  live: "Live",
+};
+
 export const SIEM_RULE_SEVERITIES = ["low", "medium", "high", "critical"] as const;
 export type SiemRuleSeverity = (typeof SIEM_RULE_SEVERITIES)[number];
 

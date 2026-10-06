@@ -75,12 +75,27 @@ to ArcRadar; ArcRadar replaces its earlier report per source, so running it agai
 
 2. **Run it** (as root, it uses the ArcRadar address and key from the app's `local/arcradar_forward.json`):
    `arcradar-splunk-sync`. It prints "reported N source(s), M field(s) to ArcRadar".
-3. **Schedule it**, for example every 30 minutes under `flock` in `/etc/cron.d/arcradar-splunk-sync`.
+3. **Schedule it**, for example every 30 minutes under `flock` in `/etc/cron.d/arcradar-splunk-sync` (with no flag it does both the field catalog and the backtests; `--catalog` or `--backtests` does one).
 
 Per source it looks at up to 1000 events of the last 24 hours (`ARCRADAR_CATALOG_*` variables change that), keeps
 the 300 most common fields with up to five example values (one line each, cut to 100 characters) and skips the
 fields Splunk adds to every event. The example values come from real logs (account names, addresses): ArcRadar
 shows them only to administrators.
+
+## Test mode and backtests
+
+A rule can be pushed **in test mode** (the "Push as test" button): the file is loaded by Splunk but is not
+scheduled (`enableSched = 0`) and has no action, so it cannot alert. `arcradar-splunk-sync --backtests` (also run in
+the background by the apply script right after it installs a change, and by the sync cron) then runs the rule's
+search over the **last 24 hours and the last 7 days** on the real data and reports to ArcRadar how often it would
+have fired, with a few examples (when, how many, which address). The rule card shows it as "Test on real data".
+When the numbers look right, "Go live" pushes the live version (scheduled, with the ArcRadar action).
+
+- A rule that counts repeats is tested in fixed time slices of its window (`| bin _time span=...`), so the numbers
+  are close to, not exactly, what the sliding live schedule would do.
+- The script only runs a search that has exactly the shape ArcRadar generates (the same check as the apply script);
+  anything else is skipped and logged. It runs with the `arcradar_sync` account (search only).
+- If the rule's search changes after a test, the old result is flagged "out of date" until Splunk tests the new one.
 
 ## What a rule file can and cannot contain
 

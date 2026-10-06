@@ -40,6 +40,7 @@ export const AUDIT_ACTIONS = [
   "api_key.revoked",
   "ingest.batch",
   "ingest.catalog",
+  "ingest.backtest",
   "report.created",
   "report.deleted",
   "profile.updated",

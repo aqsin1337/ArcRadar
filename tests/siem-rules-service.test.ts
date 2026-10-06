@@ -69,6 +69,7 @@ const rule = (patch: Partial<SiemRule> = {}): SiemRule => ({
   name: "Failed logon",
   description: null,
   severity: "medium",
+  mode: "live",
   spec,
   mitre_ids: ["T1110"],
   status: "draft",
@@ -88,10 +89,11 @@ const rule = (patch: Partial<SiemRule> = {}): SiemRule => ({
   created_at: "2026-10-06T10:00:00Z",
   updated_at: "2026-10-06T10:00:00Z",
   file: { path: "splunk/arcradar_1000.conf", content: "[arcradar_1000]\n" },
+  backtests: [],
   ...patch,
 });
 
-const deps = (over: Partial<Parameters<typeof pushSiemRule>[4]> = {}) => ({
+const deps = (over: Partial<Parameters<typeof pushSiemRule>[5]> = {}) => ({
   ai: aiService.defaultDeps,
   githubConfig: () => config,
   githubTimeoutMs: 1000,
@@ -347,13 +349,16 @@ describe("pushSiemRule", () => {
   it("commits the generated file to its own path and records the push", async () => {
     repo.findSiemRule.mockResolvedValue(rule());
     github.commitRepoFile.mockResolvedValue({ commitSha: "abc123", unchanged: false });
-    await pushSiemRule(admin, "splunk", ID, request, deps());
+    await pushSiemRule(admin, "splunk", ID, "live", request, deps());
     const call = github.commitRepoFile.mock.calls[0][0];
     expect(call.path).toBe("splunk/arcradar_1000.conf");
-    expect(call.content).toBe("[arcradar_1000]\n");
+    expect(call.content).toContain("[arcradar_1000]");
+    expect(call.content).toContain("enableSched = 1");
+    expect(call.content).toContain("action.arcradar_forward = 1");
     expect(call.message).toBe("Add Splunk rule 1000: Failed logon");
     expect(repo.updateSiemRuleRow.mock.calls[0][3]).toMatchObject({
       status: "pushed",
+      mode: "live",
       github_path: "splunk/arcradar_1000.conf",
       github_commit: "abc123",
       changed_since_push: false,
@@ -362,26 +367,61 @@ describe("pushSiemRule", () => {
     expect(JSON.stringify(audit.mock.calls)).not.toContain("ghp_test");
   });
 
+  it("pushes in test mode: the file is not scheduled and has no action, and the row records the mode", async () => {
+    repo.findSiemRule.mockResolvedValue(rule());
+    github.commitRepoFile.mockResolvedValue({ commitSha: "abc123", unchanged: false });
+    await pushSiemRule(admin, "splunk", ID, "test", request, deps());
+    const call = github.commitRepoFile.mock.calls[0][0];
+    expect(call.content).toContain("enableSched = 0");
+    expect(call.content).not.toContain("action.arcradar_forward");
+    expect(call.message).toBe("Add Splunk rule 1000 (test mode): Failed logon");
+    expect(repo.updateSiemRuleRow.mock.calls[0][3]).toMatchObject({
+      status: "pushed",
+      mode: "test",
+    });
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "siem_rule.pushed",
+        metadata: expect.objectContaining({ mode: "test" }),
+      }),
+      request,
+    );
+  });
+
+  it("pushing a test-mode rule live replaces the file with the live version", async () => {
+    repo.findSiemRule.mockResolvedValue(
+      rule({ status: "pushed", mode: "test", github_path: "splunk/arcradar_1000.conf" }),
+    );
+    github.commitRepoFile.mockResolvedValue({ commitSha: "def456", unchanged: false });
+    await pushSiemRule(admin, "splunk", ID, "live", request, deps());
+    const call = github.commitRepoFile.mock.calls[0][0];
+    expect(call.content).toContain("enableSched = 1");
+    expect(call.content).toContain("action.arcradar_forward = 1");
+    expect(repo.updateSiemRuleRow.mock.calls[0][3]).toMatchObject({ mode: "live" });
+  });
+
   it("says Update for a rule pushed before and keeps the last commit when nothing changed", async () => {
     repo.findSiemRule.mockResolvedValue(
       rule({ status: "pushed", github_path: "splunk/arcradar_1000.conf", github_commit: "old" }),
     );
     github.commitRepoFile.mockResolvedValue({ commitSha: null, unchanged: true });
-    await pushSiemRule(admin, "splunk", ID, request, deps());
+    await pushSiemRule(admin, "splunk", ID, "live", request, deps());
     expect(github.commitRepoFile.mock.calls[0][0].message).toMatch(/^Update Splunk rule 1000/);
     expect(repo.updateSiemRuleRow.mock.calls[0][3]).toMatchObject({ github_commit: "old" });
   });
 
   it("refuses a rejected rule and pushes nothing", async () => {
     repo.findSiemRule.mockResolvedValue(rule({ status: "rejected" }));
-    expect((await failureOf(pushSiemRule(admin, "splunk", ID, request, deps()))).status).toBe(409);
+    expect(
+      (await failureOf(pushSiemRule(admin, "splunk", ID, "live", request, deps()))).status,
+    ).toBe(409);
     expect(github.commitRepoFile).not.toHaveBeenCalled();
   });
 
   it("reports 503 when GitHub is not configured and leaves the rule a draft", async () => {
     repo.findSiemRule.mockResolvedValue(rule());
     const error = await failureOf(
-      pushSiemRule(admin, "splunk", ID, request, deps({ githubConfig: () => null })),
+      pushSiemRule(admin, "splunk", ID, "live", request, deps({ githubConfig: () => null })),
     );
     expect(error.status).toBe(503);
     expect(github.commitRepoFile).not.toHaveBeenCalled();
@@ -400,7 +440,7 @@ describe("pushSiemRule", () => {
     async (reason, status) => {
       repo.findSiemRule.mockResolvedValue(rule());
       github.commitRepoFile.mockRejectedValue(new GithubError(reason, "detail"));
-      const error = await failureOf(pushSiemRule(admin, "splunk", ID, request, deps()));
+      const error = await failureOf(pushSiemRule(admin, "splunk", ID, "live", request, deps()));
       expect(error.status).toBe(status);
       expect(repo.updateSiemRuleRow).not.toHaveBeenCalled();
       expect(audit).not.toHaveBeenCalled();

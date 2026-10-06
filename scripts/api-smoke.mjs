@@ -2498,6 +2498,51 @@ async function main() {
     );
     await adminRest("DELETE", "/rest/v1/siem_field_catalog?index_name=eq.smokeidx");
 
+    // Backtests: the Splunk host reports what a rule's search found on past data.
+    const backtestUrl = "/api/ingest/splunk/backtests";
+    const backtestItem = {
+      rule_key: "smokebt",
+      window_hours: 24,
+      kind: "threshold",
+      matches: 2,
+      scanned: 100,
+      sample: [{ time: "2026-10-06T10:00:00Z", count: 6, group: { ip: "203.0.113.9" } }],
+      search_sha256: "c".repeat(64),
+    };
+    const backtestNoKey = await call(null, "POST", backtestUrl, {
+      body: { results: [backtestItem] },
+    });
+    check(
+      "the backtest endpoint needs a key too (401)",
+      backtestNoKey.status === 401,
+      backtestNoKey.status,
+    );
+    const backtestBad = await call(null, "POST", backtestUrl, {
+      body: { results: [{ ...backtestItem, window_hours: 12 }] },
+      headers: bearer(splunkKey),
+    });
+    check(
+      "a window other than 24 or 168 hours is refused (422)",
+      backtestBad.status === 422,
+      backtestBad.status,
+    );
+    const backtestSent = await call(null, "POST", backtestUrl, {
+      body: { results: [backtestItem] },
+      headers: bearer(splunkKey),
+    });
+    check(
+      "a backtest report is stored (200)",
+      backtestSent.status === 200 && backtestSent.json?.data?.results === 1,
+      backtestSent.json,
+    );
+    const pushBadMode = await call(
+      admin.jar,
+      "POST",
+      "/api/siem-rules/splunk/00000000-0000-4000-8000-000000000000/push?mode=staging",
+    );
+    check("an unknown push mode is refused (422)", pushBadMode.status === 422, pushBadMode.status);
+    await adminRest("DELETE", "/rest/v1/siem_rule_backtests?rule_key=eq.smokebt");
+
     // Clean-up: only what this run created.
     await adminRest(
       "DELETE",

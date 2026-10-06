@@ -4,6 +4,8 @@ import { toApiError } from "@/lib/api/supabase-errors";
 import type { AuthClient } from "@/lib/auth/context";
 import { findDisplayNames } from "@/lib/team/repository";
 import type { Database, Json } from "@/types/database";
+import { expectedSearchDigest } from "./backtest";
+import { findBacktests } from "./backtest-repository";
 import { RULE_KEY_FIRST, type SiemId } from "./constants";
 import { getDialect } from "./dialects";
 import type { SiemRule } from "./types";
@@ -20,17 +22,42 @@ async function toRules(supabase: AuthClient, rows: Row[]): Promise<SiemRule[]> {
     supabase,
     rows.map((row) => row.created_by),
   );
+  // Every caller passes the rules of one SIEM.
+  const backtests = await findBacktests(
+    supabase,
+    (rows[0]?.siem ?? "splunk") as SiemId,
+    rows.map((row) => row.rule_key),
+  );
   return rows.map(({ created_by, spec, ...row }) => {
     const rule = {
       ...row,
       siem: row.siem as SiemRule["siem"],
       severity: row.severity as SiemRule["severity"],
+      mode: row.mode as SiemRule["mode"],
       status: row.status as SiemRule["status"],
       source: row.source as SiemRule["source"],
       spec: spec as Record<string, unknown>,
       created_by_name: created_by ? (names.get(created_by) ?? null) : null,
     };
-    return { ...rule, file: getDialect(rule.siem).render(rule) };
+    const file = getDialect(rule.siem).render(rule);
+    const expected = expectedSearchDigest(file.content);
+    return {
+      ...rule,
+      file,
+      backtests: backtests
+        .filter((backtest) => backtest.rule_key === rule.rule_key)
+        .sort((a, b) => a.window_hours - b.window_hours)
+        .map((backtest) => ({
+          window_hours: backtest.window_hours as 24 | 168,
+          kind: backtest.kind as "threshold" | "events",
+          matches: backtest.matches,
+          scanned: backtest.scanned,
+          sample: backtest.sample,
+          error: backtest.error,
+          reported_at: backtest.reported_at,
+          stale: backtest.search_sha256 !== expected,
+        })),
+    };
   });
 }
 

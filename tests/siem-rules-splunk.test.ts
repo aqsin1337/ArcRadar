@@ -30,6 +30,7 @@ const rule = (overrides: Partial<SiemRuleDefinition> = {}): SiemRuleDefinition =
   name: "Brute force from one address",
   description: null,
   severity: "high",
+  mode: "live",
   mitre_ids: ["T1110"],
   spec: splunkSpecSchema.parse(spec),
   ...overrides,
@@ -66,6 +67,21 @@ describe("Splunk rule rendering", () => {
         "",
       ].join("\n"),
     );
+  });
+
+  it("renders a test-mode rule that is not scheduled and has no action, and still passes the safety check", () => {
+    const file = dialect.render(rule({ mode: "test" }));
+    expect(file.content).toContain("# ArcRadar rule 1000 (test mode: not scheduled, no action).");
+    expect(file.content).toContain("enableSched = 0");
+    expect(file.content).not.toContain("enableSched = 1");
+    expect(file.content).not.toContain("action.");
+    expect(file.content).toContain("search = index=main sourcetype=WinEventLog:Security");
+    expect(() => assertSafeSplunkConf(file.content, "1000")).not.toThrow();
+    // the search itself is the same in both modes
+    const live = dialect.render(rule({ mode: "live" })).content;
+    const searchOf = (content: string) =>
+      content.split("\n").find((line) => line.startsWith("search = "));
+    expect(searchOf(file.content)).toBe(searchOf(live));
   });
 
   it("renders a single-event rule without threshold, suppression or MITRE lines", () => {

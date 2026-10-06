@@ -1389,6 +1389,48 @@ export type Database = {
         };
         Relationships: [];
       };
+      siem_rule_backtests: {
+        Row: {
+          error: string | null;
+          kind: string;
+          matches: number;
+          origin: Database["public"]["Enums"]["data_origin"];
+          reported_at: string;
+          rule_key: string;
+          sample: NonNullable<Json>;
+          scanned: number | null;
+          search_sha256: string;
+          siem: string;
+          window_hours: number;
+        };
+        Insert: {
+          error?: string | null;
+          kind: string;
+          matches: number;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          reported_at?: string;
+          rule_key: string;
+          sample?: NonNullable<Json>;
+          scanned?: number | null;
+          search_sha256: string;
+          siem: string;
+          window_hours: number;
+        };
+        Update: {
+          error?: string | null;
+          kind?: string;
+          matches?: number;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          reported_at?: string;
+          rule_key?: string;
+          sample?: NonNullable<Json>;
+          scanned?: number | null;
+          search_sha256?: string;
+          siem?: string;
+          window_hours?: number;
+        };
+        Relationships: [];
+      };
       siem_rules: {
         Row: {
           ai_model: string | null;
@@ -1402,6 +1444,7 @@ export type Database = {
           github_path: string | null;
           id: string;
           mitre_ids: string[];
+          mode: string;
           name: string;
           origin: Database["public"]["Enums"]["data_origin"];
           pushed_at: string | null;
@@ -1428,6 +1471,7 @@ export type Database = {
           github_path?: string | null;
           id?: string;
           mitre_ids?: string[];
+          mode?: string;
           name: string;
           origin?: Database["public"]["Enums"]["data_origin"];
           pushed_at?: string | null;
@@ -1454,6 +1498,7 @@ export type Database = {
           github_path?: string | null;
           id?: string;
           mitre_ids?: string[];
+          mode?: string;
           name?: string;
           origin?: Database["public"]["Enums"]["data_origin"];
           pushed_at?: string | null;
@@ -1959,6 +2004,7 @@ export type Database = {
         Returns: number;
       };
       sync_field_catalog: { Args: { p_siem: string; p_sources: Json }; Returns: Json };
+      sync_rule_backtests: { Args: { p_results: Json; p_siem: string }; Returns: Json };
       telemetry_source_health: {
         Args: Record<PropertyKey, never>;
         Returns: {
