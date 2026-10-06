@@ -1,6 +1,6 @@
 # Multi-SIEM plan: Splunk first, pluggable for the rest
 
-Status: **steps 1 and 2 built (2026-10-06)**; steps 3-6 not started (decision 32 in `ARCRADAR_PROGRESS.md`).
+Status: **steps 1-3 built (2026-10-06)**; steps 4-6 not started (decision 32 in `ARCRADAR_PROGRESS.md`).
 
 Goal: ArcRadar is not only a Wazuh companion. The same two abilities work for Splunk, and a third SIEM
 (QRadar, Sentinel, Elastic) is a new small module, not a rewrite:
@@ -87,8 +87,11 @@ the API key scope, and `ingest_telemetry()` unchanged (it already takes normaliz
    `assertSafeSplunkConf` (only `search`, `regex`, `stats`, `where` can appear), AI prompt, unit tests
    including injection attempts, DB tests with mutation checks, smoke checks. NOT yet verified against a
    real Splunk: the escaping of backslashes inside the `regex` command is checked in step 5.
-3. **UI.** The Detection rules page gets a SIEM switch (Wazuh / Splunk); the form is spec-driven per SIEM;
-   the preview shows the generated file.
+3. **UI (done).** The Detection rules page has a "Splunk rules" tab next to "Wazuh rules" and "Severity rules":
+   `SiemRulesManager` (the shared workflow: manual form, AI draft, edit, reject, push, delete, a per-SIEM
+   `SIEM_UI` entry for the form, the badges and the file label) and `SplunkRuleForm` (index, sourcetype,
+   schedule, conditions, "only when it repeats" with count, window and group-by). The preview shows the
+   generated `savedsearches.conf` stanza. A new SIEM adds one form component and one `SIEM_UI` entry.
 4. **Splunk ingest.** Adapter, scope, integration row, `POST /api/ingest/splunk`, fictional sample
    (`ingest:sample` option), tests, smoke, API docs.
 5. **Splunk lab.** Splunk Enterprise (free trial, 500 MB/day) in its own VMware VM, the apply script,

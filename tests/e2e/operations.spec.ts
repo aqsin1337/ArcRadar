@@ -28,6 +28,10 @@ async function cleanUp() {
     method: "DELETE",
     headers: { prefer: "return=minimal" },
   });
+  await adminFetch("/rest/v1/siem_rules?name=like.E2E*", {
+    method: "DELETE",
+    headers: { prefer: "return=minimal" },
+  });
   await adminFetch("/rest/v1/tags?name=ilike.e2e-*", {
     method: "DELETE",
     headers: { prefer: "return=minimal" },
@@ -706,6 +710,62 @@ test.describe("Detection rules and alert deduplication (Phase 10)", () => {
       await page.getByLabel("Condition 1 value").fill("(a+)+");
       await page.getByRole("button", { name: "Save as draft" }).click();
       await expect(page.getByText("can make matching very slow")).toBeVisible();
+    });
+
+    test("an admin drafts a Splunk rule, reads its generated search, edits, rejects and deletes it", async ({
+      page,
+    }) => {
+      const name = `E2E splunk rule ${stamp}`;
+      const renamed = `${name} edited`;
+
+      await page.goto("/detection-rules?tab=splunk");
+      await expect(page.getByRole("link", { name: "Splunk rules" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      await page.getByRole("button", { name: "Manual rule" }).click();
+      await page.getByLabel("Name", { exact: true }).fill(name);
+      await page.getByLabel("Condition 1 value").fill("4625");
+      await page.getByLabel("Only when it repeats").check();
+      await page.getByLabel("Count per (optional)").fill("Source_Network_Address");
+      await page.getByRole("button", { name: "Save as draft" }).click();
+
+      const card = page.locator("li", { hasText: name });
+      await expect(card).toBeVisible();
+      await expect(card.getByText("Draft", { exact: true })).toBeVisible();
+      await expect(card.getByText("5× in 5 min")).toBeVisible();
+      await expect(card.locator("pre")).toContainText(
+        'regex EventCode="(?i)^4625$" | stats count by Source_Network_Address | where count >= 5',
+      );
+      await expect(card.locator("pre")).not.toContainText("outputlookup");
+      await expect(page.getByText("GitHub is not connected")).toBeVisible();
+      await expect(card.getByRole("button", { name: "Send to GitHub" })).toBeDisabled();
+
+      await card.getByRole("button", { name: "Edit", exact: true }).click();
+      await card.getByLabel("Name", { exact: true }).fill(renamed);
+      await card.getByLabel("Severity").selectOption({ label: "Critical" });
+      await card.getByRole("button", { name: "Save changes" }).click();
+      const edited = page.locator("li", { hasText: renamed });
+      await expect(edited).toBeVisible();
+      await expect(edited.locator("pre")).toContainText("alert.severity = 5");
+
+      await edited.getByRole("button", { name: "Reject", exact: true }).click();
+      await edited.getByLabel("Reason (optional)").fill("e2e");
+      await edited.getByRole("button", { name: "Confirm reject" }).click();
+      await expect(edited.getByText("Rejected", { exact: true })).toBeVisible();
+
+      await edited.getByRole("button", { name: `Delete ${renamed}` }).click();
+      await expect(edited).toHaveCount(0);
+    });
+
+    test("a Splunk field that is not a plain name is refused on the form", async ({ page }) => {
+      await page.goto("/detection-rules?tab=splunk");
+      await page.getByRole("button", { name: "Manual rule" }).click();
+      await page.getByLabel("Name", { exact: true }).fill(`E2E splunk bad ${stamp}`);
+      await page.getByLabel("Condition 1 field").fill("a | outputlookup x");
+      await page.getByLabel("Condition 1 value").fill("1");
+      await page.getByRole("button", { name: "Save as draft" }).click();
+      await expect(page.getByText("Use a Splunk field name")).toBeVisible();
     });
 
     test("a viewer cannot reach the page at all", async ({ browser, baseURL }) => {

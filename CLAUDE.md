@@ -334,3 +334,9 @@ Keep entries short. Newest entries go at the bottom.
 - Gotcha: the Bash tool's heredoc halved a backslash inside a regex in `schema.ts` (the unit test caught it); write regex-bearing files with the Write tool.
 - Validated: lint, typecheck, format, 918 unit tests, all SQL tests, `api:smoke` 464/464. Not verified against a real Splunk. **Committed locally; the migration is NOT pushed to the hosted project and nothing is deployed** (it needs `supabase db push` with a Supabase token, then the code push).
 - Next: step 3 (UI: Wazuh/Splunk switch and a spec-driven form on the Detection rules page), step 4 (Splunk ingest), step 5 (Splunk lab VM and the apply script), step 6 (docs, deploy).
+
+### 2026-10-06 (session 12, continued — step 3: Splunk rules tab)
+
+- User replied "kec" to the prompt asking for step 3. Added the "Splunk rules" tab to `/detection-rules`: `src/components/detection-rules/siem-rules-manager.tsx` (shared workflow, per-SIEM `SIEM_UI` entry) and `splunk-rule-form.tsx` (spec-driven form); the page's tab, description and `SplunkTab` in `src/app/(app)/detection-rules/page.tsx`. No new dependency, no schema change.
+- Validated: lint, typecheck, format, 918 unit tests, E2E operations + accessibility 57/57 (two new Splunk tests; the Splunk tab is in the axe pass), screenshots of the form and the generated stanza reviewed, no leftover rows. Committed locally; still not pushed or deployed.
+- Next: step 4 (Splunk ingest: adapter, `ingest:splunk` scope, integration row, `POST /api/ingest/splunk`), then 5 (Splunk lab VM, apply script) and 6 (docs, deploy; the migration needs `supabase db push`).

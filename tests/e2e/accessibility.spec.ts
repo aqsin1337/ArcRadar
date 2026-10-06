@@ -51,6 +51,7 @@ test.describe("signed in as admin", () => {
     "/settings",
     "/profile",
     "/detection-rules",
+    "/detection-rules?tab=splunk",
     "/detection-rules?tab=severity",
     "/response-actions",
   ];
