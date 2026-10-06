@@ -205,6 +205,7 @@ const CONF_KEYS = new Set([
   "alert.suppress.fields",
   "action.arcradar_forward",
   "action.arcradar_forward.param.rule_key",
+  "action.arcradar_forward.param.name",
   "action.arcradar_forward.param.severity",
   "action.arcradar_forward.param.mitre",
 ]);
@@ -274,6 +275,7 @@ function renderSplunkRule(rule: SiemRuleDefinition): RenderedRuleFile {
   lines.push(
     `action.arcradar_forward = 1`,
     `action.arcradar_forward.param.rule_key = ${rule.rule_key}`,
+    `action.arcradar_forward.param.name = ${rule.name}`,
     `action.arcradar_forward.param.severity = ${rule.severity}`,
   );
   if (rule.mitre_ids.length > 0) {

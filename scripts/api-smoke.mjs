@@ -2333,6 +2333,132 @@ async function main() {
     leftovers.json?.data?.pagination,
   );
 
+  section("Ingest: Splunk alerts");
+  {
+    const splunkUrl = "/api/ingest/splunk";
+    const splunkMarker = `smoke-splunk-${stamp}`;
+    const splunkItem = (n, overrides = {}) => ({
+      sid: `${splunkMarker}-${n}`,
+      search_name: "arcradar_smoke",
+      results_link: "https://splunk.example/app/search/@go?sid=x",
+      server_host: "splunk-smoke",
+      result: {
+        _time: String(Math.floor(Date.now() / 1000) - n),
+        host: splunkMarker,
+        Source_Network_Address: "203.0.113.178",
+        count: String(n),
+      },
+      configuration: {
+        rule_key: "smoke",
+        name: `Smoke splunk alert ${stamp}`,
+        severity: "high",
+        mitre: "T1110",
+      },
+      ...overrides,
+    });
+
+    const made = await call(admin.jar, "POST", "/api/api-keys", {
+      body: { name: `Smoke splunk key ${stamp}`, scopes: ["ingest:splunk"], expires_in_days: 7 },
+    });
+    const splunkKey = made.json?.data?.key;
+    const splunkKeyId = made.json?.data?.api_key?.id;
+    check(
+      "an administrator makes an ingest:splunk key (201)",
+      made.status === 201 && keyPattern.test(splunkKey ?? ""),
+      made.json?.error,
+    );
+
+    const noKey = await call(null, "POST", splunkUrl, { body: { alerts: [splunkItem(1)] } });
+    check("no key is the same 401 as everywhere", noKey.status === 401, noKey.status);
+    const wrongScope = await call(null, "POST", "/api/ingest/wazuh", {
+      body: { alerts: [] },
+      headers: bearer(splunkKey),
+    });
+    check(
+      "a Splunk key does not open the Wazuh endpoint (403)",
+      wrongScope.status === 403,
+      wrongScope.status,
+    );
+
+    const sent = await call(null, "POST", splunkUrl, {
+      body: { alerts: [splunkItem(1), splunkItem(2), "junk", { sid: "x" }] },
+      headers: bearer(splunkKey),
+    });
+    check(
+      "two valid items are stored and two bad ones listed as rejected (200)",
+      sent.status === 200 &&
+        sent.json?.data?.received === 4 &&
+        sent.json?.data?.events_created === 2 &&
+        sent.json?.data?.alerts_created === 2 &&
+        sent.json?.data?.rejected?.length === 2,
+      sent.json,
+    );
+    const again = await call(null, "POST", splunkUrl, {
+      body: { alerts: [splunkItem(1), splunkItem(2)] },
+      headers: bearer(splunkKey),
+    });
+    check(
+      "sending them again changes nothing (duplicates)",
+      again.status === 200 &&
+        again.json?.data?.duplicates === 2 &&
+        again.json?.data?.events_created === 0,
+      again.json,
+    );
+    const empty = await call(null, "POST", splunkUrl, {
+      body: { alerts: [] },
+      headers: bearer(splunkKey),
+    });
+    check("an empty batch is 422", empty.status === 422, empty.status);
+
+    const found = await call(
+      admin.jar,
+      "GET",
+      `/api/alerts?source=splunk&q=${encodeURIComponent(`Smoke splunk alert ${stamp}`)}`,
+    );
+    const alert = found.json?.data?.items?.[0];
+    check(
+      "the alert is listed with source splunk, the saved severity and the MITRE technique; the identical second one is linked as its duplicate",
+      found.json?.data?.pagination?.total === 1 &&
+        alert?.severity === "high" &&
+        alert?.technique_ids?.includes("T1110") &&
+        alert?.duplicate_count === 1,
+      found.json?.data,
+    );
+    const withDuplicates = await call(
+      admin.jar,
+      "GET",
+      `/api/alerts?source=splunk&duplicates=show&q=${encodeURIComponent(`Smoke splunk alert ${stamp}`)}`,
+    );
+    check(
+      "both are stored (the duplicate is only hidden by default)",
+      withDuplicates.json?.data?.pagination?.total === 2,
+      withDuplicates.json?.data?.pagination,
+    );
+
+    // Clean-up: only what this run created.
+    await adminRest(
+      "DELETE",
+      `/rest/v1/alerts?source=eq.splunk&source_event_id=like.arcradar_smoke:${splunkMarker}-*`,
+    );
+    await adminRest(
+      "DELETE",
+      `/rest/v1/events?source=eq.splunk&source_event_id=like.arcradar_smoke:${splunkMarker}-*`,
+    );
+    await adminRest("DELETE", `/rest/v1/assets?source=eq.splunk&external_id=eq.${splunkMarker}`);
+    await adminRest("DELETE", "/rest/v1/indicators?value=eq.203.0.113.178");
+    if (splunkKeyId) await adminRest("DELETE", `/rest/v1/api_keys?id=eq.${splunkKeyId}`);
+    const leftovers = await call(
+      admin.jar,
+      "GET",
+      `/api/alerts?source=splunk&duplicates=show&q=${encodeURIComponent(`Smoke splunk alert ${stamp}`)}`,
+    );
+    check(
+      "(cleanup) the Splunk ingest data is removed again",
+      leftovers.json?.data?.pagination?.total === 0,
+      leftovers.json?.data?.pagination,
+    );
+  }
+
   section("Dashboard");
   {
     const overview = await call(viewer.jar, "GET", "/api/dashboard");

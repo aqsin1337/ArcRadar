@@ -4,11 +4,12 @@ import type { Permission } from "@/lib/rbac/permissions";
 export const API_KEY_PREFIX = "arc_";
 
 /** What a key may be used for. Add a scope here when a new machine-facing endpoint arrives. */
-export const API_KEY_SCOPES = ["ingest:wazuh"] as const;
+export const API_KEY_SCOPES = ["ingest:wazuh", "ingest:splunk"] as const;
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 
 export const SCOPE_LABELS: Record<ApiKeyScope, string> = {
   "ingest:wazuh": "Send Wazuh alerts to ArcRadar",
+  "ingest:splunk": "Send Splunk alerts to ArcRadar",
 };
 
 /**
@@ -17,6 +18,7 @@ export const SCOPE_LABELS: Record<ApiKeyScope, string> = {
  */
 export const SCOPE_PERMISSIONS: Record<ApiKeyScope, Permission> = {
   "ingest:wazuh": "events:write",
+  "ingest:splunk": "events:write",
 };
 
 export const MAX_ACTIVE_KEYS_PER_USER = 10;

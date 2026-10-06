@@ -1,6 +1,6 @@
 import type { ServerEnv } from "@/lib/env/server";
 
-/** The provider catalog seeded in migration 20260925100400, plus wazuh (20260927110000) and the
+/** The provider catalog seeded in migration 20260925100400, plus wazuh (20260927110000), splunk (20261006110000) and the
  * five AI providers (20260927130000). */
 export const INTEGRATION_PROVIDERS = [
   "demo",
@@ -12,6 +12,7 @@ export const INTEGRATION_PROVIDERS = [
   "misp",
   "opencti",
   "wazuh",
+  "splunk",
   "abusech",
   "cisa_kev",
   "groq",
@@ -27,8 +28,8 @@ export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
  * it is the one the project ships configured by default. */
 export const AI_PROVIDERS = ["groq", "openai", "anthropic", "deepseek", "ollama"] as const;
 
-/** Which server-side environment variable, if any, a provider needs. `demo` and `wazuh` need none:
- * demo always works, wazuh is configured per API key rather than one shared server secret. Ollama
+/** Which server-side environment variable, if any, a provider needs. `demo`, `wazuh` and `splunk` need none:
+ * demo always works, wazuh and splunk are configured per API key rather than one shared server secret. Ollama
  * is "configured" once its local base URL is set, not an API key. */
 export const PROVIDER_ENV_KEYS: Partial<Record<IntegrationProvider, keyof ServerEnv>> = {
   virustotal: "VIRUSTOTAL_API_KEY",

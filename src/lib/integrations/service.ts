@@ -13,13 +13,14 @@ import type { IntegrationRow } from "./types";
 type RequestLike = { headers: Headers };
 
 /**
- * demo always works with no key; wazuh is configured per API key, not one shared server secret; the
+ * demo always works with no key; wazuh and splunk are configured per API key, not one shared server secret; the
  * public feeds (abuse.ch, CISA KEV) are free and need no key at all.
  */
 function isConfigured(provider: string, env: ServerEnv): boolean {
   if (
     provider === "demo" ||
     provider === "wazuh" ||
+    provider === "splunk" ||
     (FEED_GROUPS as readonly string[]).includes(provider)
   ) {
     return true;

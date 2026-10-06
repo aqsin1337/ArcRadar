@@ -60,6 +60,7 @@ describe("Splunk rule rendering", () => {
         "alert.suppress.fields = Source_Network_Address",
         "action.arcradar_forward = 1",
         "action.arcradar_forward.param.rule_key = 1000",
+        "action.arcradar_forward.param.name = Brute force from one address",
         "action.arcradar_forward.param.severity = high",
         "action.arcradar_forward.param.mitre = T1110",
         "",

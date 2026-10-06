@@ -45,7 +45,7 @@ export default async function IntegrationsPage() {
         </Card>
       )}
       <p className="mt-4 text-xs text-muted">
-        Wazuh is configured per API key rather than one shared secret — see{" "}
+        Wazuh and Splunk are configured per API key rather than one shared secret — see{" "}
         <Link href="/api-keys" className="underline underline-offset-2">
           API keys
         </Link>

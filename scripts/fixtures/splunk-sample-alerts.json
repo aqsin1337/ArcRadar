@@ -1,0 +1,36 @@
+[
+  {
+    "sid": "scheduler__admin__arcradar_rules__RMD5sample1_at_1__sample",
+    "search_name": "arcradar_1001",
+    "results_link": "https://sample-splunk.example/app/search/@go?sid=sample1",
+    "server_host": "sample-splunk",
+    "result": {
+      "host": "SAMPLE-WIN10",
+      "Source_Network_Address": "203.0.113.45",
+      "count": "7"
+    },
+    "configuration": {
+      "rule_key": "1001",
+      "name": "Sample: 5 failed logons from one address",
+      "severity": "high",
+      "mitre": "T1110"
+    }
+  },
+  {
+    "sid": "scheduler__admin__arcradar_rules__RMD5sample2_at_1__sample",
+    "search_name": "arcradar_1002",
+    "results_link": "https://sample-splunk.example/app/search/@go?sid=sample2",
+    "server_host": "sample-splunk",
+    "result": {
+      "host": "SAMPLE-WIN10",
+      "CommandLine": "powershell.exe -NoP -Enc SQBFAFgA",
+      "Image": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+    },
+    "configuration": {
+      "rule_key": "1002",
+      "name": "Sample: encoded PowerShell command",
+      "severity": "critical",
+      "mitre": "T1059.001"
+    }
+  }
+]

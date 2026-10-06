@@ -20,7 +20,10 @@ export const MAX_DESCRIPTION_LENGTH = 1000;
 export const RECEIVING_WITHIN_MINUTES = 15;
 
 /** The telemetry sources ArcRadar knows how to receive, shown even before their first event. */
-export const TELEMETRY_SOURCES = [{ id: "wazuh", name: "Wazuh" }] as const;
+export const TELEMETRY_SOURCES = [
+  { id: "wazuh", name: "Wazuh" },
+  { id: "splunk", name: "Splunk" },
+] as const;
 export type TelemetrySourceId = (typeof TELEMETRY_SOURCES)[number]["id"];
 
 /** Wazuh rule levels are 0-15. */

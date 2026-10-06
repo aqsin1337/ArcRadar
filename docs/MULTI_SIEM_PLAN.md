@@ -1,6 +1,6 @@
 # Multi-SIEM plan: Splunk first, pluggable for the rest
 
-Status: **steps 1-3 built (2026-10-06)**; steps 4-6 not started (decision 32 in `ARCRADAR_PROGRESS.md`).
+Status: **steps 1-4 built (2026-10-06)**; steps 5-6 not started (decision 32 in `ARCRADAR_PROGRESS.md`).
 
 Goal: ArcRadar is not only a Wazuh companion. The same two abilities work for Splunk, and a third SIEM
 (QRadar, Sentinel, Elastic) is a new small module, not a rewrite:
@@ -92,8 +92,12 @@ the API key scope, and `ingest_telemetry()` unchanged (it already takes normaliz
    `SIEM_UI` entry for the form, the badges and the file label) and `SplunkRuleForm` (index, sourcetype,
    schedule, conditions, "only when it repeats" with count, window and group-by). The preview shows the
    generated `savedsearches.conf` stanza. A new SIEM adds one form component and one `SIEM_UI` entry.
-4. **Splunk ingest.** Adapter, scope, integration row, `POST /api/ingest/splunk`, fictional sample
-   (`ingest:sample` option), tests, smoke, API docs.
+4. **Splunk ingest (done).** `POST /api/ingest/splunk`, scope `ingest:splunk`, `SplunkSource` adapter
+   (`src/lib/telemetry/splunk.ts`), migration `20261006110000` (the `splunk` integration row and `ingest_telemetry()`
+   accepting that source; the function body is otherwise the Phase 6b one), sample file and
+   `npm run ingest:sample -- --siem splunk`, unit tests, a SQL test with a mutation check, smoke checks. Rendered
+   Splunk files now carry `action.arcradar_forward.param.name` so the alert gets the rule's name as its title.
+   The Splunk-side custom alert action that builds these requests is step 5.
 5. **Splunk lab.** Splunk Enterprise (free trial, 500 MB/day) in its own VMware VM, the apply script,
    the webhook alert action; end-to-end proof: draft in ArcRadar, push, Splunk loads it, an event fires
    it, the alert shows up in ArcRadar.

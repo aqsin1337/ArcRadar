@@ -90,7 +90,7 @@ export default async function TelemetryPage({ searchParams }: PageProps<"/teleme
               icon: Activity,
               title: "No events yet",
               description:
-                "Events appear here when a sensor delivers them. Point a Wazuh Manager at ArcRadar to start.",
+                "Events appear here when a sensor delivers them. Point a Wazuh Manager or a Splunk server at ArcRadar to start.",
             }}
           >
             <EventTable items={events.items} state={query} />

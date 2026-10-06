@@ -441,18 +441,23 @@ describe("source health", () => {
     expect(statusOf({ origin: "demo", last_received_at: minutesAgo(0) }, NOW)).toBe("demo");
   });
 
-  it("always lists the Wazuh connector, even before its first event", () => {
+  it("always lists the Wazuh and Splunk connectors, even before their first event", () => {
     const cards = buildSourceCards([], NOW);
-    expect(cards).toEqual([
-      expect.objectContaining({
-        id: "wazuh",
-        name: "Wazuh",
-        status: "never",
-        origin: null,
-        events_total: 0,
-        last_received_at: null,
-      }),
-    ]);
+    expect(cards).toEqual(
+      [
+        { id: "wazuh", name: "Wazuh" },
+        { id: "splunk", name: "Splunk" },
+      ].map(({ id, name }) =>
+        expect.objectContaining({
+          id,
+          name,
+          status: "never",
+          origin: null,
+          events_total: 0,
+          last_received_at: null,
+        }),
+      ),
+    );
   });
 
   it("puts live connectors first, then other live sources, then the demo feeds by name", () => {
@@ -467,6 +472,7 @@ describe("source health", () => {
     );
     expect(cards.map((card) => `${card.id}:${card.status}`)).toEqual([
       "wazuh:quiet",
+      "splunk:never",
       "other-sensor:receiving",
       "demo-edr:demo",
       "demo-idp:demo",
@@ -484,6 +490,7 @@ describe("source health", () => {
     const cards = buildSourceCards([health({ source: "wazuh", origin: "demo" })], NOW);
     expect(cards.map((card) => `${card.id}:${card.status}:${card.origin}`)).toEqual([
       "wazuh:never:null",
+      "splunk:never:null",
       "wazuh:demo:demo",
     ]);
   });

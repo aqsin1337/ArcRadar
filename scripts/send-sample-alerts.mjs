@@ -5,6 +5,7 @@
 //   npm run ingest:sample -- --url http://localhost:3000 --key arc_...
 //   ARCRADAR_URL=... ARCRADAR_INGEST_KEY=... npm run ingest:sample
 //   npm run ingest:sample -- --replay        # send the same alerts (same ids) again: nothing new is created
+//   npm run ingest:sample -- --siem splunk   # the Splunk samples, through /api/ingest/splunk (needs an ingest:splunk key)
 //
 // Each run gives the alerts fresh ids and the current time, so running it twice creates twice as much;
 // --replay reuses the ids of the previous run (kept in a temp file) to show that a resend is harmless.
@@ -33,6 +34,9 @@ async function main() {
   );
   const key = option("key") ?? process.env.ARCRADAR_INGEST_KEY;
   const replay = args.includes("--replay");
+  const siem = option("siem") ?? "wazuh";
+  if (siem !== "wazuh" && siem !== "splunk")
+    return fail(`Unknown --siem ${siem} (wazuh or splunk).`);
   if (!key) {
     return fail(
       "Give the API key with --key arc_... or ARCRADAR_INGEST_KEY (make one with: npm run apikey:create).",
@@ -40,9 +44,9 @@ async function main() {
   }
 
   const samples = JSON.parse(
-    readFileSync(new URL("./fixtures/wazuh-sample-alerts.json", import.meta.url), "utf8"),
+    readFileSync(new URL(`./fixtures/${siem}-sample-alerts.json`, import.meta.url), "utf8"),
   );
-  const memory = join(tmpdir(), "arcradar-sample-alert-ids.json");
+  const memory = join(tmpdir(), `arcradar-sample-alert-ids-${siem}.json`);
 
   let ids;
   if (replay && existsSync(memory)) {
@@ -54,14 +58,23 @@ async function main() {
   }
 
   const now = Date.now();
-  const alerts = samples.map((sample, index) => ({
-    ...sample,
-    id: ids[index] ?? `${Math.floor(now / 1000)}.${1000001 + index}`,
-    // the newest last, a minute apart, ending now
-    timestamp: wazuhTime(new Date(now - (samples.length - 1 - index) * 60_000)),
-  }));
+  const alerts = samples.map((sample, index) => {
+    const at = new Date(now - (samples.length - 1 - index) * 60_000); // the newest last, a minute apart, ending now
+    if (siem === "splunk") {
+      return {
+        ...sample,
+        sid: `${sample.sid}.${ids[index]}`,
+        result: { ...sample.result, _time: String(Math.floor(at.getTime() / 1000)) },
+      };
+    }
+    return {
+      ...sample,
+      id: ids[index] ?? `${Math.floor(now / 1000)}.${1000001 + index}`,
+      timestamp: wazuhTime(at),
+    };
+  });
 
-  const response = await fetch(`${base}/api/ingest/wazuh`, {
+  const response = await fetch(`${base}/api/ingest/${siem}`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
     body: JSON.stringify({ alerts }),
@@ -85,7 +98,7 @@ async function main() {
       `assets created ${data.assets_created}, indicators created ${data.indicators_created}, rejected ${data.rejected.length}`,
   );
   for (const item of data.rejected) console.log(`  rejected #${item.index}: ${item.reason}`);
-  console.log(`Open ${base}/telemetry and ${base}/alerts?source=wazuh to see them.`);
+  console.log(`Open ${base}/telemetry and ${base}/alerts?source=${siem} to see them.`);
 }
 
 await main();

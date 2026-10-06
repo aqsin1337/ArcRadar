@@ -45,8 +45,8 @@ export default async function ApiKeysPage() {
             Keys that send data in
           </h2>
           <p className="text-sm text-muted">
-            A Wazuh Manager or another machine uses one of these to send data to ArcRadar. A key is
-            shown once, when it is made; ArcRadar keeps only its hash.
+            A Wazuh Manager, a Splunk server or another machine uses one of these to send data to
+            ArcRadar. A key is shown once, when it is made; ArcRadar keeps only its hash.
           </p>
         </div>
         {scopes.length === 0 ? (

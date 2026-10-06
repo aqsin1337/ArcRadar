@@ -88,6 +88,7 @@ Lists return `{ items, pagination: { page, page_size, total, total_pages } }` an
 | DELETE           | `/api/investigations/:id/checklist/:itemId`                  | `investigations:write`           | Removes an item                                                                                                                                                                                                                         |
 | GET              | `/api/mitre`, `/api/mitre/:id`                               | `threat_intel:read`              | The ATT&CK matrix with what your alerts named; one technique (`T1566`) with the alerts that name it; see "MITRE ATT&CK"                                                                                                                 |
 | POST             | `/api/ingest/wazuh`                                          | API key `ingest:wazuh`           | A Wazuh Manager pushes alerts; no session, no cookies; see "Telemetry ingestion"                                                                                                                                                        |
+| POST             | `/api/ingest/splunk`                                         | API key `ingest:splunk`          | A Splunk server pushes triggered saved-search results; same behavior as the Wazuh endpoint; see "Splunk ingestion"                                                                                                                      |
 | GET              | `/api/api-keys`                                              | `api_keys:manage_own`            | Your keys (an administrator sees every key); never the key itself or its hash                                                                                                                                                           |
 | POST             | `/api/api-keys`                                              | `api_keys:manage_own`            | `{ name, scopes, expires_in_days? }`; the key is in the response **once**; the `ingest:wazuh` scope needs an administrator                                                                                                              |
 | DELETE           | `/api/api-keys/:id`                                          | `api_keys:manage_own`            | Revokes a key (yours, or any for an administrator); revoking twice is harmless                                                                                                                                                          |
@@ -155,7 +156,7 @@ refused, the same posture `writeAuditLog` already takes for audit writes.
 | `authByIp`         | 30 / 5 minutes | Caller's IP      | `POST /api/auth/{login,signup,forgot-password}` (matches Supabase Auth's own `sign_in_sign_ups` limit, `supabase/config.toml` — a second, independent layer in front of it, not a stricter one) |
 | `aiByUser`         | 30 / hour      | Signed-in caller | `POST /api/{alerts,investigations,indicators}/:id/ai` (a real, metered cost per call)                                                                                                           |
 | `alertWriteByUser` | 60 / minute    | Signed-in caller | `POST /api/alerts` (every insert also runs the `alerts_dedup_and_rules` trigger)                                                                                                                |
-| `ingestByKey`      | 120 / minute   | The API key's id | `POST /api/ingest/wazuh` (generous — a real sensor delivers steadily; the cap catches a misbehaving or compromised key)                                                                         |
+| `ingestByKey`      | 120 / minute   | The API key's id | `POST /api/ingest/wazuh` and `/api/ingest/splunk` (generous — a real sensor delivers steadily; the cap catches a misbehaving or compromised key)                                                |
 
 None of these are admin-configurable, the same narrowing decision Phase 10 made for the dedup window: a
 portfolio deployment on free-tier quotas needs a floor, not a dial.
@@ -553,6 +554,20 @@ default; rate limited, `feedImportByUser`). Downloads the public feeds now and a
 `{ feed, group, status: ok | failed | disabled, fetched, created, updated, untouched, skipped, error? }`. A
 group an administrator paused on the Integrations page is `disabled`; one feed failing does not stop the
 others (`error` is a short, safe reason). Audited as `feeds.imported`. Nothing runs on a timer: feeds are imported only when an administrator presses Import now.
+
+**Splunk ingestion.** `POST /api/ingest/splunk  { "alerts": [ { sid, search_name, result, results_link?, server_host?, configuration? }, ... ] }`
+takes 1 to 100 items, authenticated by an API key with the `ingest:splunk` scope (it needs the same permission,
+`events:write`, so administrators issue it; a Splunk key does not open the Wazuh endpoint, `403`). Each item is one
+result of an ArcRadar-written saved search that triggered. `sid`, `search_name`, `results_link` and `result` are
+what Splunk's own webhook action sends; `configuration` carries the saved search's parameters
+(`rule_key`, `name`, `severity` low to critical, `mitre` as a comma list). It goes through the same `ingestRoute`,
+`ingest_telemetry('splunk', ...)` and rate limit as Wazuh: every item becomes an event and an alert (a Splunk
+alert is already a triggered one), the `host` field becomes an asset, public IPs, hashes and URLs in the result
+become indicators (verdict unknown), and the new indicators are researched afterwards exactly as for Wazuh. The event
+id is `<search_name>:<sid>:<digest of the result row>`, so a retry is a duplicate and two rows of one search run
+are two events; identical alerts within an hour link as duplicates through the usual deduplication trigger. Without
+a parsable `_time` the time of receipt is used. An unusable item is listed in `rejected`. Fictional samples:
+`npm run ingest:sample -- --siem splunk`.
 
 **Research on arrival.** When a Wazuh delivery (`POST /api/ingest/wazuh`) creates alerts, the new indicators in them (public IPs, domains, URLs, file hashes) are researched at the live providers that are set up and switched on, right after the response is sent (`after()`, so the sender never waits): the worst verdict any provider reached, a confidence and a summary are recorded on the indicator (`researched_at` says when). At most 4 indicators per delivery (VirusTotal's free plan allows 4 requests a minute), each only once (`researched_at` is null until then; providers that all failed leave it null so a later delivery retries; providers that all answered "unknown to me" still count as researched), never a private or reserved address, never an indicator somebody tracks as their own (local or demo), and never at all when no provider is configured. Audited as `indicator.researched` (`trigger: ingest`, the providers' outcomes, never the values).
 
