@@ -3297,6 +3297,130 @@ async function main() {
     }
   }
 
+  section("SIEM rules (Splunk, detection-as-code)");
+  {
+    const spec = {
+      index: "main",
+      sourcetype: "WinEventLog:Security",
+      conditions: [{ field: "EventCode", op: "equals", value: "4625" }],
+      threshold: { count: 5, window_minutes: 5, by: ["Source_Network_Address"] },
+      schedule: "every_5_minutes",
+    };
+    const body = {
+      name: `Smoke splunk rule ${stamp}`,
+      description: "Created by the smoke test.",
+      severity: "high",
+      mitre_ids: ["T1110"],
+      spec,
+    };
+
+    for (const [label, who] of [
+      ["a viewer", viewer],
+      ["an analyst", analyst],
+    ]) {
+      const listed = await call(who.jar, "GET", "/api/siem-rules/splunk");
+      check(`${label} cannot list Splunk rules (403)`, listed.status === 403, listed.json);
+      const created = await call(who.jar, "POST", "/api/siem-rules/splunk", { body });
+      check(`${label} cannot create a Splunk rule (403)`, created.status === 403, created.json);
+    }
+
+    const unknown = await call(admin.jar, "GET", "/api/siem-rules/qradar");
+    check("an unknown SIEM is 404", unknown.status === 404, unknown.json);
+    const injectedField = await call(admin.jar, "POST", "/api/siem-rules/splunk", {
+      body: {
+        ...body,
+        spec: { ...spec, conditions: [{ field: "a | outputlookup x", op: "equals", value: "1" }] },
+      },
+    });
+    check("SPL in a field name is refused (422)", injectedField.status === 422, injectedField.json);
+    const unsafe = await call(admin.jar, "POST", "/api/siem-rules/splunk", {
+      body: {
+        ...body,
+        spec: { ...spec, conditions: [{ field: "a", op: "regex", value: "(a+)+" }] },
+      },
+    });
+    check("an unsafe regex is refused (422)", unsafe.status === 422);
+    const extraKey = await call(admin.jar, "POST", "/api/siem-rules/splunk", {
+      body: { ...body, spec: { ...spec, search: "| delete" } },
+    });
+    check("an unknown spec key is refused (422)", extraKey.status === 422);
+    const forged = await call(admin.jar, "POST", "/api/siem-rules/splunk", {
+      body: { ...body, origin: "external", status: "pushed" },
+    });
+    check("origin and status are not the client's to set (422)", forged.status === 422);
+
+    const made = await call(admin.jar, "POST", "/api/siem-rules/splunk", { body });
+    const rule = made.json?.data;
+    check(
+      "an admin creates a draft; the server picks the key and renders the file",
+      made.status === 201 &&
+        rule?.status === "draft" &&
+        rule?.siem === "splunk" &&
+        rule?.file?.path === `splunk/arcradar_${rule?.rule_key}.conf` &&
+        rule?.file?.content?.includes(`[arcradar_${rule?.rule_key}]`) &&
+        rule?.file?.content?.includes(
+          "| stats count by Source_Network_Address | where count >= 5",
+        ) &&
+        !rule?.file?.content?.includes("outputlookup"),
+      made.json,
+    );
+    const ruleId = rule?.id;
+
+    if (ruleId) {
+      const listed = await call(admin.jar, "GET", "/api/siem-rules/splunk");
+      check(
+        "the list contains it",
+        listed.status === 200 && listed.json?.data?.some((item) => item.id === ruleId),
+      );
+      const edited = await call(admin.jar, "PATCH", `/api/siem-rules/splunk/${ruleId}`, {
+        body: { severity: "critical" },
+      });
+      check(
+        "an edit regenerates the file",
+        edited.status === 200 && edited.json?.data?.file?.content?.includes("alert.severity = 5"),
+        edited.json,
+      );
+      const keyChange = await call(admin.jar, "PATCH", `/api/siem-rules/splunk/${ruleId}`, {
+        body: { rule_key: "other" },
+      });
+      check("the key cannot be changed (422)", keyChange.status === 422);
+      const pushNoGithub = await call(admin.jar, "POST", `/api/siem-rules/splunk/${ruleId}/push`);
+      check(
+        "pushing without GitHub configured is a clear 503",
+        pushNoGithub.status === 503,
+        pushNoGithub.json,
+      );
+      const rejected = await call(admin.jar, "POST", `/api/siem-rules/splunk/${ruleId}/reject`, {
+        body: { reason: "smoke" },
+      });
+      check(
+        "a draft can be rejected",
+        rejected.status === 200 && rejected.json?.data?.status === "rejected",
+      );
+      const rejectAgain = await call(admin.jar, "POST", `/api/siem-rules/splunk/${ruleId}/reject`, {
+        body: {},
+      });
+      check("a rejected rule cannot be rejected again (409)", rejectAgain.status === 409);
+      const pushRejected = await call(admin.jar, "POST", `/api/siem-rules/splunk/${ruleId}/push`);
+      check("a rejected rule cannot be pushed (409)", pushRejected.status === 409);
+      const removed = await call(admin.jar, "DELETE", `/api/siem-rules/splunk/${ruleId}`);
+      check("a rejected rule can be deleted", removed.status === 200);
+      const gone = await call(admin.jar, "GET", `/api/siem-rules/splunk/${ruleId}`);
+      check("and is then gone (404)", gone.status === 404);
+    }
+
+    const wrongId = await call(admin.jar, "GET", "/api/siem-rules/splunk/not-a-uuid");
+    check("a malformed id is 404", wrongId.status === 404);
+    const shortPrompt = await call(admin.jar, "POST", "/api/siem-rules/splunk/generate", {
+      body: { prompt: "x" },
+    });
+    check("a too-short AI request is refused (422)", shortPrompt.status === 422);
+    const viewerGenerates = await call(viewer.jar, "POST", "/api/siem-rules/splunk/generate", {
+      body: { prompt: "Detect five failed logons from one address." },
+    });
+    check("a viewer cannot ask the AI for a rule (403)", viewerGenerates.status === 403);
+  }
+
   section("Profile");
   {
     const before = await call(viewer.jar, "GET", "/api/auth/me");

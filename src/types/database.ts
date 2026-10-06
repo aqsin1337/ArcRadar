@@ -1347,6 +1347,102 @@ export type Database = {
         };
         Relationships: [];
       };
+      siem_rules: {
+        Row: {
+          ai_model: string | null;
+          ai_prompt: string | null;
+          ai_provider: string | null;
+          changed_since_push: boolean;
+          created_at: string;
+          created_by: string | null;
+          description: string | null;
+          github_commit: string | null;
+          github_path: string | null;
+          id: string;
+          mitre_ids: string[];
+          name: string;
+          origin: Database["public"]["Enums"]["data_origin"];
+          pushed_at: string | null;
+          pushed_by: string | null;
+          reject_reason: string | null;
+          rejected_at: string | null;
+          rule_key: string;
+          severity: string;
+          siem: string;
+          source: string;
+          spec: NonNullable<Json>;
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          ai_model?: string | null;
+          ai_prompt?: string | null;
+          ai_provider?: string | null;
+          changed_since_push?: boolean;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string | null;
+          github_commit?: string | null;
+          github_path?: string | null;
+          id?: string;
+          mitre_ids?: string[];
+          name: string;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          pushed_at?: string | null;
+          pushed_by?: string | null;
+          reject_reason?: string | null;
+          rejected_at?: string | null;
+          rule_key: string;
+          severity: string;
+          siem: string;
+          source: string;
+          spec: NonNullable<Json>;
+          status?: string;
+          updated_at?: string;
+        };
+        Update: {
+          ai_model?: string | null;
+          ai_prompt?: string | null;
+          ai_provider?: string | null;
+          changed_since_push?: boolean;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string | null;
+          github_commit?: string | null;
+          github_path?: string | null;
+          id?: string;
+          mitre_ids?: string[];
+          name?: string;
+          origin?: Database["public"]["Enums"]["data_origin"];
+          pushed_at?: string | null;
+          pushed_by?: string | null;
+          reject_reason?: string | null;
+          rejected_at?: string | null;
+          rule_key?: string;
+          severity?: string;
+          siem?: string;
+          source?: string;
+          spec?: NonNullable<Json>;
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "siem_rules_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "siem_rules_pushed_by_fkey";
+            columns: ["pushed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       tags: {
         Row: {
           color: string | null;

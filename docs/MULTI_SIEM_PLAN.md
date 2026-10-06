@@ -1,6 +1,6 @@
 # Multi-SIEM plan: Splunk first, pluggable for the rest
 
-Status: **plan only, nothing built yet** (decision 32 in `ARCRADAR_PROGRESS.md`).
+Status: **steps 1 and 2 built (2026-10-06)**; steps 3-6 not started (decision 32 in `ARCRADAR_PROGRESS.md`).
 
 Goal: ArcRadar is not only a Wazuh companion. The same two abilities work for Splunk, and a third SIEM
 (QRadar, Sentinel, Elastic) is a new small module, not a rewrite:
@@ -34,24 +34,28 @@ A **dialect** is one module under `src/lib/siem-rules/dialects/<siem>.ts`:
 ```ts
 interface RuleDialect<Spec> {
   siem: string;
-  specSchema: ZodType<Spec>;          // strict, per-field checks (what xml.ts + schema.ts do today)
-  render(rule): { path: string; content: string };  // the file committed to GitHub
-  aiPrompt(): string;                 // teaches the model the spec shape, not the output language
+  specSchema: ZodType<Spec>; // strict, per-field checks (what xml.ts + schema.ts do today)
+  render(rule): { path: string; content: string }; // the file committed to GitHub
+  aiPrompt(): string; // teaches the model the spec shape, not the output language
 }
 ```
 
-Wazuh becomes the first dialect by **moving** `src/lib/wazuh-rules/{schema,xml,constants,prompt}.ts`
-behind that interface; behavior and tests stay identical. Splunk is the second.
+**Changed while building step 1 (2026-10-06):** Wazuh was NOT moved into `siem_rules`. Its rules live in
+`wazuh_rules` with real columns, constraints and trigger statistics, are in production, and moving them
+would put a working feature at risk for no gain. `siem_rules` (migration `20261006100000`) serves every
+SIEM added from now on; the Detection rules page presents Wazuh and the others side by side, and the
+Wazuh module can be folded in later if it ever matters. Rows are identified by a uuid and a per-SIEM
+`rule_key`; the API is `/api/siem-rules/:siem/...`.
 
 ### Splunk spec (structured, no free SPL from anyone)
 
-| Field | Meaning |
-| --- | --- |
-| `index`, `sourcetype` | where to search (validated names) |
-| `conditions[]` | `field` + `contains` / `equals` / `regex` + value (same three ops as Wazuh) |
-| `threshold` | optional: `count >= N` within a window, grouped `by` up to 3 fields |
-| `window` / `schedule` | search time range and cron (bounded choices) |
-| `severity`, `mitre_ids` | stored as the saved search's metadata |
+| Field                   | Meaning                                                                     |
+| ----------------------- | --------------------------------------------------------------------------- |
+| `index`, `sourcetype`   | where to search (validated names)                                           |
+| `conditions[]`          | `field` + `contains` / `equals` / `regex` + value (same three ops as Wazuh) |
+| `threshold`             | optional: `count >= N` within a window, grouped `by` up to 3 fields         |
+| `window` / `schedule`   | search time range and cron (bounded choices)                                |
+| `severity`, `mitre_ids` | stored as the saved search's metadata                                       |
 
 `render()` builds one `savedsearches.conf` stanza from a fixed template (`search index=... | stats count
 by ... | where count>=N`). Only the commands in that template can ever appear. Output file:
@@ -76,12 +80,13 @@ the API key scope, and `ingest_telemetry()` unchanged (it already takes normaliz
 
 ## Steps (each one is shippable and tested on its own)
 
-1. **Generalize, no behavior change.** Migration `siem_rules` + data copy from `wazuh_rules`; dialect
-   interface; Wazuh dialect wraps the existing code; routes keep working (`/api/wazuh-rules` stays as an
-   alias or is replaced by `/api/siem-rules?siem=wazuh`); all existing Wazuh unit, SQL and E2E tests stay
-   green. This is the risky step, so it goes first and alone.
-2. **Splunk dialect.** Spec schema, renderer, AI prompt, unit tests including injection attempts
-   (`| outputlookup` inside a value, quotes, newlines, backticks, macros), DB tests, mutation checks.
+1. **Generic engine (done).** `siem_rules` table, the `RuleDialect` interface and registry, the shared
+   lifecycle (create, AI draft, edit, reject, push, delete, audit, rate limits), routes under
+   `/api/siem-rules/:siem`. Wazuh is untouched, so none of its tests could change.
+2. **Splunk dialect (done, with step 1).** Fixed-template renderer, spec schema,
+   `assertSafeSplunkConf` (only `search`, `regex`, `stats`, `where` can appear), AI prompt, unit tests
+   including injection attempts, DB tests with mutation checks, smoke checks. NOT yet verified against a
+   real Splunk: the escaping of backslashes inside the `regex` command is checked in step 5.
 3. **UI.** The Detection rules page gets a SIEM switch (Wazuh / Splunk); the form is spec-driven per SIEM;
    the preview shows the generated file.
 4. **Splunk ingest.** Adapter, scope, integration row, `POST /api/ingest/splunk`, fictional sample

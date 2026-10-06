@@ -68,6 +68,12 @@ export const AUDIT_ACTIONS = [
   "wazuh_rule.rejected",
   "wazuh_rule.pushed",
   "wazuh_rule.deleted",
+  "siem_rule.created",
+  "siem_rule.generated",
+  "siem_rule.updated",
+  "siem_rule.rejected",
+  "siem_rule.pushed",
+  "siem_rule.deleted",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
