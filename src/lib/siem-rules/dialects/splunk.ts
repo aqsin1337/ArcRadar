@@ -6,11 +6,11 @@ import type { RenderedRuleFile, SiemRuleDefinition } from "../types";
 
 /**
  * Splunk dialect. A rule is stored as structured fields and ArcRadar renders one `savedsearches.conf`
- * stanza from a FIXED template: `search index=... | regex ... [| stats count by ... | where count >= N]`.
+ * stanza from a FIXED template: `index=... | regex ... [| stats count by ... | where count >= N]`.
  * Nothing a caller or the AI writes is ever placed in the file as SPL: values only ever appear inside a
  * quoted, escaped string; index, sourcetype and field names are matched against strict patterns; and the
- * finished search is checked again (`assertSafeSplunkConf`) so only `search`, `regex`, `stats` and `where`
- * can be in it. `| outputlookup`, `| sendalert`, `| script`, `| collect`, `| delete`, `| map`, `| rest` and
+ * finished search is checked again (`assertSafeSplunkConf`): every segment must have exactly the shape the
+ * template produces, so only `regex`, `stats` and `where` can be in it. `| outputlookup`, `| sendalert`, `| script`, `| collect`, `| delete`, `| map`, `| rest` and
  * every other command are impossible by construction, not by a blocklist.
  */
 
@@ -147,7 +147,7 @@ export function splunkConditionPattern(op: SplunkConditionOp, value: string): st
 }
 
 export function buildSplunkSearch(spec: SplunkSpec): string {
-  const head = [`search index=${spec.index}`];
+  const head = [`index=${spec.index}`];
   if (spec.sourcetype) head.push(`sourcetype=${spec.sourcetype}`);
   const parts = [head.join(" ")];
   for (const item of spec.conditions) {
@@ -160,7 +160,19 @@ export function buildSplunkSearch(spec: SplunkSpec): string {
   return parts.join(" | ");
 }
 
-const ALLOWED_COMMANDS = new Set(["search", "regex", "stats", "where"]);
+/**
+ * The only shapes a segment of the search can have. The first is the base search; it is NOT written with
+ * a leading `search` command: in savedsearches.conf Splunk adds that itself, and a second one would turn
+ * the rule into a search for the word "search" (found by running a rule on a real Splunk). The others are
+ * the template's `regex`, `stats` and `where`. Anything else, a subsearch in brackets included, is refused.
+ */
+const FIELD = "[A-Za-z_][A-Za-z0-9_.]{0,79}";
+const SEGMENT_SHAPES = [
+  /^index=[a-z0-9_][a-z0-9_-]{0,59}( sourcetype=[A-Za-z0-9_:./-]{1,80})?$/,
+  new RegExp(`^regex ${FIELD}="(?:[^"\\\\]|\\\\.)*"$`),
+  new RegExp(`^stats count( by ${FIELD}(, ${FIELD}){0,2})?$`),
+  /^where count >= [0-9]{1,4}$/,
+];
 
 /** Splits an SPL pipeline on `|` outside quoted strings. */
 export function splitPipeline(search: string): string[] {
@@ -229,11 +241,12 @@ export function assertSafeSplunkConf(content: string, ruleKey: string): void {
     if (!match || !CONF_KEYS.has(match[1])) throw new Error("Unexpected setting in a Splunk rule.");
     if (match[1] === "search") {
       const [first, ...rest] = splitPipeline(match[2]);
-      if (!first.startsWith("search "))
-        throw new Error("A Splunk rule search must start with search.");
+      if (!SEGMENT_SHAPES[0].test(first)) {
+        throw new Error("A Splunk rule search must start with index=<name>.");
+      }
       for (const segment of rest) {
-        const command = segment.split(/\s+/, 1)[0];
-        if (!ALLOWED_COMMANDS.has(command)) {
+        if (!SEGMENT_SHAPES.slice(1).some((shape) => shape.test(segment))) {
+          const command = segment.split(/\s+/, 1)[0];
           throw new Error(`Command "${command}" is not allowed in a Splunk rule.`);
         }
       }

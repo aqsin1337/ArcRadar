@@ -1,6 +1,6 @@
 # Multi-SIEM plan: Splunk first, pluggable for the rest
 
-Status: **steps 1-4 built (2026-10-06)**; steps 5-6 not started (decision 32 in `ARCRADAR_PROGRESS.md`).
+Status: **steps 1-5 built (2026-10-06)**; step 6 (deploy) not started (decision 32 in `ARCRADAR_PROGRESS.md`).
 
 Goal: ArcRadar is not only a Wazuh companion. The same two abilities work for Splunk, and a third SIEM
 (QRadar, Sentinel, Elastic) is a new small module, not a rewrite:
@@ -98,9 +98,11 @@ the API key scope, and `ingest_telemetry()` unchanged (it already takes normaliz
    `npm run ingest:sample -- --siem splunk`, unit tests, a SQL test with a mutation check, smoke checks. Rendered
    Splunk files now carry `action.arcradar_forward.param.name` so the alert gets the rule's name as its title.
    The Splunk-side custom alert action that builds these requests is step 5.
-5. **Splunk lab.** Splunk Enterprise (free trial, 500 MB/day) in its own VMware VM, the apply script,
-   the webhook alert action; end-to-end proof: draft in ArcRadar, push, Splunk loads it, an event fires
-   it, the alert shows up in ArcRadar.
+5. **Splunk lab (done).** Splunk Enterprise 10.0.2 on its own Ubuntu VM (192.168.218.30), the app and the alert
+   action in `deploy/splunk/`, the apply script, end-to-end proof; see [SPLUNK_INTEGRATION.md](SPLUNK_INTEGRATION.md)
+   ("Verified on the lab"). It found one real bug: a saved search must not start with `search` (fixed, and the
+   safety check now whitelists the exact shape of every segment). Not yet done: the real GitHub hop (a local Git
+   repository stood in) and a Universal Forwarder on the Windows VM as the event source.
 6. **Docs and deploy.** `SPLUNK_INTEGRATION.md`, README, DEMO_SCRIPT additions, migration pushed to the
    hosted project, then the code.
 
