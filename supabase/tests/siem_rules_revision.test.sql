@@ -41,6 +41,32 @@ begin
   if public.siem_rules_revision('splunk') = after_rev then raise exception 'FAIL a second push did not move the revision'; end if;
   if public.siem_rules_revision('qradar') <> '' then raise exception 'FAIL another SIEM saw a revision'; end if;
 
+  -- withdrawing a pushed rule (rejecting it) moves the revision: the SIEM host has to drop it
+  after_rev := public.siem_rules_revision('splunk');
+  update public.siem_rules
+    set status = 'rejected', rejected_at = now() + interval '3 hours', github_path = null
+    where rule_key = 'fxrev1';
+  if public.siem_rules_revision('splunk') = after_rev then
+    raise exception 'FAIL withdrawing a pushed rule did not move the revision';
+  end if;
+
+  -- ... and the revision IS the time of the withdrawal (not merely something different)
+  if public.siem_rules_revision('splunk') <> (select rejected_at::text from public.siem_rules where rule_key = 'fxrev1') then
+    raise exception 'FAIL the revision after a withdrawal is not the withdrawal time';
+  end if;
+
+  -- a rule that was never pushed does not count, even when it is rejected
+  after_rev := public.siem_rules_revision('splunk');
+  perform set_config('request.jwt.claims', json_build_object('sub', 'e8e8e8e8-0000-4000-8000-000000000001', 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  insert into public.siem_rules (siem, rule_key, name, severity, spec, source)
+    values ('splunk', 'fxrev2', 'fxrev never pushed', 'low', '{}', 'manual');
+  update public.siem_rules set status = 'rejected', rejected_at = now() + interval '9 hours' where rule_key = 'fxrev2';
+  reset role;
+  if public.siem_rules_revision('splunk') <> after_rev then
+    raise exception 'FAIL a rejected rule that was never pushed moved the revision';
+  end if;
+
   raise notice 'ok - siem_rules_revision: service-role only, moves on every push and only on a push';
 end $$;
 

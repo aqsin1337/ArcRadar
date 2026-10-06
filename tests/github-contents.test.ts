@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   commitRepoFile,
+  deleteRepoFile,
   getGithubRulesConfig,
   GithubError,
   type GithubRepoConfig,
@@ -184,5 +185,69 @@ describe("commitRepoFile", () => {
       .mockResolvedValueOnce(json(404, {}))
       .mockResolvedValueOnce(json(201, { content: {} }));
     await expect(run(asFetch(fetchImpl))).rejects.toMatchObject({ reason: "bad_response" });
+  });
+});
+
+describe("deleteRepoFile", () => {
+  const params = (fetchImpl: typeof fetch) => ({
+    config,
+    path: "splunk/arcradar_1000.conf",
+    message: "Withdraw",
+    signal: AbortSignal.timeout(1000),
+    fetchImpl,
+  });
+
+  it("looks up the file's sha, then deletes it with that sha on the configured branch", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(json(200, { sha: "blob9", content: "eA==" }))
+      .mockResolvedValueOnce(json(200, { commit: { sha: "del1" } }));
+    expect(await deleteRepoFile(params(fetchImpl))).toEqual({
+      commitSha: "del1",
+      alreadyGone: false,
+    });
+    const [url, init] = fetchImpl.mock.calls[1];
+    expect(String(url)).toBe(
+      "https://api.github.com/repos/aqsin1337/wazuh_rules/contents/splunk/arcradar_1000.conf",
+    );
+    expect(init.method).toBe("DELETE");
+    expect(JSON.parse(init.body)).toEqual({ message: "Withdraw", sha: "blob9", branch: "main" });
+    expect(init.headers.authorization).toBe("Bearer ghp_secret_token_value");
+  });
+
+  it("treats a file that is not there as already gone, and deletes nothing", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(json(404, {}));
+    expect(await deleteRepoFile(params(fetchImpl))).toEqual({ commitSha: null, alreadyGone: true });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [401, "auth"],
+    [403, "auth"],
+    [409, "conflict"],
+    [422, "conflict"],
+    [500, "unavailable"],
+  ] as const)(
+    "maps a %s on the delete to %s without leaking GitHub's text",
+    async (status, reason) => {
+      const fetchImpl = vi
+        .fn()
+        .mockResolvedValueOnce(json(200, { sha: "blob9" }))
+        .mockResolvedValueOnce(json(status, { message: "secret detail ghp_secret_token_value" }));
+      const error = await deleteRepoFile(params(fetchImpl)).catch((e) => e);
+      expect(error).toBeInstanceOf(GithubError);
+      expect(error.reason).toBe(reason);
+      expect(error.message).not.toContain("secret");
+    },
+  );
+
+  it("refuses an answer that names no sha or no commit", async () => {
+    const noSha = vi.fn().mockResolvedValueOnce(json(200, { content: "x" }));
+    expect(await deleteRepoFile(params(noSha)).catch((e) => e.reason)).toBe("bad_response");
+    const noCommit = vi
+      .fn()
+      .mockResolvedValueOnce(json(200, { sha: "blob9" }))
+      .mockResolvedValueOnce(json(200, { content: null }));
+    expect(await deleteRepoFile(params(noCommit)).catch((e) => e.reason)).toBe("bad_response");
   });
 });

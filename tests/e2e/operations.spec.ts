@@ -869,6 +869,12 @@ test.describe("Detection rules and alert deduplication (Phase 10)", () => {
       await expect(panel.getByText("out of date: the rule changed after this test")).toHaveCount(1);
       await expect(card.getByRole("button", { name: "Go live" })).toBeDisabled();
       await expect(card.getByRole("button", { name: "Push as test" })).toHaveCount(0);
+      // a rule that is on GitHub is withdrawn, not rejected; the confirmation explains what happens
+      await card.getByRole("button", { name: "Withdraw" }).click();
+      await expect(
+        card.getByText("Withdrawing deletes its file from the repository"),
+      ).toBeVisible();
+      await expect(card.getByRole("button", { name: "Confirm withdraw" })).toBeDisabled();
     });
 
     test("a Splunk field that is not a plain name is refused on the form", async ({ page }) => {

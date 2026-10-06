@@ -16,7 +16,7 @@ const repo = vi.hoisted(() => ({
 }));
 const catalogRepo = vi.hoisted(() => ({ findCatalog: vi.fn(), storeCatalog: vi.fn() }));
 const aiService = vi.hoisted(() => ({ getAiAvailability: vi.fn(), defaultDeps: vi.fn() }));
-const github = vi.hoisted(() => ({ commitRepoFile: vi.fn() }));
+const github = vi.hoisted(() => ({ commitRepoFile: vi.fn(), deleteRepoFile: vi.fn() }));
 const audit = vi.hoisted(() => vi.fn().mockResolvedValue(true));
 
 vi.mock("@/lib/siem-rules/repository", () => repo);
@@ -26,6 +26,7 @@ vi.mock("@/lib/audit/write", () => ({ writeAuditLog: audit }));
 vi.mock("@/lib/github/contents", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/github/contents")>()),
   commitRepoFile: github.commitRepoFile,
+  deleteRepoFile: github.deleteRepoFile,
 }));
 
 const {
@@ -332,16 +333,95 @@ describe("rejectSiemRule", () => {
     });
   });
 
-  it("refuses a pushed or an already rejected rule", async () => {
-    repo.findSiemRule.mockResolvedValue(rule({ status: "pushed", github_path: "x" }));
-    expect(
-      (await failureOf(rejectSiemRule(admin, "splunk", ID, null, request, deps()))).status,
-    ).toBe(409);
+  it("does not touch GitHub when a draft is rejected", async () => {
+    repo.findSiemRule.mockResolvedValue(rule());
+    await rejectSiemRule(admin, "splunk", ID, null, request, deps());
+    expect(github.deleteRepoFile).not.toHaveBeenCalled();
+    expect(repo.updateSiemRuleRow.mock.calls[0][3]).not.toHaveProperty("github_path");
+  });
+
+  it("refuses a rule that is already rejected", async () => {
     repo.findSiemRule.mockResolvedValue(rule({ status: "rejected" }));
     expect(
       (await failureOf(rejectSiemRule(admin, "splunk", ID, null, request, deps()))).status,
     ).toBe(409);
     expect(repo.updateSiemRuleRow).not.toHaveBeenCalled();
+    expect(github.deleteRepoFile).not.toHaveBeenCalled();
+  });
+
+  describe("a rule that is on GitHub is withdrawn", () => {
+    const pushed = () =>
+      rule({ status: "pushed", mode: "test", github_path: "splunk/arcradar_1000.conf" });
+
+    it("deletes its file from the repository, then rejects it and forgets the path", async () => {
+      repo.findSiemRule.mockResolvedValue(pushed());
+      github.deleteRepoFile.mockResolvedValue({ commitSha: "del123", alreadyGone: false });
+      await rejectSiemRule(admin, "splunk", ID, "not needed", request, deps());
+      const call = github.deleteRepoFile.mock.calls[0][0];
+      expect(call.path).toBe("splunk/arcradar_1000.conf");
+      expect(call.message).toBe("Withdraw Splunk rule 1000: Failed logon");
+      expect(repo.updateSiemRuleRow.mock.calls[0][3]).toMatchObject({
+        status: "rejected",
+        reject_reason: "not needed",
+        github_path: null,
+        changed_since_push: false,
+      });
+      expect(audit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "siem_rule.rejected",
+          metadata: expect.objectContaining({
+            withdrawn: true,
+            path: "splunk/arcradar_1000.conf",
+            commit: "del123",
+            repository: "aqsin1337/wazuh_rules",
+          }),
+        }),
+        request,
+      );
+      expect(JSON.stringify(audit.mock.calls)).not.toContain("ghp_test");
+    });
+
+    it("still rejects when the file is already gone from GitHub", async () => {
+      repo.findSiemRule.mockResolvedValue(pushed());
+      github.deleteRepoFile.mockResolvedValue({ commitSha: null, alreadyGone: true });
+      await rejectSiemRule(admin, "splunk", ID, null, request, deps());
+      expect(repo.updateSiemRuleRow.mock.calls[0][3]).toMatchObject({ status: "rejected" });
+      expect(audit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ withdrawn: true, already_gone: true }),
+        }),
+        request,
+      );
+    });
+
+    it("reports 503 when GitHub is not configured and leaves the rule as it was", async () => {
+      repo.findSiemRule.mockResolvedValue(pushed());
+      const error = await failureOf(
+        rejectSiemRule(admin, "splunk", ID, null, request, deps({ githubConfig: () => null })),
+      );
+      expect(error.status).toBe(503);
+      expect(github.deleteRepoFile).not.toHaveBeenCalled();
+      expect(repo.updateSiemRuleRow).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["auth", 503],
+      ["not_found", 503],
+      ["unavailable", 503],
+      ["timeout", 503],
+      ["conflict", 409],
+      ["rate_limited", 429],
+    ] as const)(
+      "maps a GitHub %s failure to %s and leaves the rule pushed (nothing half done)",
+      async (reason, status) => {
+        repo.findSiemRule.mockResolvedValue(pushed());
+        github.deleteRepoFile.mockRejectedValue(new GithubError(reason, "detail"));
+        const error = await failureOf(rejectSiemRule(admin, "splunk", ID, null, request, deps()));
+        expect(error.status).toBe(status);
+        expect(repo.updateSiemRuleRow).not.toHaveBeenCalled();
+        expect(audit).not.toHaveBeenCalled();
+      },
+    );
   });
 });
 

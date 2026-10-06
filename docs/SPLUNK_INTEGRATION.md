@@ -102,6 +102,14 @@ A GitHub Actions workflow cannot do this job: it runs in GitHub's cloud, which c
 network (a self-hosted runner on that server could, but on a public repository it would let anyone's pull request run code
 there).
 
+## Withdrawing a rule
+
+A rule that is on GitHub (live or in test mode) has a **Withdraw** button. ArcRadar deletes the rule's file from the
+repository and marks the rule rejected; the watcher is woken, the apply script rebuilds the app's saved searches from
+what the repository now holds (so the rule is gone), and Splunk reloads them. The rule stays in ArcRadar as rejected, can be
+edited and pushed again, or deleted. Nothing is ever deleted on the Splunk host by ArcRadar itself: it is the apply script,
+on that host, that follows the repository.
+
 ## Test mode and backtests
 
 A rule can be pushed **in test mode** (the "Push as test" button): the file is loaded by Splunk but is not

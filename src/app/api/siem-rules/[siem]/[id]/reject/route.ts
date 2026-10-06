@@ -9,7 +9,12 @@ export const dynamic = "force-dynamic";
 
 type Params = { siem: string; id: string };
 
-/** POST /api/siem-rules/:siem/:id/reject  { reason? } — a draft becomes rejected and never goes to GitHub. */
+/**
+ * POST /api/siem-rules/:siem/:id/reject  { reason? } — a draft becomes rejected and never goes to GitHub. A rule
+ * that is already on GitHub is WITHDRAWN: its file is deleted from the repository (the SIEM host drops the rule when
+ * it next pulls, within seconds) and the rule becomes rejected; `503` when GitHub is not configured, nothing changes
+ * if GitHub fails.
+ */
 export const POST = protectedRoute<Params>(
   { permissions: ["rules:manage"] },
   async ({ request, auth, params }) => {

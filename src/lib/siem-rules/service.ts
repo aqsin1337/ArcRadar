@@ -6,6 +6,7 @@ import { writeAuditLog } from "@/lib/audit/write";
 import type { AuthClient, AuthContext } from "@/lib/auth/context";
 import {
   commitRepoFile,
+  deleteRepoFile,
   GITHUB_TIMEOUT_MS,
   getGithubRulesConfig,
   GithubError,
@@ -47,6 +48,24 @@ export function defaultSiemRuleDeps(): SiemRuleDeps {
     githubTimeoutMs: GITHUB_TIMEOUT_MS,
     audit: writeAuditLog,
   };
+}
+
+/** What a failed GitHub call means for the caller. Never carries the token or GitHub's own text. */
+function githubFailure(error: unknown, siem: SiemId, id: string, what: string): never {
+  if (!(error instanceof GithubError)) {
+    logError(`siem_rule.${what}_error`, error, { siem, rule: id });
+    throw apiErrors.unavailable("GitHub could not be reached right now. Try again shortly.");
+  }
+  logWarn(`siem_rule.${what}_failed`, { siem, rule: id, reason: error.reason });
+  if (error.reason === "conflict") throw apiErrors.conflict(error.message);
+  if (error.reason === "rate_limited") throw apiErrors.rateLimited();
+  throw apiErrors.unavailable(
+    error.reason === "auth"
+      ? "GitHub refused the token. Check that it can write to the rules repository."
+      : error.reason === "not_found"
+        ? "The rules repository or branch was not found. Check GITHUB_RULES_REPO."
+        : "GitHub could not be reached right now. Try again shortly.",
+  );
 }
 
 const notFound = (siem: SiemId) => apiErrors.notFound(`${SIEM_LABELS[siem]} rule not found.`);
@@ -253,17 +272,51 @@ export async function rejectSiemRule(
   deps = defaultSiemRuleDeps(),
 ): Promise<SiemRule> {
   const current = await requireRule(auth.supabase, siem, id);
-  if (current.status !== "draft") {
-    throw apiErrors.conflict(
-      current.status === "pushed"
-        ? "This rule is already on GitHub, so it cannot be rejected."
-        : "This rule is already rejected.",
-    );
+  if (current.status === "rejected") throw apiErrors.conflict("This rule is already rejected.");
+
+  // A rule that is on GitHub is WITHDRAWN: its file is deleted from the repository, so the SIEM host drops the
+  // rule the next time it pulls (within seconds, it is woken by the change). Nothing here touches the SIEM.
+  let withdrawal: {
+    path: string;
+    commit: string | null;
+    alreadyGone: boolean;
+    repository: string;
+  } | null = null;
+  if (current.status === "pushed") {
+    const config = await deps.githubConfig();
+    if (!config) {
+      throw apiErrors.unavailable(
+        "GitHub is not configured, so the rule's file cannot be removed from the repository. An administrator can save a GitHub token and the rules repository on the API keys page.",
+      );
+    }
+    const path = current.github_path ?? current.file.path;
+    try {
+      const removed = await deleteRepoFile({
+        config,
+        path,
+        message: `Withdraw ${SIEM_LABELS[siem]} rule ${current.rule_key}: ${current.name}`.slice(
+          0,
+          200,
+        ),
+        signal: AbortSignal.timeout(deps.githubTimeoutMs),
+        fetchImpl: deps.fetchImpl,
+      });
+      withdrawal = {
+        path,
+        commit: removed.commitSha,
+        alreadyGone: removed.alreadyGone,
+        repository: `${config.owner}/${config.repo}`,
+      };
+    } catch (error) {
+      githubFailure(error, siem, id, "withdraw");
+    }
   }
+
   const row = await updateSiemRuleRow(auth.supabase, siem, id, {
     status: "rejected",
     rejected_at: new Date().toISOString(),
     reject_reason: reason,
+    ...(withdrawal ? { github_path: null, changed_since_push: false } : {}),
   });
   if (!row) throw notFound(siem);
   await deps.audit(
@@ -272,7 +325,20 @@ export async function rejectSiemRule(
       userId: auth.user.id,
       entityType: "siem_rule",
       entityId: id,
-      metadata: { siem, name: row.name, has_reason: reason !== null },
+      metadata: {
+        siem,
+        name: row.name,
+        has_reason: reason !== null,
+        ...(withdrawal
+          ? {
+              withdrawn: true,
+              path: withdrawal.path,
+              commit: withdrawal.commit,
+              already_gone: withdrawal.alreadyGone,
+              repository: withdrawal.repository,
+            }
+          : {}),
+      },
     },
     request,
   );
@@ -324,20 +390,7 @@ export async function pushSiemRule(
       fetchImpl: deps.fetchImpl,
     });
   } catch (error) {
-    if (!(error instanceof GithubError)) {
-      logError("siem_rule.push_error", error, { siem, rule: id });
-      throw apiErrors.unavailable("GitHub could not be reached right now. Try again shortly.");
-    }
-    logWarn("siem_rule.push_failed", { siem, rule: id, reason: error.reason });
-    if (error.reason === "conflict") throw apiErrors.conflict(error.message);
-    if (error.reason === "rate_limited") throw apiErrors.rateLimited();
-    throw apiErrors.unavailable(
-      error.reason === "auth"
-        ? "GitHub refused the token. Check that it can write to the rules repository."
-        : error.reason === "not_found"
-          ? "The rules repository or branch was not found. Check GITHUB_RULES_REPO."
-          : "GitHub could not be reached right now. Try again shortly.",
-    );
+    githubFailure(error, siem, id, "push");
   }
 
   const row = await updateSiemRuleRow(auth.supabase, siem, id, {

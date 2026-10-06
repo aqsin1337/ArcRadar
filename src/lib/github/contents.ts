@@ -77,7 +77,7 @@ async function readCapped(response: Response): Promise<string> {
 
 type CallOptions = {
   config: GithubRepoConfig;
-  method: "GET" | "PUT";
+  method: "GET" | "PUT" | "DELETE";
   /** Repository-relative file path, for example `rules/arcradar_100120.xml`. */
   path: string;
   query?: Record<string, string>;
@@ -211,4 +211,46 @@ export async function commitRepoFile(params: {
     throw new GithubError("bad_response", "GitHub's answer did not name the commit.");
   }
   return { commitSha: commit.sha, unchanged: false };
+}
+
+export type DeleteResult = { commitSha: string | null; alreadyGone: boolean };
+
+/**
+ * Deletes the file (its current blob sha is looked up first, which the API requires). A file that is not
+ * there is not an error: the goal, that it is gone, is already met.
+ */
+export async function deleteRepoFile(params: {
+  config: GithubRepoConfig;
+  path: string;
+  message: string;
+  signal: AbortSignal;
+  fetchImpl?: typeof fetch;
+}): Promise<DeleteResult> {
+  const { config, path, message, signal, fetchImpl } = params;
+  const existing = await call({
+    config,
+    method: "GET",
+    path,
+    query: { ref: config.branch },
+    signal,
+    fetchImpl,
+  });
+  if (existing.status === 404) return { commitSha: null, alreadyGone: true };
+  const sha = asRecord(existing.json)?.sha;
+  if (typeof sha !== "string") {
+    throw new GithubError("bad_response", "GitHub's answer did not name the file.");
+  }
+  const removed = await call({
+    config,
+    method: "DELETE",
+    path,
+    body: { message, sha, branch: config.branch },
+    signal,
+    fetchImpl,
+  });
+  const commit = asRecord(asRecord(removed.json)?.commit);
+  if (typeof commit?.sha !== "string") {
+    throw new GithubError("bad_response", "GitHub's answer did not name the commit.");
+  }
+  return { commitSha: commit.sha, alreadyGone: false };
 }

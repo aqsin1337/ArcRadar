@@ -324,9 +324,16 @@ export function SiemRulesManager({
       setMessage({ tone: "error", text: result.fieldErrors.reason ?? result.message });
       return;
     }
+    const withdrawn = rule.status === "pushed";
     replace(result.data);
     setRejectingId(null);
     setRejectReason("");
+    if (withdrawn) {
+      setMessage({
+        tone: "success",
+        text: `Rule ${rule.rule_key} was withdrawn: its file was removed from GitHub and Splunk drops the rule within seconds.`,
+      });
+    }
   }
 
   async function remove(rule: SiemRule) {
@@ -527,6 +534,13 @@ export function SiemRulesManager({
 
                       {rejectingId === rule.id ? (
                         <div className="space-y-2">
+                          {rule.status === "pushed" && (
+                            <p className="text-xs text-muted">
+                              The rule is on GitHub and Splunk. Withdrawing deletes its file from
+                              the repository; Splunk removes the rule when it next pulls (within
+                              seconds) and its alerts stop. The rule stays here as rejected.
+                            </p>
+                          )}
                           <TextAreaField
                             id={`${siem}-reject-${rule.id}`}
                             label="Reason (optional)"
@@ -541,10 +555,10 @@ export function SiemRulesManager({
                               variant="danger"
                               size="sm"
                               loading={pending === `reject-${rule.id}`}
-                              disabled={busy}
+                              disabled={busy || (rule.status === "pushed" && !githubReady)}
                               onClick={() => reject(rule)}
                             >
-                              Confirm reject
+                              {rule.status === "pushed" ? "Confirm withdraw" : "Confirm reject"}
                             </Button>
                             <Button
                               type="button"
@@ -615,7 +629,7 @@ export function SiemRulesManager({
                             <Pencil aria-hidden className="size-4" />
                             {rule.status === "rejected" ? "Edit and restore" : "Edit"}
                           </Button>
-                          {rule.status === "draft" && (
+                          {rule.status !== "rejected" && (
                             <Button
                               type="button"
                               variant="danger"
@@ -626,7 +640,7 @@ export function SiemRulesManager({
                                 setRejectingId(rule.id);
                               }}
                             >
-                              Reject
+                              {rule.status === "pushed" ? "Withdraw" : "Reject"}
                             </Button>
                           )}
                           {rule.status !== "pushed" && (
