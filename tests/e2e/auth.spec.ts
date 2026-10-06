@@ -5,11 +5,36 @@ test.describe("signed-out visitor", () => {
   test("the root shows the landing page, with a way to sign in", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("resolved incidents");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("ArcRadar works the case");
     await expect(page).toHaveTitle(/ArcRadar/);
+    // The sections a visitor is promised by the header exist.
+    for (const section of ["how-it-works", "rules", "roles", "security", "setup"]) {
+      await expect(page.locator(`#${section}`), section).toBeVisible();
+    }
     await page.getByRole("main").getByRole("link", { name: "Sign in to the console" }).click();
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
+  });
+
+  test("the logo on the sign-in page goes back to the landing page", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByRole("link", { name: "ArcRadar, back to the home page" }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("ArcRadar works the case");
+  });
+
+  test("the landing page shows each SIEM's rule file in its own tab", async ({ page }) => {
+    await page.goto("/");
+    const tabs = page.getByRole("tablist", { name: "Rule file for each SIEM" });
+    await expect(tabs.getByRole("tab", { name: "Splunk" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByRole("tabpanel")).toContainText("[arcradar_1001]");
+    await tabs.getByRole("tab", { name: "Splunk" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(tabs.getByRole("tab", { name: "Wazuh" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tabpanel")).toContainText('<rule id="100241"');
   });
 
   test("a protected page redirects to sign-in and remembers where the visitor was going", async ({
@@ -68,7 +93,7 @@ test.describe("signed-out visitor", () => {
     page,
   }) => {
     await page.goto("/login");
-    await page.getByRole("button", { name: "Analyst" }).click();
+    await page.getByRole("button", { name: "SOC L2" }).click();
     await expect(page.getByLabel("Email")).toHaveValue("analyst@arcradar.test");
     await expect(page.getByLabel(/^Password/)).toHaveValue(DEMO_PASSWORD);
   });

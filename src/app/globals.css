@@ -213,69 +213,128 @@
   }
 }
 
-/* Landing page only: decorative backdrops and motion. All colors come from the tokens above. */
-@keyframes arcradar-rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
+/*
+ * Landing page only: the radar scope in the hero. One turn of the beam takes 10 seconds, and each
+ * contact brightens as the beam passes it (its delay is its bearing; see hero.tsx). The resting
+ * style of a contact is fully visible, so reduced motion shows a still, readable scope. All colors
+ * come from the tokens above.
+ */
+@keyframes arcradar-contact {
+  0% {
+    scale: 2;
     opacity: 1;
-    transform: translateY(0);
   }
-}
-
-@keyframes arcradar-pulse {
-  0%,
+  14% {
+    scale: 1;
+    opacity: 1;
+  }
   100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
+    scale: 1;
     opacity: 0.45;
-    transform: scale(1.5);
-  }
-}
-
-@keyframes arcradar-flow {
-  to {
-    background-position: 24px 0;
   }
 }
 
 @layer components {
-  .landing-grid {
-    background-image:
+  /*
+   * Range rings that continue from the scope across the hero. A large square centred on the scope
+   * (it sits inside the bezel, behind the scope itself), so the rings stay concentric at any width;
+   * the hero clips it. One ring every 5.3125rem: twice the spacing of the rings inside the scope.
+   */
+  .landing-rings {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 120rem;
+    height: 120rem;
+    translate: -50% -50%;
+    z-index: -1;
+    pointer-events: none;
+    background-image: repeating-radial-gradient(
+      circle closest-side,
+      transparent 0 calc(5.3125rem - 1px),
+      color-mix(in srgb, var(--border) 80%, transparent) calc(5.3125rem - 1px) 5.3125rem
+    );
+    mask-image: radial-gradient(circle closest-side, #000 14%, transparent 62%);
+  }
+
+  /* The ring of tick marks around the scope, one every ten degrees. */
+  .scope-bezel {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 9999px;
+    padding: 0.875rem;
+  }
+  .scope-bezel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: repeating-conic-gradient(
+      from -0.4deg,
+      color-mix(in srgb, var(--muted) 75%, transparent) 0 0.8deg,
+      transparent 0.8deg 10deg
+    );
+    mask-image: radial-gradient(
+      closest-side,
+      transparent calc(100% - 0.5rem),
+      #000 calc(100% - 0.5rem)
+    );
+  }
+
+  .scope {
+    --scope-line: color-mix(in srgb, var(--primary) 30%, transparent);
+    position: relative;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 9999px;
+    border: 1px solid color-mix(in srgb, var(--primary) 55%, transparent);
+    background:
       linear-gradient(
         to right,
-        color-mix(in srgb, var(--border) 55%, transparent) 1px,
-        transparent 1px
+        transparent calc(50% - 0.5px),
+        var(--scope-line) calc(50% - 0.5px) calc(50% + 0.5px),
+        transparent calc(50% + 0.5px)
       ),
       linear-gradient(
         to bottom,
-        color-mix(in srgb, var(--border) 55%, transparent) 1px,
-        transparent 1px
+        transparent calc(50% - 0.5px),
+        var(--scope-line) calc(50% - 0.5px) calc(50% + 0.5px),
+        transparent calc(50% + 0.5px)
+      ),
+      repeating-radial-gradient(
+        circle closest-side,
+        transparent 0 calc(25% - 1px),
+        var(--scope-line) calc(25% - 1px) 25%
+      ),
+      radial-gradient(
+        circle closest-side,
+        color-mix(in srgb, var(--primary) 12%, var(--surface)),
+        var(--surface)
       );
-    background-size: 44px 44px;
-    mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 75%);
   }
-  .landing-glow {
-    background: radial-gradient(
-      ellipse 60% 55% at 50% 0%,
-      color-mix(in srgb, var(--primary) 22%, transparent),
-      transparent 70%
+
+  .scope-sweep {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg 285deg,
+      color-mix(in srgb, var(--primary) 40%, transparent) 360deg
     );
+    animation: arcradar-sweep 10s linear infinite;
   }
-  .landing-rise {
-    animation: arcradar-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  .scope-sweep::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: calc(50% - 0.5px);
+    width: 1px;
+    height: 50%;
+    background: linear-gradient(to top, transparent, var(--primary));
   }
-  .landing-pulse-dot {
-    animation: arcradar-pulse 2s ease-in-out infinite;
-  }
-  .landing-flow {
-    background-image: linear-gradient(to right, var(--primary) 0 12px, transparent 12px 24px);
-    background-size: 24px 2px;
-    background-repeat: repeat-x;
-    animation: arcradar-flow 1.2s linear infinite;
+
+  .scope-contact {
+    animation: arcradar-contact 10s linear infinite;
   }
 }

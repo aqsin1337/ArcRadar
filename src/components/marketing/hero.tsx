@@ -1,38 +1,29 @@
-import {
-  ArrowRight,
-  ArrowUpRight,
-  Bot,
-  CheckCircle2,
-  Circle,
-  Radar,
-  ShieldAlert,
-} from "lucide-react";
 import Link from "next/link";
-import { buttonClasses } from "@/components/ui/button";
-import { Logo } from "@/components/ui/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { GITHUB_URL } from "./links";
+import { buttonClasses } from "@/components/ui/button";
+import { LogoLink } from "@/components/ui/logo";
+import { cn } from "@/lib/cn";
+import { SETUP_GUIDE_URL } from "./links";
 
 const NAV = [
-  { href: "#platform", label: "Platform" },
-  { href: "#pipeline", label: "Pipeline" },
-  { href: "#rules-as-code", label: "Rules as code" },
+  { href: "#how-it-works", label: "How it works" },
+  { href: "#rules", label: "Detection rules" },
+  { href: "#roles", label: "Roles" },
   { href: "#security", label: "Security" },
+  { href: "#setup", label: "Set up" },
 ];
 
 export function LandingHeader() {
   return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-        <Link href="/" aria-label="ArcRadar home">
-          <Logo />
-        </Link>
-        <nav aria-label="Sections" className="hidden items-center gap-1 md:flex">
+        <LogoLink href="/" label="ArcRadar home" />
+        <nav aria-label="Sections" className="hidden items-center lg:flex">
           {NAV.map((item) => (
             <a
               key={item.href}
               href={item.href}
-              className="rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+              className="rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:text-foreground"
             >
               {item.label}
             </a>
@@ -40,19 +31,23 @@ export function LandingHeader() {
         </nav>
         <div className="flex items-center gap-1.5">
           <ThemeToggle />
-          <Link
-            href="/login"
-            className={buttonClasses({
-              variant: "ghost",
-              size: "sm",
-              className: "hidden sm:inline-flex",
-            })}
-          >
-            Sign in
-          </Link>
-          <Link href="/signup" className={buttonClasses({ size: "sm" })}>
-            Get started
-          </Link>
+          {/*
+           * A phone has room for one button, signing in; requesting access is in the hero. The
+           * wrappers do the hiding: a `hidden` on the button itself loses to its own `inline-flex`.
+           */}
+          <span className="sm:hidden">
+            <Link href="/login" className={buttonClasses({ size: "sm" })}>
+              Sign in
+            </Link>
+          </span>
+          <span className="hidden items-center gap-1.5 sm:flex">
+            <Link href="/login" className={buttonClasses({ variant: "ghost", size: "sm" })}>
+              Sign in
+            </Link>
+            <Link href="/signup" className={buttonClasses({ size: "sm" })}>
+              Request access
+            </Link>
+          </span>
         </div>
       </div>
     </header>
@@ -61,236 +56,196 @@ export function LandingHeader() {
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden">
-      <div aria-hidden className="landing-glow absolute inset-0" />
-      <div aria-hidden className="landing-grid absolute inset-0" />
-
-      <div className="relative mx-auto max-w-6xl px-4 pt-16 pb-10 text-center sm:px-6 sm:pt-24">
-        <p
-          className="landing-rise mx-auto inline-flex items-center gap-2 rounded-full border border-tone-brand-border bg-tone-brand-bg px-3.5 py-1.5 text-xs font-medium tracking-wide text-tone-brand-fg"
-          style={{ animationDelay: "0ms" }}
-        >
-          <span className="landing-pulse-dot size-1.5 rounded-full bg-primary" />
-          Incident response · Case management
-          <span className="hidden sm:inline"> · Wazuh-native</span>
-        </p>
-
-        <h1
-          className="landing-rise mx-auto mt-7 max-w-4xl text-4xl leading-[1.05] font-semibold tracking-tight text-balance sm:text-6xl lg:text-7xl"
-          style={{ animationDelay: "80ms" }}
-        >
-          From raw alerts to{" "}
-          <span className="bg-gradient-to-r from-primary to-tone-blue-fg bg-clip-text text-transparent">
-            resolved incidents
-          </span>
-          .
-        </h1>
-
-        <p
-          className="landing-rise mx-auto mt-6 max-w-2xl text-base text-pretty text-muted sm:text-lg"
-          style={{ animationDelay: "160ms" }}
-        >
-          ArcRadar sits beside your SIEM. Telemetry from real endpoints lands here, gets researched
-          at threat-intelligence sources, mapped to MITRE ATT&amp;CK, triaged with AI assistance and
-          tracked to closure. Everything is role-gated and audited, and nothing runs on its own.
-        </p>
-
-        <div
-          className="landing-rise mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
-          style={{ animationDelay: "240ms" }}
-        >
-          <Link
-            href="/login"
-            className={buttonClasses({ size: "lg", className: "w-full sm:w-auto" })}
-          >
-            Sign in to the console
-            <ArrowRight aria-hidden className="size-4" />
-          </Link>
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-            className={buttonClasses({
-              variant: "secondary",
-              size: "lg",
-              className: "w-full sm:w-auto",
-            })}
-          >
-            View source
-            <ArrowUpRight aria-hidden className="size-4" />
-          </a>
+    <section className="relative isolate overflow-hidden border-b border-border">
+      <div className="relative mx-auto grid max-w-6xl gap-14 px-4 pt-14 pb-16 sm:px-6 sm:pt-20 lg:grid-cols-12 lg:items-center lg:gap-10 lg:pt-24 lg:pb-24">
+        <div className="lg:col-span-7">
+          <h1 className="text-[2.6rem] leading-[1.03] font-semibold tracking-[-0.035em] sm:text-6xl lg:text-[4.1rem]">
+            <span className="block text-balance">Your SIEM raises the alert.</span>
+            <span className="block text-balance">ArcRadar works the case.</span>
+          </h1>
+          <p className="mt-6 max-w-xl text-lg/8 text-pretty text-muted">
+            ArcRadar takes alerts from Wazuh and Splunk, looks up the addresses and hashes inside
+            them, places them on the MITRE ATT&amp;CK matrix and gives your analysts a queue, a case
+            file and an audit trail. Detection rules go back the other way, as reviewed files in
+            Git.
+          </p>
+          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+            <Link href="/login" className={buttonClasses({ size: "lg" })}>
+              Sign in to the console
+            </Link>
+            <a
+              href={SETUP_GUIDE_URL}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonClasses({ variant: "secondary", size: "lg" })}
+            >
+              Run your own copy
+            </a>
+          </div>
+          <p className="mt-5 max-w-xl text-sm text-muted">
+            No account yet?{" "}
+            <Link href="/signup" className="font-medium text-primary hover:underline">
+              Request access
+            </Link>
+            . An administrator approves every new account and chooses its role.
+          </p>
         </div>
 
-        <ul
-          className="landing-rise mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted"
-          style={{ animationDelay: "320ms" }}
-          aria-label="Built with"
-        >
-          {[
-            "Wazuh",
-            "MITRE ATT&CK",
-            "VirusTotal",
-            "AbuseIPDB",
-            "AlienVault OTX",
-            "abuse.ch",
-            "CISA KEV",
-          ].map((name) => (
-            <li key={name} className="font-mono tracking-wide">
-              {name}
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div
-        className="landing-rise relative mx-auto max-w-5xl px-4 pb-20 sm:px-6"
-        style={{ animationDelay: "420ms" }}
-      >
-        <ProductPreview />
+        <div className="lg:col-span-5">
+          <Scope />
+        </div>
       </div>
     </section>
   );
 }
 
+/* ------------------------------------------------------------------ scope */
+
+type Contact = {
+  title: string;
+  severity: "Critical" | "High" | "Medium" | "Low";
+  source: string;
+  technique: string;
+  age: string;
+  /** Text color for the severity; the dot is drawn in it. */
+  tone: string;
+  /** Where the contact sits on the scope: distance from the centre is its age. */
+  position: string;
+  /** Minus the time left until the beam reaches this bearing, so the dot lights as it passes. */
+  phase: string;
+  /** Which side of the dot its label sits on, so labels never run into each other or the rim. */
+  label: "left" | "right";
+};
+
 /**
- * A hand-built, illustrative picture of an alert page. It is not a screenshot and shows no real
- * data; it is labelled as illustrative so it can never be mistaken for live intelligence.
+ * Four example alerts. Positions follow bearing and range on the scope (left = 50% + 50%·r·sin θ,
+ * top = 50% − 50%·r·cos θ); the phase is θ/360 of the 10 s turn, minus 10 s.
  */
-function ProductPreview() {
+const CONTACTS: Contact[] = [
+  {
+    title: "Multiple Windows logon failures",
+    severity: "Critical",
+    source: "Wazuh",
+    technique: "T1110",
+    age: "2 min",
+    tone: "text-tone-red-fg",
+    position: "left-[55.2%] top-[42.6%]",
+    phase: "[animation-delay:-9.03s]",
+    label: "right",
+  },
+  {
+    title: "Five failed logons from one address",
+    severity: "High",
+    source: "Splunk",
+    technique: "T1110.001",
+    age: "9 min",
+    tone: "text-tone-orange-fg",
+    position: "left-[30.7%] top-[44.8%]",
+    phase: "[animation-delay:-2.08s]",
+    label: "left",
+  },
+  {
+    title: "Defender real-time protection turned off",
+    severity: "Medium",
+    source: "Wazuh",
+    technique: "T1562.001",
+    age: "41 min",
+    tone: "text-tone-amber-fg",
+    position: "left-[77.3%] top-[59.9%]",
+    phase: "[animation-delay:-6.94s]",
+    label: "left",
+  },
+  {
+    title: "New service installed",
+    severity: "Low",
+    source: "Wazuh",
+    technique: "T1543.003",
+    age: "6 h",
+    tone: "text-tone-blue-fg",
+    position: "left-[25.3%] top-[85.2%]",
+    phase: "[animation-delay:-4.03s]",
+    label: "right",
+  },
+];
+
+/** Range rings, innermost first: how long ago an alert arrived. */
+const RINGS = [
+  { label: "5 min", top: "top-[39%]" },
+  { label: "30 min", top: "top-[26.5%]" },
+  { label: "2 h", top: "top-[14%]" },
+  { label: "24 h", top: "top-[2.5%]" },
+];
+
+/**
+ * The alert queue drawn as a radar scope: the nearer the centre, the newer the alert, and the colour
+ * is its severity. It is an illustration with example values, labelled as one, and the list under it
+ * says the same thing in words for anyone who cannot see the picture.
+ */
+function Scope() {
   return (
-    <figure className="relative">
-      <div
-        aria-hidden
-        className="absolute -inset-x-6 -inset-y-4 -z-10 rounded-[2rem] bg-primary/10 blur-3xl"
-      />
-      <div className="overflow-hidden rounded-2xl border border-border bg-surface text-left shadow-2xl shadow-black/30">
-        <div className="flex items-center gap-2 border-b border-border bg-surface-2 px-4 py-2.5">
-          <span className="size-2.5 rounded-full bg-tone-red-fg/70" />
-          <span className="size-2.5 rounded-full bg-tone-amber-fg/70" />
-          <span className="size-2.5 rounded-full bg-tone-green-fg/70" />
-          <span className="ml-3 truncate rounded-md bg-background px-3 py-1 font-mono text-xs text-muted">
-            arcradar.vercel.app/alerts/…
-          </span>
-        </div>
-
-        <div className="grid gap-px bg-border lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-          <div className="space-y-5 bg-surface p-5 sm:p-6">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-tone-red-border bg-tone-red-bg px-2.5 py-0.5 text-xs font-semibold text-tone-red-fg">
-                <ShieldAlert aria-hidden className="size-3.5" />
-                Critical
+    <figure className="relative mx-auto w-full max-w-md">
+      <div aria-hidden className="scope-bezel mx-auto max-w-[23rem]">
+        <div className="landing-rings" />
+        <div className="scope">
+          <div className="scope-sweep" />
+          {RINGS.map((ring) => (
+            <span
+              key={ring.label}
+              className={cn(
+                "absolute right-1/2 mr-1.5 font-mono text-[10px] leading-none text-muted",
+                ring.top,
+              )}
+            >
+              {ring.label}
+            </span>
+          ))}
+          {CONTACTS.map((contact) => (
+            <span key={contact.title} className={cn("absolute", contact.position)}>
+              <span
+                className={cn(
+                  "scope-contact absolute -top-[5px] -left-[5px] size-2.5 rounded-full bg-current",
+                  contact.tone,
+                  contact.phase,
+                )}
+              />
+              <span
+                className={cn(
+                  "absolute -top-[7px] font-mono text-[11px] leading-none whitespace-nowrap text-foreground",
+                  contact.label === "right" ? "left-3" : "right-3",
+                )}
+              >
+                {contact.technique}
               </span>
-              <span className="rounded-full border border-tone-blue-border bg-tone-blue-bg px-2.5 py-0.5 text-xs font-medium text-tone-blue-fg">
-                Investigating
-              </span>
-              <span className="rounded-full border border-tone-violet-border bg-tone-violet-bg px-2.5 py-0.5 text-xs font-medium text-tone-violet-fg">
-                External · Wazuh
-              </span>
-            </div>
-
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight sm:text-xl">
-                Multiple Windows logon failures
-              </h2>
-              <p className="mt-1 text-sm text-muted">
-                Asset <code>WIN10-LAB</code> · rule <code>60204</code> · 5 events in 4 minutes
-              </p>
-            </div>
-
-            <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-              <PreviewFact label="Technique">
-                <span className="rounded-md border border-tone-brand-border bg-tone-brand-bg px-1.5 py-0.5 font-mono text-xs text-tone-brand-fg">
-                  T1110
-                </span>{" "}
-                Brute Force
-              </PreviewFact>
-              <PreviewFact label="Source address">
-                <code>185.220.101.4</code>
-              </PreviewFact>
-              <PreviewFact label="Researched">
-                <span className="text-tone-red-fg">Malicious</span> · 11/91
-              </PreviewFact>
-            </dl>
-
-            <div className="rounded-xl border border-border bg-background p-4">
-              <p className="flex items-center gap-2 text-xs font-medium tracking-wide text-muted uppercase">
-                <Radar aria-hidden className="size-3.5 text-primary" />
-                Threat intelligence
-              </p>
-              <ul className="mt-3 space-y-2.5 text-sm">
-                <VerdictRow name="VirusTotal" value="11 / 91 engines" width="w-[12%]" />
-                <VerdictRow name="AbuseIPDB" value="confidence 100 / 100" width="w-full" />
-                <VerdictRow name="AlienVault OTX" value="3 pulses" width="w-1/4" />
-              </ul>
-            </div>
-          </div>
-
-          <div className="space-y-4 bg-surface p-5 sm:p-6">
-            <div className="rounded-xl border border-tone-violet-border bg-tone-violet-bg/60 p-4">
-              <p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-tone-violet-fg uppercase">
-                <Bot aria-hidden className="size-4" />
-                AI-generated · analyst-assisted
-              </p>
-              <p className="mt-2.5 text-sm leading-relaxed text-foreground/90">
-                Repeated failed network logons from a known Tor exit node against a single account
-                fit password guessing. No successful logon followed. Severity looks appropriate.
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium tracking-wide text-muted uppercase">
-                Response actions · tracked by hand
-              </p>
-              <ul className="mt-3 space-y-2 text-sm">
-                <ActionRow done>Block the source address at the perimeter</ActionRow>
-                <ActionRow done>Confirm no successful logon after the burst</ActionRow>
-                <ActionRow>Review lockout policy for the account</ActionRow>
-              </ul>
-            </div>
-          </div>
+            </span>
+          ))}
         </div>
       </div>
-      <figcaption className="mt-4 text-center text-xs text-muted">
-        Illustrative interface. Values are examples, not live data.
+
+      <ul className="mt-7 divide-y divide-border border-y border-border">
+        {CONTACTS.map((contact) => (
+          <li key={contact.title} className="flex items-center gap-3 py-2.5">
+            <span
+              aria-hidden
+              className={cn("size-2 shrink-0 rounded-full bg-current", contact.tone)}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{contact.title}</span>
+              <span className="block text-xs text-muted">
+                {contact.severity}, from {contact.source}
+              </span>
+            </span>
+            <code className="hidden text-xs text-muted sm:block">{contact.technique}</code>
+            <span className="w-14 shrink-0 text-right text-xs text-muted tabular-nums">
+              {contact.age}
+              <span className="sr-only"> ago</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <figcaption className="mt-3 text-xs text-muted">
+        An illustration with example values, not live data. Each dot is an alert: the closer to the
+        centre, the newer it is.
       </figcaption>
     </figure>
-  );
-}
-
-function PreviewFact({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <dt className="text-xs text-muted">{label}</dt>
-      <dd className="mt-1 font-medium">{children}</dd>
-    </div>
-  );
-}
-
-function VerdictRow({ name, value, width }: { name: string; value: string; width: string }) {
-  return (
-    <li>
-      <div className="flex items-center justify-between gap-3">
-        <span>{name}</span>
-        <span className="text-xs text-muted">{value}</span>
-      </div>
-      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2">
-        <div className={`h-full rounded-full bg-tone-red-fg ${width}`} />
-      </div>
-    </li>
-  );
-}
-
-function ActionRow({ done, children }: { done?: boolean; children: React.ReactNode }) {
-  const Icon = done ? CheckCircle2 : Circle;
-  return (
-    <li className="flex items-start gap-2.5">
-      <Icon
-        aria-hidden
-        className={
-          done ? "mt-0.5 size-4 shrink-0 text-tone-green-fg" : "mt-0.5 size-4 shrink-0 text-muted"
-        }
-      />
-      <span className={done ? "text-muted line-through decoration-border" : ""}>{children}</span>
-    </li>
   );
 }

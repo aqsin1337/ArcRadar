@@ -2,21 +2,20 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Hero, LandingHeader } from "@/components/marketing/hero";
 import {
-  FinalCta,
-  HonestByDesign,
+  AlertTrace,
+  Connections,
   LandingFooter,
-  Pipeline,
-  Platform,
-  RulesAsCode,
+  Roles,
+  Rules,
   Security,
-  StatsBand,
+  Setup,
 } from "@/components/marketing/sections";
 import { getPageAuth } from "@/lib/auth/session";
 
 export const metadata: Metadata = {
-  title: { absolute: "ArcRadar: incident response and threat monitoring" },
+  title: { absolute: "ArcRadar: the case file for every alert your SIEM raises" },
   description:
-    "Incident-response and case-management platform that complements your SIEM. Wazuh telemetry, threat-intelligence research, MITRE ATT&CK, AI-assisted triage, role-based access and a full audit trail.",
+    "ArcRadar takes alerts from Wazuh and Splunk, researches the indicators inside them, places them on the MITRE ATT&CK matrix and gives analysts a queue, a case file and an audit trail. Detection rules go back to the SIEM as reviewed files in Git.",
 };
 
 /**
@@ -33,13 +32,12 @@ export default async function Home() {
       <LandingHeader />
       <main id="main">
         <Hero />
-        <StatsBand />
-        <Platform />
-        <Pipeline />
-        <RulesAsCode />
+        <Connections />
+        <AlertTrace />
+        <Rules />
+        <Roles />
         <Security />
-        <HonestByDesign />
-        <FinalCta />
+        <Setup />
       </main>
       <LandingFooter />
     </>
