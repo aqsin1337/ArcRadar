@@ -87,7 +87,8 @@ the API key scope, and `ingest_telemetry()` unchanged (it already takes normaliz
    `assertSafeSplunkConf` (only `search`, `regex`, `stats`, `where` can appear), AI prompt, unit tests
    including injection attempts, DB tests with mutation checks, smoke checks. NOT yet verified against a
    real Splunk: the escaping of backslashes inside the `regex` command is checked in step 5.
-3. **UI (done).** The Detection rules page has a "Splunk rules" tab next to "Wazuh rules" and "Severity rules":
+3. **UI (done).** The Detection rules page has a "Splunk rules" tab next to "Wazuh rules" (a third tab,
+   "Severity rules", was removed on 2026-10-19, decision 34):
    `SiemRulesManager` (the shared workflow: manual form, AI draft, edit, reject, push, delete, a per-SIEM
    `SIEM_UI` entry for the form, the badges and the file label) and `SplunkRuleForm` (index, sourcetype,
    schedule, conditions, "only when it repeats" with count, window and group-by). The preview shows the

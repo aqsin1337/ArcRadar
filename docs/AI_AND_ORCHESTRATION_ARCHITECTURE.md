@@ -214,6 +214,10 @@ this is scheduled (see "Open questions").
 
 ## Custom rule prioritization
 
+> **Removed on 2026-10-19 (decision 34 in `docs/ARCRADAR_PROGRESS.md`).** The severity rules below were
+> built in Phase 10 and later dropped at the user's request: the Wazuh and Splunk rules (decisions 30 and 32) already set an alert's severity at the source. Deduplication stays; its trigger is now
+> `alerts_dedup`. This section and the Phase 10 notes below are kept as the record of what was built.
+
 A `detection_rules` table so an admin/analyst can define ArcRadar-side rules that run **inline, at ingest
 time** (there is no background worker to run them later — the constraint from decision 1 still holds):
 
@@ -314,6 +318,8 @@ Matches this plan closely; the differences, all narrowings flagged for the user 
   as designed above. Full account: decision 23 in `docs/ARCRADAR_PROGRESS.md`.
 
 ## What Phase 10 actually built (2026-09-28)
+
+(The detection-rule half was removed on 2026-10-19, decision 34; deduplication below is unchanged.)
 
 Matches this plan closely; the differences, all narrowings flagged for the user to override, are:
 

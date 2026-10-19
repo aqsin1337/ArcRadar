@@ -62,6 +62,7 @@ export const AUDIT_ACTIONS = [
   "response_action.deleted",
   "response_action.attached",
   "response_action.status_changed",
+  // Severity rules were removed on 2026-10-19; kept so older audit entries can still be filtered.
   "detection_rule.created",
   "detection_rule.updated",
   "detection_rule.deleted",

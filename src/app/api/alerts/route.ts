@@ -21,7 +21,7 @@ export const GET = protectedRoute({ permissions: ["alerts:read"] }, async ({ req
  * POST /api/alerts  { title, description?, severity?, indicator_id? }
  * Creates a manual, local alert (needs alerts:write). Its source is `manual`; origin and owner are not
  * accepted from the client. Rate-limited by caller (`alertWriteByUser`): every insert also runs the
- * dedup/detection-rule trigger (`alerts_dedup_and_rules`), so a burst of manual alerts is real work.
+ * deduplication trigger (`alerts_dedup`), so a burst of manual alerts is real work.
  */
 export const POST = protectedRoute(
   {

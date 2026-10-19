@@ -82,7 +82,6 @@ whether it is demo data, typed in by your team, or arrived from an outside sourc
 - One queue for alerts from every source, with a lifecycle (new, acknowledged, investigating, resolved
   or false positive) and an owner.
 - A repeat of the same alert within an hour links to the first one instead of filling the queue.
-- Severity rules you write can raise the severity of matching alerts. They can never lower it.
 - Investigations hold the alerts, indicators, notes, evidence and a checklist for one incident, with a
   history written by the server.
 - Reports are snapshots: generated once, kept as they were, ready to print.
@@ -211,7 +210,7 @@ Other things an administrator sets in the app:
 | **Integrations**    | Switch any provider on or off, choose the active AI provider and model, import feeds |
 | **API keys**        | Make and revoke the keys your SIEM uses to send alerts                               |
 | **Settings**        | Add accounts, approve sign-ups, change roles, disable an account                     |
-| **Detection rules** | Wazuh rules, Splunk rules, and severity rules that run inside ArcRadar               |
+| **Detection rules** | Wazuh and Splunk rules: written by hand or drafted by AI, sent to GitHub             |
 
 ArcRadar starts with none of the optional keys and still works: lookups then answer from a small,
 clearly labelled demo dataset, and the AI buttons stay hidden.

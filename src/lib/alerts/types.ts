@@ -39,8 +39,6 @@ export type AlertDetail = AlertListItem & {
     Row<"events">,
     "id" | "title" | "event_type" | "severity" | "source" | "occurred_at" | "payload"
   > | null;
-  /** The detection rule that last raised this alert's severity, if any (`alerts.matched_rule_id`). */
-  matched_rule: { id: number; name: string } | null;
   /** Set only when this alert is itself a duplicate (`alerts.duplicate_of`). */
   primary_alert: { id: string; title: string; severity: Severity; status: AlertStatus } | null;
   /** Other alerts linked to this one as duplicates; empty unless this is a primary with some. */

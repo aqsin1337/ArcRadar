@@ -111,10 +111,6 @@ Lists return `{ items, pagination: { page, page_size, total, total_pages } }` an
 | POST             | `/api/response-actions`                                      | `investigations:write`           | `{ title, description?, category? }`; adds a local catalog entry                                                                                                                                                                        |
 | PATCH            | `/api/response-actions/:id`                                  | `investigations:write`           | Edits a catalog entry's fields                                                                                                                                                                                                          |
 | DELETE           | `/api/response-actions/:id`                                  | `investigations:write`           | `409` if an alert has already recommended or logged it                                                                                                                                                                                  |
-| GET              | `/api/detection-rules`                                       | `alerts:read`                    | The rule catalog; see "Detection rules and alert deduplication"                                                                                                                                                                         |
-| POST             | `/api/detection-rules`                                       | `rules:manage` (admin)           | `{ id, name, description?, conditions, severity?, priority?, enabled? }`; `id` is 100000-999999                                                                                                                                         |
-| PATCH            | `/api/detection-rules/:id`                                   | `rules:manage` (admin)           | Edits a rule's fields; the id itself is fixed                                                                                                                                                                                           |
-| DELETE           | `/api/detection-rules/:id`                                   | `rules:manage` (admin)           | Any alert it had matched keeps its history; only `matched_rule_id` is cleared                                                                                                                                                           |
 | GET              | `/api/wazuh-rules`                                           | `rules:manage` (admin)           | Wazuh detection rules with their generated XML and trigger counts; see "Wazuh rules"                                                                                                                                                    |
 | POST             | `/api/wazuh-rules`                                           | `rules:manage` (admin)           | `{ id?, name, description?, level, parent_kind, parent_value, conditions, mitre_ids? }`; always a draft, next free id when `id` is omitted                                                                                              |
 | POST             | `/api/wazuh-rules/generate`                                  | `rules:manage` + `ai:use`        | `{ prompt }`; the active AI provider drafts a rule (checked like a hand-written one), stored as an AI-sourced draft; `503` when no provider is ready                                                                                    |
@@ -160,7 +156,7 @@ refused, the same posture `writeAuditLog` already takes for audit writes.
 | ------------------ | -------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `authByIp`         | 30 / 5 minutes | Caller's IP      | `POST /api/auth/{login,signup,forgot-password}` (matches Supabase Auth's own `sign_in_sign_ups` limit, `supabase/config.toml` — a second, independent layer in front of it, not a stricter one) |
 | `aiByUser`         | 30 / hour      | Signed-in caller | `POST /api/{alerts,investigations,indicators}/:id/ai` (a real, metered cost per call)                                                                                                           |
-| `alertWriteByUser` | 60 / minute    | Signed-in caller | `POST /api/alerts` (every insert also runs the `alerts_dedup_and_rules` trigger)                                                                                                                |
+| `alertWriteByUser` | 60 / minute    | Signed-in caller | `POST /api/alerts` (every insert also runs the `alerts_dedup` trigger)                                                                                                                          |
 | `ingestByKey`      | 120 / minute   | The API key's id | `POST /api/ingest/wazuh` and `/api/ingest/splunk` (generous — a real sensor delivers steadily; the cap catches a misbehaving or compromised key)                                                |
 
 None of these are admin-configurable, the same narrowing decision Phase 10 made for the dedup window: a
@@ -338,8 +334,7 @@ through the API are `local` with source `manual`, and live alerts will arrive th
 - `GET /api/alerts/stats` returns `{ total, unassigned, by_status: [{ status, total, unassigned }] }`, every
   status in lifecycle order; a duplicate alert is excluded, the same as from the default list.
 - `GET /api/alerts/:id` returns the alert with `indicator`, `event` (with its raw `payload`), `assignee`,
-  `investigations`, `created_by_name`, `matched_rule` (`{ id, name } | null`, see "Detection rules and alert
-  deduplication") and `duplicates` (other alerts linked to this one, empty unless this is a primary with
+  `investigations`, `created_by_name` and `duplicates` (other alerts linked to this one, empty unless this is a primary with
   some). A malformed or unknown id is `404`.
 - `POST /api/alerts  { title, description?, severity?, indicator_id? }` needs `alerts:write`. The body is
   strict: `origin`, `source`, `status` and ownership are refused (`422`). Blank text becomes `null`.
@@ -692,37 +687,14 @@ Rate limits: `wazuhRuleGenerateByUser` (20/hour), `wazuhRulePushByUser` (30/10 m
 `last_triggered` come from `wazuh_rule_trigger_stats()` (alerts whose description starts with
 "Wazuh rule <id> (level"). Audited as `wazuh_rule.created|generated|updated|rejected|pushed|deleted`.
 
-## Detection rules and alert deduplication
+## Alert deduplication
 
-Both are Phase 10 (`docs/AI_AND_ORCHESTRATION_ARCHITECTURE.md`) and both happen **inline, in one database
-trigger** (`alerts_dedup_and_rules`) fired on every `alerts` insert, so ingestion and a manual
-`POST /api/alerts` share the exact same behavior — there is no background worker to run either later.
-
-**Detection rules** are a small, admin-curated catalog. `detection_rules.id` is a client-chosen integer in
-100000-999999 (mirroring Wazuh's own custom-rule id space, so the two number ranges never collide).
-`conditions` is a fixed, closed grammar — never a filter built from free text — an array of 1-10
-`{ field, op, value }` rows, ANDed together:
-
-| `field`        | Allowed `op`     | Matches against                           |
-| -------------- | ---------------- | ----------------------------------------- |
-| `title`        | `contains`       | the alert's title, case-insensitive       |
-| `description`  | `contains`       | the alert's description, case-insensitive |
-| `source`       | `eq`, `contains` | the alert's source                        |
-| `severity`     | `eq`             | the alert's severity                      |
-| `technique_id` | `eq`             | any id in the alert's `technique_ids`     |
-
-A `(field, op)` pair outside this table never matches — the database's `detection_rule_matches()` fails
-closed, not open, even on a row inserted directly (bypassing this API's own validation). Enabled rules are
-tried in `priority` order (lower first); the first match wins, sets `alerts.matched_rule_id`, and — only if
-the rule names a `severity` **higher** than the alert already has — raises it. A rule never lowers a
-severity and never adds a tag or forces an alert into existence on its own.
-
-**`GET /api/detection-rules`** (`alerts:read`) lists the catalog, so an analyst can see why a rule fired.
-**`POST /api/detection-rules` `{ id, name, description?, conditions, severity?, priority?, enabled? }`**
-(`rules:manage`, admin only — unlike the response-action catalog, this is not `investigations:write`)
-creates one, always `local`; a duplicate `id` is `409`. **`PATCH .../:id`** edits any field except the id
-itself; **`DELETE .../:id`** removes it (any alert it had matched keeps its history, `matched_rule_id` is
-simply cleared, `on delete set null`). Audited as `detection_rule.created`/`updated`/`deleted`.
+Phase 10 (`docs/AI_AND_ORCHESTRATION_ARCHITECTURE.md`). It happens **inline, in one database trigger**
+(`alerts_dedup`) fired on every `alerts` insert, so ingestion and a manual `POST /api/alerts` share the
+exact same behavior, and there is no background worker to run it later. (The same trigger once also ran
+ArcRadar-side severity rules, `/api/detection-rules`; they were removed on 2026-10-19, decision 34, since
+the Wazuh or Splunk rule already sets an alert's severity. Their audit entries,
+`detection_rule.created`/`updated`/`deleted`, stay filterable in the audit log.)
 
 **Deduplication** needs no endpoint of its own: `alerts.fingerprint` (an md5 of the normalized `source` +
 title + `asset_id` + `indicator_id`) is computed on every insert, and a new alert whose fingerprint matches

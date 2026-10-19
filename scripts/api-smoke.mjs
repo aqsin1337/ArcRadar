@@ -3217,124 +3217,15 @@ async function main() {
     );
   }
 
-  section("Detection rules and alert deduplication (Phase 10)");
+  section("Alert deduplication (Phase 10)");
   {
-    // A rule id derived from the run's own stamp: unique per run, always inside 100000-999999.
-    const ruleId = 100000 + (stamp % 899999);
-    const marker = `drmarker${stamp}`;
-
-    const viewerCreatesRule = await call(viewer.jar, "POST", "/api/detection-rules", {
-      body: {
-        id: ruleId,
-        name: "Smoke viewer rule",
-        conditions: [{ field: "title", op: "contains", value: marker }],
-      },
-    });
+    // Severity rules were removed on 2026-10-19 (decision 34): their endpoints are gone and an
+    // alert no longer carries a matched rule. Deduplication, which shared their trigger, stays.
+    const removedRules = await call(admin.jar, "GET", "/api/detection-rules");
     check(
-      "a viewer cannot create a detection rule (403)",
-      viewerCreatesRule.status === 403,
-      viewerCreatesRule.json,
-    );
-    const analystCreatesRule = await call(analyst.jar, "POST", "/api/detection-rules", {
-      body: {
-        id: ruleId,
-        name: "Smoke analyst rule",
-        conditions: [{ field: "title", op: "contains", value: marker }],
-      },
-    });
-    check(
-      "an analyst cannot create a detection rule either: rules:manage is admin only (403)",
-      analystCreatesRule.status === 403,
-      analystCreatesRule.json,
-    );
-
-    const badRange = await call(admin.jar, "POST", "/api/detection-rules", {
-      body: {
-        id: 1,
-        name: "Smoke bad id",
-        conditions: [{ field: "title", op: "contains", value: marker }],
-      },
-    });
-    check(
-      "a rule id outside 100000-999999 is rejected (422)",
-      badRange.status === 422,
-      badRange.json,
-    );
-    const badConditions = await call(admin.jar, "POST", "/api/detection-rules", {
-      body: { id: ruleId, name: "Smoke empty conditions", conditions: [] },
-    });
-    check(
-      "an empty conditions array is rejected (422)",
-      badConditions.status === 422,
-      badConditions.json,
-    );
-
-    const madeRule = await call(admin.jar, "POST", "/api/detection-rules", {
-      body: {
-        id: ruleId,
-        name: `Smoke rule ${stamp}`,
-        conditions: [{ field: "title", op: "contains", value: marker }],
-        severity: "critical",
-      },
-    });
-    const rule = madeRule.json?.data;
-    check(
-      "an admin creates a rule (201): local, the id given, enabled by default",
-      madeRule.status === 201 &&
-        rule?.id === ruleId &&
-        rule.origin === "local" &&
-        rule.enabled === true,
-      madeRule.json,
-    );
-    const ruleList = await call(viewer.jar, "GET", "/api/detection-rules");
-    check(
-      "anyone with alerts:read reads the rule catalog and finds it",
-      ruleList.status === 200 && ruleList.json?.data?.some((r) => r.id === ruleId),
-      ruleList.status,
-    );
-
-    const matchingAlert = await call(analyst.jar, "POST", "/api/alerts", {
-      body: { title: `Smoke ${marker} triggers a rule`, severity: "low" },
-    });
-    const matchedAlertId = matchingAlert.json?.data?.id;
-    check(
-      "a new alert matching an enabled rule has its severity raised and traces the rule (201)",
-      matchingAlert.status === 201 &&
-        matchingAlert.json.data.severity === "critical" &&
-        matchingAlert.json.data.matched_rule_id === ruleId,
-      matchingAlert.json,
-    );
-    const matchedDetail = await call(analyst.jar, "GET", `/api/alerts/${matchedAlertId}`);
-    check(
-      "the alert page shows which rule matched, by name",
-      matchedDetail.status === 200 && matchedDetail.json?.data?.matched_rule?.id === ruleId,
-      matchedDetail.json?.data?.matched_rule,
-    );
-
-    const disabled = await call(admin.jar, "PATCH", `/api/detection-rules/${ruleId}`, {
-      body: { enabled: false },
-    });
-    check(
-      "an admin disables the rule (200)",
-      disabled.status === 200 && disabled.json?.data?.enabled === false,
-      disabled.json,
-    );
-    const afterDisable = await call(analyst.jar, "POST", "/api/alerts", {
-      body: { title: `Smoke ${marker} but the rule is off`, severity: "low" },
-    });
-    check(
-      "a disabled rule no longer matches new alerts",
-      afterDisable.status === 201 &&
-        afterDisable.json.data.severity === "low" &&
-        afterDisable.json.data.matched_rule_id === null,
-      afterDisable.json,
-    );
-
-    const analystDeletesRule = await call(analyst.jar, "DELETE", `/api/detection-rules/${ruleId}`);
-    check(
-      "an analyst cannot delete a rule (403)",
-      analystDeletesRule.status === 403,
-      analystDeletesRule.json,
+      "the removed severity-rules endpoint answers 404",
+      removedRules.status === 404,
+      removedRules.status,
     );
 
     // --- deduplication ---
@@ -3344,8 +3235,10 @@ async function main() {
     });
     const firstId = firstOfPair.json?.data?.id;
     check(
-      "a first occurrence is its own primary (no duplicate_of)",
-      firstOfPair.status === 201 && firstOfPair.json.data.duplicate_of === null,
+      "a first occurrence is its own primary (no duplicate_of) and carries no matched rule",
+      firstOfPair.status === 201 &&
+        firstOfPair.json.data.duplicate_of === null &&
+        !("matched_rule_id" in firstOfPair.json.data),
       firstOfPair.json,
     );
     const secondOfPair = await call(analyst.jar, "POST", "/api/alerts", {
@@ -3387,15 +3280,9 @@ async function main() {
     );
 
     // --- cleanup ---
-    for (const id of [matchedAlertId, afterDisable.json?.data?.id, firstId, secondId]) {
+    for (const id of [firstId, secondId]) {
       if (id) await call(admin.jar, "DELETE", `/api/alerts/${id}`);
     }
-    const finalRuleDelete = await call(admin.jar, "DELETE", `/api/detection-rules/${ruleId}`);
-    check(
-      "(cleanup) an admin deletes the rule",
-      finalRuleDelete.status === 200,
-      finalRuleDelete.json,
-    );
   }
 
   section("Wazuh rules (detection-as-code)");

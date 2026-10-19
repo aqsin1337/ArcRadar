@@ -10,10 +10,10 @@ deliberately does not do.
                           Edit / Reject      (commit)                              (pulls, tests, restarts)
 ```
 
-- **Detection rule** (this page): a rule that runs _inside Wazuh_ and decides whether an event becomes an
-  alert at all. It arrives in ArcRadar afterwards, like every other Wazuh alert.
-- **Severity rule** (the other tab of the same page, `detection_rules`, Phase 10): runs _inside ArcRadar_
-  after an alert exists and can only raise its severity. The two are independent.
+A rule here runs _inside Wazuh_ and decides whether an event becomes an alert at all, and at what level
+(which becomes the alert's severity in ArcRadar). The alert arrives in ArcRadar afterwards, like every
+other Wazuh alert. (ArcRadar once had its own "severity rules" that could raise an alert's severity after
+it arrived; they were removed on 2026-10-19, decision 34, because the SIEM rule already sets it.)
 
 ArcRadar never connects to the Wazuh host. It only commits a file to a repository; the Manager pulls the
 repository itself, on its own schedule. Nothing here executes anything, and rules cannot contain an

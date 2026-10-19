@@ -303,14 +303,6 @@ export default async function AlertPage({ params }: PageProps<"/alerts/[id]">) {
                     <span data-testid="alert-ai-fp-score">{Math.round(alert.ai_fp_score)}%</span>
                   </Row>
                 )}
-                {alert.matched_rule && (
-                  <Row label="Matched rule">
-                    <span data-testid="alert-matched-rule">
-                      {alert.matched_rule.name}{" "}
-                      <span className="font-mono text-xs text-muted">#{alert.matched_rule.id}</span>
-                    </span>
-                  </Row>
-                )}
                 <Row label="Assigned to">
                   <span data-testid="alert-assignee">
                     {alert.assignee ? (

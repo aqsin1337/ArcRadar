@@ -15,7 +15,7 @@ export const RATE_LIMITS = {
   authByIp: { limit: 30, windowSeconds: 300 } satisfies RateLimitRule,
   /** Asking an AI provider for an analysis: real, metered cost per call, keyed by the caller. */
   aiByUser: { limit: 30, windowSeconds: 3600 } satisfies RateLimitRule,
-  /** Creating an alert by hand: each insert also runs the dedup/detection-rule trigger. */
+  /** Creating an alert by hand: each insert also runs the deduplication trigger. */
   alertWriteByUser: { limit: 60, windowSeconds: 60 } satisfies RateLimitRule,
   /** "Import now" for the public threat feeds: several downloads and a bulk write per call. */
   feedImportByUser: { limit: 6, windowSeconds: 600 } satisfies RateLimitRule,

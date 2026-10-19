@@ -23,7 +23,6 @@ const DETAIL_SELECT = `*,
   assignee:profiles!assigned_to(id, display_name),
   asset:assets(id, name, ip_address, os),
   event:events(id, title, event_type, severity, source, occurred_at, payload),
-  matched_rule:detection_rules!matched_rule_id(id, name),
   investigation_alerts(added_at, investigations(id, title, status, priority))`;
 
 /** One page of alerts matching the text search and filters, plus the total match count. */

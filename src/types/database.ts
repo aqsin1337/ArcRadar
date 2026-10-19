@@ -131,7 +131,6 @@ export type Database = {
           fingerprint: string | null;
           id: string;
           indicator_id: string | null;
-          matched_rule_id: number | null;
           origin: Database["public"]["Enums"]["data_origin"];
           resolved_at: string | null;
           severity: Database["public"]["Enums"]["severity"];
@@ -156,7 +155,6 @@ export type Database = {
           fingerprint?: string | null;
           id?: string;
           indicator_id?: string | null;
-          matched_rule_id?: number | null;
           origin?: Database["public"]["Enums"]["data_origin"];
           resolved_at?: string | null;
           severity?: Database["public"]["Enums"]["severity"];
@@ -181,7 +179,6 @@ export type Database = {
           fingerprint?: string | null;
           id?: string;
           indicator_id?: string | null;
-          matched_rule_id?: number | null;
           origin?: Database["public"]["Enums"]["data_origin"];
           resolved_at?: string | null;
           severity?: Database["public"]["Enums"]["severity"];
@@ -233,13 +230,6 @@ export type Database = {
             columns: ["indicator_id"];
             isOneToOne: false;
             referencedRelation: "indicators";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "alerts_matched_rule_id_fkey";
-            columns: ["matched_rule_id"];
-            isOneToOne: false;
-            referencedRelation: "detection_rules";
             referencedColumns: ["id"];
           },
         ];
@@ -368,56 +358,6 @@ export type Database = {
           user_id?: string | null;
         };
         Relationships: [];
-      };
-      detection_rules: {
-        Row: {
-          conditions: NonNullable<Json>;
-          created_at: string;
-          created_by: string | null;
-          description: string | null;
-          enabled: boolean;
-          id: number;
-          name: string;
-          origin: Database["public"]["Enums"]["data_origin"];
-          priority: number;
-          severity: Database["public"]["Enums"]["severity"] | null;
-          updated_at: string;
-        };
-        Insert: {
-          conditions: NonNullable<Json>;
-          created_at?: string;
-          created_by?: string | null;
-          description?: string | null;
-          enabled?: boolean;
-          id: number;
-          name: string;
-          origin?: Database["public"]["Enums"]["data_origin"];
-          priority?: number;
-          severity?: Database["public"]["Enums"]["severity"] | null;
-          updated_at?: string;
-        };
-        Update: {
-          conditions?: NonNullable<Json>;
-          created_at?: string;
-          created_by?: string | null;
-          description?: string | null;
-          enabled?: boolean;
-          id?: number;
-          name?: string;
-          origin?: Database["public"]["Enums"]["data_origin"];
-          priority?: number;
-          severity?: Database["public"]["Enums"]["severity"] | null;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "detection_rules_created_by_fkey";
-            columns: ["created_by"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
-          },
-        ];
       };
       events: {
         Row: {
@@ -1797,10 +1737,6 @@ export type Database = {
         }[];
       };
       current_role_name: { Args: Record<PropertyKey, never>; Returns: string };
-      detection_rule_matches: {
-        Args: { p_alert: Database["public"]["Tables"]["alerts"]["Row"]; p_conditions: Json };
-        Returns: boolean;
-      };
       escape_like: { Args: { p_text: string }; Returns: string };
       has_permission: { Args: { p_key: string }; Returns: boolean };
       import_external_vulnerabilities: { Args: { p_records: Json }; Returns: Json };
@@ -1859,7 +1795,6 @@ export type Database = {
           fingerprint: string | null;
           id: string;
           indicator_id: string | null;
-          matched_rule_id: number | null;
           origin: Database["public"]["Enums"]["data_origin"];
           resolved_at: string | null;
           severity: Database["public"]["Enums"]["severity"];
@@ -1998,10 +1933,6 @@ export type Database = {
       set_investigation_tags: {
         Args: { p_investigation_id: string; p_tags: string[] };
         Returns: undefined;
-      };
-      severity_rank: {
-        Args: { p_severity: Database["public"]["Enums"]["severity"] };
-        Returns: number;
       };
       siem_rules_revision: { Args: { p_siem: string }; Returns: string };
       sync_field_catalog: { Args: { p_siem: string; p_sources: Json }; Returns: Json };

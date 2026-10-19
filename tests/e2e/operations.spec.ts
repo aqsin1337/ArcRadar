@@ -19,12 +19,6 @@ async function cleanUp() {
     method: "DELETE",
     headers: { prefer: "return=minimal" },
   });
-  // detection_rules has no origin/title column the way other record tables do, but the same
-  // on-delete-set-null relationship to alerts.matched_rule_id means it can be removed any time.
-  await adminFetch("/rest/v1/detection_rules?name=like.E2E*", {
-    method: "DELETE",
-    headers: { prefer: "return=minimal" },
-  });
   await adminFetch("/rest/v1/wazuh_rules?name=like.E2E*", {
     method: "DELETE",
     headers: { prefer: "return=minimal" },
@@ -624,35 +618,17 @@ test.describe("Detection rules and alert deduplication (Phase 10)", () => {
   test.describe("the detection-rules page (administrator)", () => {
     test.use({ storageState: STORAGE.admin });
 
-    test("an admin adds a rule, sees it trace itself on a matching alert, disables and deletes it", async ({
+    test("the page has a Wazuh and a Splunk tab only; an old severity link opens the Wazuh tab", async ({
       page,
     }) => {
-      const ruleId = String(100000 + (stamp % 899999));
-      const ruleName = `E2E rule ${stamp}`;
-      const marker = `e2edr${stamp}`;
-
       await page.goto("/detection-rules?tab=severity");
-      await page.getByLabel("Rule id").fill(ruleId);
-      await page.getByLabel("Name").fill(ruleName);
-      // The condition builder defaults to field "Title" / comparison "contains".
-      await page.getByLabel("Condition 1 value").fill(marker);
-      await page.getByLabel("Raise severity to").selectOption({ label: "Critical" });
-      await page.getByRole("button", { name: "Add rule" }).click();
-
-      const card = page.locator("li", { hasText: ruleName });
-      await expect(card).toBeVisible();
-      await expect(card.getByText("Raises to Critical")).toBeVisible();
-
-      const alertId = await createAlert(page, `E2E ${marker} matches a rule`);
-      await page.goto(`/alerts/${alertId}`);
-      await expect(page.getByTestId("alert-matched-rule")).toContainText(ruleName);
-
-      await page.goto("/detection-rules?tab=severity");
-      await card.getByRole("checkbox").uncheck();
-      await expect(card.getByText("Disabled")).toBeVisible();
-
-      await card.getByRole("button", { name: `Delete ${ruleName}` }).click();
-      await expect(card).toHaveCount(0);
+      const tabs = page.getByRole("navigation", { name: "Rule type" });
+      await expect(tabs.getByRole("link")).toHaveText(["Wazuh rules", "Splunk rules"]);
+      await expect(tabs.getByRole("link", { name: "Wazuh rules" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      await expect(page.getByText("Severity rules")).toHaveCount(0);
     });
 
     test("an admin drafts a Wazuh rule, reads its XML, edits it, rejects it and deletes it", async ({
