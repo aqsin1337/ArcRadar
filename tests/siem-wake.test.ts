@@ -86,4 +86,14 @@ describe("waitForPush", () => {
       changed: true,
     });
   });
+
+  it("asks for the revision of the host that is waiting (the Wazuh Manager has its own)", async () => {
+    const { deps } = clock(["rev1", "rev2"]);
+    expect(await waitForPush("wazuh", "rev1", 25, undefined, deps)).toEqual({
+      revision: "rev2",
+      changed: true,
+    });
+    expect(deps.revision).toHaveBeenCalledWith("wazuh");
+    expect(deps.revision).not.toHaveBeenCalledWith("splunk");
+  });
 });

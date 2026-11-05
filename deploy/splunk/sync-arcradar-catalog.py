@@ -288,7 +288,8 @@ def iso(value):
 
 
 def window_minutes(content):
-    match = re.fullmatch(r"-(\d{1,5})m", content.get("dispatch.earliest_time", "") or "")
+    # A timed rule looks back -<N>m, a real-time one watches a rolling rt-<N>m window.
+    match = re.fullmatch(r"(?:rt)?-(\d{1,5})m", content.get("dispatch.earliest_time", "") or "")
     return int(match.group(1)) if match else 5
 
 

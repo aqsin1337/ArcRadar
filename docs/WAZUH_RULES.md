@@ -7,8 +7,14 @@ deliberately does not do.
 ```
  person or AI            ArcRadar                    GitHub                    Wazuh Manager
  ───────────►  Draft ──► review the XML ──► Send ──► rules/arcradar_<id>.xml ◄── arcradar-apply-rules
-                          Edit / Reject      (commit)                              (pulls, tests, restarts)
+                          Edit / Reject      (commit)                              (pulls, tests, reloads)
 ```
+
+A pushed rule is live on the Manager within about ten seconds: the Manager keeps one request open to ArcRadar
+(the wake-up, below), pulls the repository the moment a rule is pushed and reloads the ruleset in place. An
+alert from it reaches ArcRadar within seconds of the event, like every other Wazuh alert, as long as its
+level is at least the integration's `<level>` (7 in `deploy/wazuh/ossec-integration.xml`): a lower level
+only shows up on the Manager.
 
 A rule here runs _inside Wazuh_ and decides whether an event becomes an alert at all, and at what level
 (which becomes the alert's severity in ArcRadar). The alert arrives in ArcRadar afterwards, like every
@@ -16,7 +22,7 @@ other Wazuh alert. (ArcRadar once had its own "severity rules" that could raise 
 it arrived; they were removed on 2026-10-19, decision 34, because the SIEM rule already sets it.)
 
 ArcRadar never connects to the Wazuh host. It only commits a file to a repository; the Manager pulls the
-repository itself, on its own schedule. Nothing here executes anything, and rules cannot contain an
+repository itself (when told a rule was pushed, and on a timer as a safety net). Nothing here executes anything, and rules cannot contain an
 active response: the XML is always _generated_ from structured fields, never accepted from a person or
 from the AI.
 
@@ -119,11 +125,30 @@ to a URL with a read-only deploy key or token), and then:
 2. copies them to `/var/ossec/etc/rules/` (owner `root:wazuh`, mode 660) and removes any installed
    `arcradar_*.xml` that is no longer in the repository; **no other file is ever touched**;
 3. runs Wazuh's own `wazuh-analysisd -t` on the whole ruleset; if Wazuh rejects it, the previous files are
-   put back and nothing is restarted;
-4. restarts `wazuh-manager` only when something changed.
+   put back and nothing is reloaded;
+4. only when something changed, loads the new ruleset: in place, through analysisd's `reload-ruleset`
+   socket command (the request Wazuh's own API sends for `PUT /manager/analysisd/reload`; Wazuh 4.14 has
+   it), which takes a few seconds and restarts nothing; if that is not available, it restarts
+   `wazuh-manager` (about half a minute).
 
-Run it by hand when you want, or on a schedule (a cron line such as
-`*/10 * * * * /usr/local/sbin/arcradar-apply-rules >> /var/log/arcradar-rules.log 2>&1`).
+Run it by hand when you want, or on a schedule as a safety net (a cron line such as
+`*/10 * * * * root flock -n /run/arcradar-rules.lock /usr/local/sbin/arcradar-apply-rules >> /var/log/arcradar-rules.log 2>&1`
+in `/etc/cron.d/arcradar-rules`).
+
+### 4. The wake-up (a push applied at once)
+
+So that a push does not wait for the cron, `deploy/wazuh/watch-arcradar.py` runs on the Manager as a service.
+It keeps one request open to `GET /api/ingest/wazuh/wake` (see [API.md](API.md)) with the key and URL of the
+`custom-arcradar` integration in `ossec.conf` (nothing new to configure), and ArcRadar answers it the moment a
+Wazuh rule is pushed; the watcher then runs the apply script under the cron's lock. Only the Manager calls
+ArcRadar: no port of the Manager is opened.
+
+```bash
+sudo install -m 0755 watch-arcradar.py /usr/local/sbin/arcradar-wazuh-watch
+sudo install -m 0644 arcradar-wazuh-watch.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now arcradar-wazuh-watch
+journalctl -u arcradar-wazuh-watch -f      # "a rule was pushed", then the apply script's last line
+```
 
 ## Verified
 
@@ -132,6 +157,9 @@ Run it by hand when you want, or on a schedule (a cron line such as
   `mitre: T1562.001` while a benign event did not. The script's two refusal paths (an element ArcRadar
   never generates; a file Wazuh itself rejects, level 99) were also exercised and left the Manager
   unchanged. The test rules were removed afterwards.
+- The in-place reload (2026-11-05, Wazuh 4.14.8): a new rule file was loaded by `reload-ruleset` in under
+  five seconds and fired on the next matching event, with `wazuh-analysisd` still the same process; a
+  restart of `wazuh-manager` on the same VM took 36 seconds.
 - Not verified against real GitHub with a real token in the automated tests (the GitHub client is tested
   against faked responses, including error mapping and that the token never appears in an error).
 

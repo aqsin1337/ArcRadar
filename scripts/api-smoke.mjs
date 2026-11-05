@@ -1922,6 +1922,46 @@ async function main() {
     viaGet.status === 405 || viaGet.status === 404,
     viaGet.status,
   );
+
+  // The wake-up: the Manager waits for a Wazuh rule push with the key it delivers alerts with.
+  const wazuhWakeUrl = "/api/ingest/wazuh/wake";
+  const wazuhWakeNoKey = await call(null, "GET", wazuhWakeUrl + "?wait=0");
+  check(
+    "the Wazuh wake endpoint needs a key (401)",
+    wazuhWakeNoKey.status === 401,
+    wazuhWakeNoKey.status,
+  );
+  const wazuhWakeFirst = await call(null, "GET", wazuhWakeUrl, { headers: bearer(ingestKey) });
+  check(
+    "its first call answers at once with the current Wazuh revision",
+    wazuhWakeFirst.status === 200 &&
+      typeof wazuhWakeFirst.json?.data?.revision === "string" &&
+      wazuhWakeFirst.json?.data?.changed === false,
+    wazuhWakeFirst.json,
+  );
+  const wazuhWakeSame = await call(
+    null,
+    "GET",
+    wazuhWakeUrl + "?wait=0&since=" + encodeURIComponent(wazuhWakeFirst.json?.data?.revision ?? ""),
+    { headers: bearer(ingestKey) },
+  );
+  const wazuhWakeOld = await call(null, "GET", wazuhWakeUrl + "?wait=0&since=an-older-revision", {
+    headers: bearer(ingestKey),
+  });
+  check(
+    "nothing new at the current revision; an older one is answered as changed at once",
+    wazuhWakeSame.json?.data?.changed === false && wazuhWakeOld.json?.data?.changed === true,
+    [wazuhWakeSame.json, wazuhWakeOld.json],
+  );
+  const splunkWakeWithWazuhKey = await call(null, "GET", "/api/ingest/splunk/wake?wait=0", {
+    headers: bearer(ingestKey),
+  });
+  check(
+    "the Wazuh key cannot wait on Splunk's wake-up (403: wrong scope)",
+    splunkWakeWithWazuhKey.status === 403,
+    splunkWakeWithWazuhKey.status,
+  );
+
   const nothingWritten = await call(admin.jar, "GET", `/api/events?source=wazuh&page_size=1`);
   check(
     "and nothing was written by any of those",

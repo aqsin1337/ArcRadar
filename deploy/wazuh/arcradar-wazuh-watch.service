@@ -1,0 +1,12 @@
+[Unit]
+Description=Waits for ArcRadar to push Wazuh rules and applies them at once
+After=network-online.target wazuh-manager.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/sbin/arcradar-wazuh-watch
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -5,7 +5,11 @@
 # Git repository. This script, run here on the Manager, pulls that repository and installs the files
 # as custom rules. It only ever changes files named arcradar_<id>.xml in the rules directory, checks
 # every file before installing anything, tests the whole ruleset with Wazuh itself, and puts the
-# previous files back if that test fails. Wazuh is restarted only when something changed.
+# previous files back if that test fails. Only when something changed, Wazuh loads the new ruleset:
+# in place (analysisd's reload-ruleset, which Wazuh 4.14 has: a few seconds, no restart), or by
+# a restart of wazuh-manager (about half a minute) when the in-place reload is not available.
+#
+# It runs from cron as a safety net, and at once when ArcRadar says a rule was pushed (watch-arcradar.py).
 #
 # Usage (as root):  arcradar-apply-rules            apply if the repository changed
 #                   arcradar-apply-rules --check    show what would change, install nothing
@@ -95,5 +99,40 @@ if ! /var/ossec/bin/wazuh-analysisd -t >"$WORK/last-test.log" 2>&1; then
   die "Wazuh rejected the ruleset; nothing was changed (details: $WORK/last-test.log)"
 fi
 
+# 6. Load it. analysisd reloads the ruleset in place when asked on its socket (the same request Wazuh's own
+#    API sends for PUT /manager/analysisd/reload); without that (an older Wazuh, analysisd down), restart.
+reload_ruleset() {
+  command -v python3 >/dev/null || return 1
+  python3 - <<'PY'
+import json, socket, struct, sys
+
+message = json.dumps({"version": 1, "origin": {"module": "arcradar"}, "command": "reload-ruleset"}).encode()
+try:
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.settimeout(60)
+    sock.connect("/var/ossec/queue/sockets/analysis")
+    sock.sendall(struct.pack("<I", len(message)) + message)
+
+    def read(size):
+        data = b""
+        while len(data) < size:
+            chunk = sock.recv(size - len(data))
+            if not chunk:
+                raise OSError("analysisd closed the connection")
+            data += chunk
+        return data
+
+    answer = json.loads(read(struct.unpack("<I", read(4))[0]).decode())
+except (OSError, ValueError) as error:
+    sys.exit("in-place reload not available (%s)" % error)
+if answer.get("error") != 0:
+    sys.exit("analysisd refused the reload: %s" % (answer.get("data") or answer.get("message")))
+PY
+}
+
+if reload_ruleset; then
+  log "applied repository commit $COMMIT: ${#FILES[@]} rule file(s) installed, ruleset reloaded in place"
+  exit 0
+fi
 systemctl restart wazuh-manager || { restore; systemctl restart wazuh-manager || true; die "wazuh-manager did not restart"; }
 log "applied repository commit $COMMIT: ${#FILES[@]} rule file(s) installed, wazuh-manager restarted"

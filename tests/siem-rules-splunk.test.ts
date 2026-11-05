@@ -98,6 +98,37 @@ describe("Splunk rule rendering", () => {
     expect(file.content).not.toContain(".param.mitre");
   });
 
+  it("is real time unless a schedule is chosen", () => {
+    expect(splunkSpecSchema.parse({ ...spec, schedule: undefined }).schedule).toBe("realtime");
+  });
+
+  it("renders a real-time single-event rule that alerts once per matching event", () => {
+    const file = dialect.render(
+      rule({ spec: splunkSpecSchema.parse({ ...spec, threshold: null, schedule: "realtime" }) }),
+    );
+    expect(file.content).toContain("cron_schedule = * * * * *");
+    expect(file.content).toContain("dispatch.earliest_time = rt\n");
+    expect(file.content).toContain("dispatch.latest_time = rt\n");
+    expect(file.content).toContain("alert_type = always\n");
+    expect(file.content).not.toContain("alert_comparator");
+    expect(file.content).not.toContain("alert.suppress");
+    expect(file.content).toContain("action.arcradar_forward = 1");
+    expect(() => assertSafeSplunkConf(file.content, "1000")).not.toThrow();
+  });
+
+  it("renders a real-time repeating rule over a rolling window, one alert per group per window", () => {
+    const file = dialect.render(
+      rule({ spec: splunkSpecSchema.parse({ ...spec, schedule: "realtime" }) }),
+    );
+    expect(file.content).toContain("dispatch.earliest_time = rt-5m\n");
+    expect(file.content).toContain("dispatch.latest_time = rt\n");
+    expect(file.content).toContain("alert_type = number of events\n");
+    expect(file.content).toContain("alert_threshold = 0\n");
+    expect(file.content).toContain("alert.suppress.period = 5m\n");
+    expect(file.content).toContain("alert.suppress.fields = Source_Network_Address\n");
+    expect(() => assertSafeSplunkConf(file.content, "1000")).not.toThrow();
+  });
+
   it("builds contains and regex conditions as escaped, quoted regexes", () => {
     const search = buildSplunkSearch(
       splunkSpecSchema.parse({

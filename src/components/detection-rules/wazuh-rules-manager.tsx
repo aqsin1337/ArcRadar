@@ -185,6 +185,7 @@ function RuleForm({
           value={form.level}
           onChange={(event) => set({ level: event.target.value })}
           options={LEVELS}
+          hint="7 and above reach ArcRadar as alerts (the integration's default threshold)."
           error={shown.level}
         />
       </div>

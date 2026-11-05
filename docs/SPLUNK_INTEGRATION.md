@@ -7,7 +7,7 @@ ArcRadar works with Splunk in both directions, the same way it works with Wazuh:
  ───────────────────────────────────────              ──────────────────────────────────────────
   draft ─► read the stanza ─► Send ─► GitHub ◄── arcradar-apply-splunk-rules (pulls, checks, reloads)
                                     splunk/arcradar_<key>.conf        │
-                                                                      ▼  saved search runs on a schedule
+                                                                      ▼  saved search runs in real time or on a schedule
   alerts, cases, MITRE, AI ◄── POST /api/ingest/splunk ◄── alert action arcradar_forward (bin/arcradar_forward.py)
 ```
 
@@ -152,6 +152,14 @@ action.arcradar_forward.param.rule_key = 1000
 - The base search is written `index=...`, not `search index=...`: in `savedsearches.conf` Splunk adds the
   `search` command itself, and a second one turns the rule into a search for the word "search". (Found by
   running a rule on a real Splunk.)
+- **Schedule.** The default is **Real time**: a Splunk real-time search (`dispatch.earliest_time = rt`) that never
+  stops. A single-event rule alerts once per matching event (`alert_type = always`) within a second or two of it
+  being indexed; a repeating rule watches a rolling window (`rt-<window>m`) and alerts as soon as the count is
+  reached. Splunk starts a real-time rule a few seconds after the file is loaded. Measured on the lab Splunk
+  (2026-11-05): a single event fired its rule 1.4 seconds after it was sent, the third of three events from one
+  address fired the repeating rule after 7.3 seconds, and two more events in the same window were held back.
+  "Every 5 minutes", "Every 15 minutes", "Every hour" and "Every day" run the search on a timer over the last
+  period instead, which costs Splunk less but alerts only on the next run.
 - A threshold rule suppresses repeat alerts for the same group for its window (`alert.suppress`), so one burst
   is one alert. A threshold rule's alert only has the fields it counts by: add `host` to "Count per" if the
   alert should name the machine (otherwise it has no asset).

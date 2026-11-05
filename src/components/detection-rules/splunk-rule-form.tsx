@@ -82,7 +82,7 @@ function initialState(rule: SiemRule | null): FormState {
       mitre: "",
       index: "main",
       sourcetype: "WinEventLog:Security",
-      schedule: "every_5_minutes",
+      schedule: "realtime",
       conditions: [emptyCondition()],
       repeat: false,
       count: "5",
